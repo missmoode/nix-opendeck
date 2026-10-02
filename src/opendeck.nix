@@ -1,0 +1,190 @@
+{
+  lib,
+  stdenv,
+  fetchFromGitHub,
+
+  rustPlatform,
+  cargo-tauri,
+
+  deno,
+  pkg-config,
+
+  udev,
+  dbus,
+  glib-networking,
+  openssl,
+  webkitgtk_4_1,
+  wrapGAppsHook4,
+  libayatana-appindicator,
+
+  bundledPlugins ? [ ],
+  pname ? "opendeck-core",
+  webviewZoom ? null,
+}:
+# Make sure we're not bundling the same plugin multiple times
+let
+  bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
+
+  duplicateBundledPluginIds = lib.filter (
+    pluginId: lib.count (id: id == pluginId) bundledPluginIds > 1
+  ) (lib.unique bundledPluginIds);
+in
+assert duplicateBundledPluginIds == [ ];
+rustPlatform.buildRustPackage (
+  finalAttrs:
+  let
+    denoDeps = stdenv.mkDerivation {
+      pname = "opendeck-deno-deps";
+      version = finalAttrs.version;
+      src = finalAttrs.src;
+
+      nativeBuildInputs = [ deno ];
+
+      # We're just retrieving the dependencies right now
+      dontConfigure = true;
+      dontBuild = true;
+
+      # Get the dependencies as explicitly laid out in the lockfile
+      installPhase = ''
+        export DENO_DIR="$out"
+        deno install --frozen
+      '';
+
+      outputHash = "sha256-4ANt7w0xEMOqlrKg+TzyC843a6RuvO44JmsdPt56SBA=";
+      outputHashMode = "recursive";
+    };
+  in
+  {
+    pname = pname;
+
+    version = "2.14.0";
+
+    src = fetchFromGitHub {
+      owner = "nekename";
+      repo = "OpenDeck";
+      tag = "v${finalAttrs.version}";
+      hash = "sha256-2zI1asMPLxllKaDaCaGbIZ1PwiQJCCsiuyG/gUKe0Mk=";
+    };
+
+    postPatch = ''
+      rm -rf plugins
+      mkdir plugins
+
+      # Use patched version.
+      # Probably solved by libayatana-appindicator-glib, but tauri doesn't use it.
+      substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
+        --replace-fail \
+        'libayatana-appindicator3.so.1' \
+        '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
+
+      # OpenDeck intentionally supports symlinked plugins, but its plugin
+      # webserver checks the canonical path against the canonical config
+      # directory. This rejects assets whose plugin lives in the Nix store.
+      substituteInPlace src-tauri/src/plugins/webserver.rs \
+        --replace-fail \
+        'if !developer && !path.canonicalize().is_ok_and(|p| p.starts_with(&prefix)) {' \
+        '
+          let allowed = path.canonicalize().is_ok_and(|p| {
+            p.starts_with(&prefix)
+              || prefix.join("plugins").read_dir().is_ok_and(|entries| {
+                entries.flatten().any(|entry| {
+                  entry
+                    .path()
+                    .canonicalize()
+                    .is_ok_and(|plugin| p.starts_with(plugin))
+                })
+              })
+          });
+
+          if !developer && !allowed {
+          ';
+    ''
+    + lib.optionalString (webviewZoom != null) ''
+      substituteInPlace src-tauri/src/main.rs \
+        --replace-fail \
+          'APP_HANDLE.set(app.handle().clone()).unwrap();' \
+          'APP_HANDLE.set(app.handle().clone()).unwrap();
+
+            app.get_webview_window("main")
+              .ok_or_else(|| tauri::Error::WebviewNotFound)?
+              .set_zoom(${toString webviewZoom})?;'
+    '';
+
+    cargoHash = "sha256-AZ32cl5qbq/lROow9CpBgl3eztLos7VMqOnQV4kdvJU=";
+
+    # Identify location of cargo project
+    cargoRoot = "src-tauri";
+    buildAndTestSubdir = finalAttrs.cargoRoot;
+
+    # Packages used to run the build (similar to devdependencies in npm?)
+    nativeBuildInputs = [
+      cargo-tauri.hook
+      deno
+      pkg-config
+    ]
+    ++ lib.optionals stdenv.hostPlatform.isLinux [
+      wrapGAppsHook4
+    ];
+
+    # Install using the dependencies we downloaded earlier
+    #  Copy them over and make them writable so that deno can modify
+    #  as it builds if needed
+    preBuild = ''
+      export DENO_DIR="$TMPDIR/deno"
+
+      cp -a ${denoDeps} "$DENO_DIR"
+      chmod -R u+w "$DENO_DIR"
+
+      deno install --frozen
+
+      mkdir -p "${finalAttrs.cargoRoot}/target/plugins"
+
+      ${lib.concatMapStringsSep "\n" (plugin: ''
+        cp -a ${plugin}/. "${finalAttrs.cargoRoot}/target/plugins/"
+      '') bundledPlugins}
+
+      chmod -R u+rwX "${finalAttrs.cargoRoot}/target/plugins"
+    '';
+
+    # Install udev rules
+    postInstall = ''
+      install -Dm644 \
+        ${finalAttrs.cargoRoot}/bundle/40-streamdeck.rules \
+        "$out/lib/udev/rules.d/40-streamdeck.rules"
+
+      install -Dm644 \
+        "${finalAttrs.src}/LICENSE.md" \
+        "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
+    '';
+
+    # Tools needed to perform the nix build
+    buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
+      dbus
+      glib-networking
+      libayatana-appindicator
+      openssl
+      udev
+      webkitgtk_4_1
+    ];
+
+    # Debian bundle contains all the important linux integration files.
+    tauriBundleType = "deb";
+
+    meta = {
+      description = "Linux software for your Elgato Stream Deck";
+      homepage = "https://github.com/nekename/OpenDeck";
+      license = lib.licenses.gpl3Plus;
+
+      authors = [
+        "nekename"
+      ];
+
+      mainProgram = "opendeck";
+      platforms = lib.platforms.linux;
+    };
+
+    passthru = {
+      bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
+    };
+  }
+)

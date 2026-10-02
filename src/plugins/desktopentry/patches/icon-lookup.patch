@@ -1,0 +1,151 @@
+diff --git a/src/main.rs b/src/main.rs
+index 3c6d24d..78d4322 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -1,5 +1,5 @@
+ use std::fs;
+-use std::path::Path;
++use std::path::{Path, PathBuf};
+ use std::process::{Command, Stdio};
+ 
+ use base64::{Engine as _, engine::general_purpose};
+@@ -70,16 +70,130 @@ impl Action for LaunchAppAction {
+ 	}
+ }
+ 
+-async fn update_icon(instance: &Instance, settings: &LaunchAppSettings) -> OpenActionResult<()> {
+-	let icon = settings
+-		.app
+-		.as_deref()
+-		.filter(|s| !s.is_empty())
+-		.and_then(|path| IconFetcher::new().get_icon_path_from_desktop(path))
+-		.and_then(|path| icon_to_base64(&path))
+-		.unwrap_or_else(|| "icon".to_owned());
++const ICON_EXTENSIONS: &[&str] = &[
++    "",
++    ".png",
++    ".svg",
++    ".svgz",
++    ".xpm",
++    ".ico",
++    ".jpg",
++    ".jpeg",
++    ".webp",
++];
+ 
+-	instance.set_image(Some(icon), None).await
++const HICOLOR_APP_DIRS: &[&str] = &[
++    "icons/hicolor/scalable/apps",
++    "icons/hicolor/512x512/apps",
++    "icons/hicolor/384x384/apps",
++    "icons/hicolor/256x256/apps",
++    "icons/hicolor/192x192/apps",
++    "icons/hicolor/128x128/apps",
++    "icons/hicolor/96x96/apps",
++    "icons/hicolor/64x64/apps",
++    "icons/hicolor/48x48/apps",
++    "icons/hicolor/32x32/apps",
++    "icons/hicolor/24x24/apps",
++    "icons/hicolor/22x22/apps",
++    "icons/hicolor/16x16/apps",
++];
++
++const PIXMAP_DIRS: &[&str] = &[
++    "pixmaps",
++];
++
++async fn update_icon(
++    instance: &Instance,
++    settings: &LaunchAppSettings,
++) -> OpenActionResult<()> {
++    let icon = settings
++        .app
++        .as_deref()
++        .filter(|s| !s.is_empty())
++        .and_then(get_icon_path)
++        .and_then(|path| icon_to_base64(&path))
++        .unwrap_or_else(|| "icon".to_owned());
++
++    instance.set_image(Some(icon), None).await
++}
++
++fn get_icon_path(path: &str) -> Option<PathBuf> {
++    let icon = find_app(path)?.icon?;
++    let fetcher = IconFetcher::new();
++
++	// Desktop entries may specify an absolute path directly
++    if Path::new(&icon).is_absolute() {
++    	let path = PathBuf::from(&icon);
++
++    	if path.is_file() {
++    		return Some(path)
++    	}
++    }
++
++    // Try the configured icon theme.
++    if let Some(path) = fetcher.get_icon_path(icon.clone()) {
++        return Some(path);
++    }
++
++    // Some desktop entries use different capitalization from the actual
++    // icon filename.
++    if let Some(path) = fetcher.get_icon_path(icon.to_lowercase()) {
++        return Some(path);
++    }
++
++    // Search all XDG hicolor roots. This matters on systems such as NixOS,
++    // where multiple independent profiles can contribute to the same theme.
++    if let Some(path) = find_xdg_icon(&icon, HICOLOR_APP_DIRS) {
++        return Some(path);
++    }
++
++    if let Some(path) = find_xdg_icon(&icon.to_lowercase(), HICOLOR_APP_DIRS) {
++        return Some(path);
++    }
++
++    // pixmaps is an older but still commonly used location for application
++    // icons.
++    if let Some(path) = find_xdg_icon(&icon, PIXMAP_DIRS) {
++        return Some(path);
++    }
++
++    find_xdg_icon(&icon.to_lowercase(), PIXMAP_DIRS)
++}
++
++fn xdg_data_dirs() -> Vec<PathBuf> {
++    let mut dirs = Vec::new();
++
++    if let Some(data_home) = std::env::var_os("XDG_DATA_HOME") {
++        if !data_home.is_empty() {
++            dirs.push(PathBuf::from(data_home));
++        }
++    } else if let Some(home) = std::env::var_os("HOME") {
++        dirs.push(PathBuf::from(home).join(".local/share"));
++    }
++
++    if let Some(data_dirs) = std::env::var_os("XDG_DATA_DIRS") {
++        dirs.extend(std::env::split_paths(&data_dirs));
++    }
++
++    dirs
++}
++
++fn find_xdg_icon(icon: &str, directories: &[&str]) -> Option<PathBuf> {
++    for data_dir in xdg_data_dirs() {
++        for directory in directories {
++            let dir = data_dir.join(directory);
++
++            for extension in ICON_EXTENSIONS {
++                let path = dir.join(format!("{icon}{extension}"));
++
++                if path.is_file() {
++                    return Some(path);
++                }
++            }
++        }
++    }
++
++    None
+ }
+ 
+ async fn send_apps_to_pi(instance: &Instance) -> OpenActionResult<()> {
