@@ -28,9 +28,9 @@
       ;
   };
 
-  mpris = pkgs.callPackage ./mpris.nix {
+  mpris = pkgs.callPackage ./mpris {
     inherit (pluginLib)
-      mkPrebuiltOpenDeckPlugin
+      mkRustOpenDeckPlugin
       mkGitHubReleaseUpdateScript
       ;
   };
