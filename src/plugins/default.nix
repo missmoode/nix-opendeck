@@ -35,9 +35,9 @@
       ;
   };
 
-  discord = pkgs.callPackage ./discord.nix {
+  discord = pkgs.callPackage ./discord {
     inherit (pluginLib)
-      mkPrebuiltOpenDeckPlugin
+      mkRustOpenDeckPlugin
       mkGitHubReleaseUpdateScript
       ;
   };
