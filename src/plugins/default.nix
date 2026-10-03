@@ -4,18 +4,18 @@
 }:
 
 {
-  starterpack = pkgs.callPackage ./starterpack.nix {
+  starterpack = pkgs.callPackage ./starterpack {
     inherit (pluginLib) mkRustOpenDeckPlugin;
   };
 
-  xivdeck = pkgs.callPackage ./xivdeck.nix {
+  xivdeck = pkgs.callPackage ./xivdeck {
     inherit (pluginLib)
       mkYarnOpenDeckPlugin
       mkGitHubReleaseUpdateScript
       ;
   };
 
-  homeassistant = pkgs.callPackage ./homeassistant.nix {
+  homeassistant = pkgs.callPackage ./homeassistant {
     inherit (pluginLib)
       mkNpmOpenDeckPlugin
       ;
@@ -42,7 +42,7 @@
       ;
   };
 
-  pipewire = pkgs.callPackage ./pipewire.nix {
+  pipewire = pkgs.callPackage ./pipewire {
     inherit (pluginLib) mkRustOpenDeckPlugin;
   };
 }
