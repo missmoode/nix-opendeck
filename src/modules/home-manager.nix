@@ -18,7 +18,6 @@ let
   bundledPluginIds = cfg.package.bundledPluginIds or [ ];
 
   bundledPluginConflicts = lib.filter (pluginId: lib.elem pluginId bundledPluginIds) pluginIds;
-
   externalPlugins = lib.filter (plugin: !(lib.elem plugin.pluginId bundledPluginIds)) cfg.plugins;
 
   externalPluginIds = map (plugin: plugin.pluginId) externalPlugins;
@@ -31,11 +30,30 @@ let
     target="$pluginDir/$pluginId"
     temp="$pluginDir/.$pluginId.hm-tmp"
 
-    rm -rf "$temp"
-    cp -r "$source" "$temp"
-    chmod -R u+rwX "$temp"
+    if [[ ! -d "$source" ]]; then
+      echo "error: OpenDeck plugin '$pluginId' does not contain '$pluginId'" >&2
+      exit 1
+    fi
+
+    if [[ -e "$target" || -L "$target" ]]; then
+      if ! grep -Fqx -- "$pluginId" <<<"$previousState"; then
+        echo "warning: OpenDeck plugin '$pluginId' is already installed but is not managed by Home Manager." >&2
+        echo "warning: Remove the existing plugin before declaring '$pluginId' in Home Manager." >&2
+        continue
+      fi
+    fi
+
+    rm -f "$temp"
+
+    # Declarative plugins live in the Nix store; only a symlink is placed
+    # in OpenDeck's mutable plugin directory.
+    ln -s "$source" "$temp"
+
+    # At this point an existing target is known to be Home Manager-owned.
     rm -rf "$target"
     mv "$temp" "$target"
+
+    installedPluginIds+="$pluginId"$'\n'
   '') externalPlugins;
 
   pluginIdList = lib.concatStringsSep "\n" externalPluginIds;
@@ -55,7 +73,6 @@ in
       default = [ ];
       description = ''
         OpenDeck plugins to install declaratively.
-
         Each package must provide a pluginId passthru attribute and contain
         the corresponding .sdPlugin directory in its output.
 
@@ -81,7 +98,6 @@ in
         message = ''
           programs.opendeck.plugins contains plugins already bundled by
           ${cfg.package.pname or "the selected OpenDeck package"}:
-
           ${lib.concatStringsSep ", " bundledPluginConflicts}
 
           Remove those plugins from programs.opendeck.plugins, or use
@@ -96,31 +112,49 @@ in
     ++ runtimePackages;
 
     home.activation.opendeckPlugins = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-              configDir="''${XDG_CONFIG_HOME:-$HOME/.config}"
-              pluginDir="$configDir/opendeck/plugins"
+      configDir="''${XDG_CONFIG_HOME:-$HOME/.config}"
+      pluginDir="$configDir/opendeck/plugins"
+      stateDir="''${XDG_STATE_HOME:-$HOME/.local/state}/opendeck"
+      stateFile="$stateDir/home-manager-plugins"
 
-              stateDir="''${XDG_STATE_HOME:-$HOME/.local/state}/opendeck"
-              stateFile="$stateDir/home-manager-plugins"
+      if [[ -n "''${DRY_RUN:-}" ]]; then
+        verboseEcho "Would update Home Manager managed OpenDeck plugins"
+      else
+        mkdir -p "$pluginDir" "$stateDir"
 
-              if [[ -n "''${DRY_RUN:-}" ]]; then
-                verboseEcho "Would update Home Manager managed OpenDeck plugins"
-              else
-                mkdir -p "$pluginDir" "$stateDir"
+        previousState=""
+        if [[ -f "$stateFile" ]]; then
+          previousState=$(cat "$stateFile")
+        fi
 
-                # Remove plugins managed by the previous Home Manager generation.
-                if [[ -f "$stateFile" ]]; then
-                  while IFS= read -r pluginId; do
-                    [[ -n "$pluginId" ]] || continue
-                    rm -rf "$pluginDir/$pluginId"
-                  done < "$stateFile"
-                fi
+        installedPluginIds=""
 
-                ${installPlugins}
+        # Remove plugins that were managed by the previous Home Manager
+        # generation but are no longer declared.
+        #
+        # Only remove a symlink which still points into the Nix store.
+        # This prevents stale state from deleting a manually installed
+        # graphical plugin with the same ID.
+        if [[ -n "$previousState" ]]; then
+          while IFS= read -r pluginId; do
+            [[ -n "$pluginId" ]] || continue
 
-                cat > "$stateFile" <<'EOF'
-      ${pluginIdList}
-      EOF
+            target="$pluginDir/$pluginId"
+
+            if [[ -L "$target" ]]; then
+              targetPath=$(readlink -f "$target" 2>/dev/null || true)
+
+              if [[ "$targetPath" == /nix/store/* ]]; then
+                rm -f "$target"
               fi
+            fi
+          done <<<"$previousState"
+        fi
+
+        ${installPlugins}
+
+        printf '%s' "$installedPluginIds" > "$stateFile"
+      fi
     '';
   };
 }

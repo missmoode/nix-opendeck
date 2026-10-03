@@ -66,48 +66,30 @@ rustPlatform.buildRustPackage (
       hash = "sha256-2zI1asMPLxllKaDaCaGbIZ1PwiQJCCsiuyG/gUKe0Mk=";
     };
 
+    patches = [
+      ./patches/opendeck/0001-fix-plugin-webserver-path-check.patch
+      ./patches/opendeck/0002-protect-home-manager-plugins.patch
+    ];
+
     postPatch = ''
       rm -rf plugins
       mkdir plugins
 
-      # Use patched version.
-      # Probably solved by libayatana-appindicator-glib, but tauri doesn't use it.
       substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
         --replace-fail \
         'libayatana-appindicator3.so.1' \
         '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
 
-      # OpenDeck intentionally supports symlinked plugins, but its plugin
-      # webserver checks the canonical path against the canonical config
-      # directory. This rejects assets whose plugin lives in the Nix store.
-      substituteInPlace src-tauri/src/plugins/webserver.rs \
-        --replace-fail \
-        'if !developer && !path.canonicalize().is_ok_and(|p| p.starts_with(&prefix)) {' \
-        '
-          let allowed = path.canonicalize().is_ok_and(|p| {
-            p.starts_with(&prefix)
-              || prefix.join("plugins").read_dir().is_ok_and(|entries| {
-                entries.flatten().any(|entry| {
-                  entry
-                    .path()
-                    .canonicalize()
-                    .is_ok_and(|plugin| p.starts_with(plugin))
-                })
-              })
-          });
+      ${lib.optionalString (webviewZoom != null) ''
+        substituteInPlace src-tauri/src/main.rs \
+          --replace-fail \
+            'APP_HANDLE.set(app.handle().clone()).unwrap();' \
+            'APP_HANDLE.set(app.handle().clone()).unwrap();
 
-          if !developer && !allowed {
-          ';
-    ''
-    + lib.optionalString (webviewZoom != null) ''
-      substituteInPlace src-tauri/src/main.rs \
-        --replace-fail \
-          'APP_HANDLE.set(app.handle().clone()).unwrap();' \
-          'APP_HANDLE.set(app.handle().clone()).unwrap();
-
-            app.get_webview_window("main")
-              .ok_or_else(|| tauri::Error::WebviewNotFound)?
-              .set_zoom(${toString webviewZoom})?;'
+              app.get_webview_window("main")
+                .ok_or_else(|| tauri::Error::WebviewNotFound)?
+                .set_zoom(${toString webviewZoom})?;'
+      ''}
     '';
 
     cargoHash = "sha256-AZ32cl5qbq/lROow9CpBgl3eztLos7VMqOnQV4kdvJU=";

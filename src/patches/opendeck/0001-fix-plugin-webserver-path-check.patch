@@ -1,0 +1,45 @@
+diff --git a/src-tauri/src/plugins/webserver.rs b/src-tauri/src/plugins/webserver.rs
+index 638615c..945c3d4 100644
+--- a/src-tauri/src/plugins/webserver.rs
++++ b/src-tauri/src/plugins/webserver.rs
+@@ -46,10 +46,37 @@ pub async fn init_webserver(prefix: PathBuf) {
+ 		}
+ 
+ 		// Ensure the requested path is within the config directory to prevent unrestricted access to the filesystem.
++		// Plugins managed declaratively may be represented by symlinks in the plugins directory,
++		// so allow access to the canonical target of the symlink corresponding to the requested plugin.
+ 		let developer = crate::store::get_settings().value.developer;
+-		if !developer && !path.canonicalize().is_ok_and(|p| p.starts_with(&prefix)) {
+-			let _ = request.respond(Response::empty(403));
+-			continue;
++		if !developer {
++			let allowed = path.canonicalize().is_ok_and(|canonical_path| {
++				if canonical_path.starts_with(&prefix) {
++					return true;
++				}
++
++				let plugins_dir = prefix.join("plugins");
++
++				let plugin_path = path
++					.strip_prefix(&plugins_dir)
++					.ok()
++					.and_then(|relative| relative.components().next())
++					.map(|component| plugins_dir.join(component.as_os_str()));
++
++				plugin_path.is_some_and(|plugin_path| {
++					std::fs::symlink_metadata(&plugin_path)
++						.map(|metadata| metadata.file_type().is_symlink())
++						.unwrap_or(false)
++					&& plugin_path
++						.canonicalize()
++						.is_ok_and(|plugin_root| canonical_path.starts_with(&plugin_root))
++				})
++			});
++
++			if !allowed {
++				let _ = request.respond(Response::empty(403));
++				continue;
++			}
+ 		}
+ 
+ 		let access_control_allow_origin = Header {
