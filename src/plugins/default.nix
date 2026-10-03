@@ -39,6 +39,10 @@
     inherit (pluginLib) mkRustOpenDeckPlugin;
   };
 
+  tikclock = pkgs.callPackage ./tikclock {
+    inherit (pluginLib) mkRustOpenDeckPlugin;
+  };
+
   xivdeck = pkgs.callPackage ./xivdeck {
     inherit (pluginLib)
       mkYarnOpenDeckPlugin
