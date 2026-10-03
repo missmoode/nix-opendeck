@@ -1,0 +1,13 @@
+diff --git a/src-tauri/src/events/frontend/settings.rs b/src-tauri/src/events/frontend/settings.rs
+index 4c02369..918aaa6 100644
+--- a/src-tauri/src/events/frontend/settings.rs
++++ b/src-tauri/src/events/frontend/settings.rs
+@@ -63,7 +63,7 @@ pub fn get_build_info() -> String {
+ 		</details>
+ 		"#,
+ 		PRODUCT_NAME,
+-		built_info::PKG_VERSION,
++		format!("{}+nix", built_info::PKG_VERSION),
+ 		built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("commit hash unknown"),
+ 		built_info::TARGET,
+ 		built_info::DIRECT_DEPENDENCIES_STR

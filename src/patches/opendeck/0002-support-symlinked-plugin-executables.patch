@@ -1,0 +1,37 @@
+diff --git a/src-tauri/src/plugins/mod.rs b/src-tauri/src/plugins/mod.rs
+index 4d2d06f..5997df1 100644
+--- a/src-tauri/src/plugins/mod.rs
++++ b/src-tauri/src/plugins/mod.rs
+@@ -69,6 +69,9 @@ pub type SpawnRequest = Box<dyn FnOnce() -> Result<(String, PluginChildType, Com
+
+ /// Initialise a plugin from a given directory.
+ pub async fn initialise_plugin(path: path::PathBuf, spawner_tx: mpsc::Sender<SpawnRequest>) -> anyhow::Result<()> {
++	let is_symlink = fs::symlink_metadata(&path)
++		.map(|metadata| metadata.file_type().is_symlink())
++		.unwrap_or(false);
+ 	let plugin_uuid = path.file_name().unwrap().to_str().unwrap().to_owned();
+ 	let plugin_uuid_2 = plugin_uuid.clone();
+
+@@ -322,7 +325,9 @@ pub async fn initialise_plugin(path: path::PathBuf, spawner_tx: mpsc::Sender<Spa
+ 		#[cfg(unix)]
+ 		{
+ 			use std::os::unix::fs::PermissionsExt;
+-			fs::set_permissions(path.join(&code_path), fs::Permissions::from_mode(0o755))?;
++			if !is_symlink {
++				fs::set_permissions(path.join(&code_path), fs::Permissions::from_mode(0o755))?;
++			}
+ 		}
+
+ 		spawner_tx
+@@ -478,10 +483,7 @@ pub fn initialise_plugins() {
+ 	// Iterate through all directory entries in the plugins folder and initialise them as plugins if appropriate
+ 	for entry in entries {
+ 		if let Ok(entry) = entry {
+-			let path = match entry.metadata().unwrap().is_symlink() {
+-				true => entry.path().parent().unwrap_or_else(|| path::Path::new(".")).join(fs::read_link(entry.path()).unwrap()),
+-				false => entry.path(),
+-			};
++			let path = entry.path();
+ 			let metadata = fs::metadata(&path).unwrap();
+ 			if metadata.is_dir() {
+ 				let spawner_tx = tx.clone();

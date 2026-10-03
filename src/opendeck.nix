@@ -68,7 +68,9 @@ rustPlatform.buildRustPackage (
 
     patches = [
       ./patches/opendeck/0001-fix-plugin-webserver-path-check.patch
-      ./patches/opendeck/0002-protect-home-manager-plugins.patch
+      ./patches/opendeck/0002-support-symlinked-plugin-executables.patch
+      ./patches/opendeck/0003-protect-home-manager-plugins.patch
+      ./patches/opendeck/0004-identify-nix-build.patch
     ];
 
     postPatch = ''
