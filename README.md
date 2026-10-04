@@ -8,7 +8,7 @@ long-term, but in the spirit of Nix, here ya go.
 > [!IMPORTANT]  
 > If you encounter bugs with the packages produced by this repo, it might not be
 > the fault of the upstream repos, but a problem with this derivation.
-> Be certain before bugging them!
+> Be certain before contacting the upstream devs!
 
 ## Scope
 ### Core
