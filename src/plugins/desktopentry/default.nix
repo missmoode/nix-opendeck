@@ -4,6 +4,7 @@
   stdenv,
   deno,
   glib,
+  makeWrapper,
 
   mkRustOpenDeckPlugin,
   mkGitHubReleaseUpdateScript,
@@ -72,9 +73,9 @@ mkRustOpenDeckPlugin (
       ln -s ${./Cargo.lock} Cargo.lock
       ln -s ${./deno.lock} pi/deno.lock
     '';
-
     nativeBuildInputs = [
       deno
+      makeWrapper
     ];
 
     preBuild = ''
@@ -90,6 +91,11 @@ mkRustOpenDeckPlugin (
 
     binaryInstallPath = "oadesktopentry-${stdenv.hostPlatform.rust.rustcTarget}";
 
+    postInstall = ''
+      wrapProgram "$out/${finalAttrs.pluginId}/${finalAttrs.binaryInstallPath}" \
+        --prefix PATH : "${glib}/bin"
+    '';
+
     licenseFiles = [
       "LICENSE"
     ];
@@ -104,10 +110,6 @@ mkRustOpenDeckPlugin (
         "nekename"
       ];
     };
-
-    runtimePackages = [
-      glib
-    ];
 
     passthru = {
       updateScript = mkGitHubReleaseUpdateScript {
