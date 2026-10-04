@@ -18,7 +18,7 @@ long-term, but in the spirit of Nix, here ya go.
 
 > [!IMPORTANT]  
 > If you encounter bugs with the packages produced by this repo, it might not be
-> the fault of the upstream repos, but a problem with nix-opendeck’s derivation.
+> the fault of the upstream repos, but a problem with nix-opendeck’s derivation, or OpenDeck’s handling of them.
 > Be certain before contacting the upstream devs!
 
 ## Overview
