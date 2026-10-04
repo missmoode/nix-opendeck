@@ -35,6 +35,10 @@
       ;
   };
 
+  onairclock = pkgs.callPackage ./onairclock {
+    inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+  };
+
   pipewire = pkgs.callPackage ./pipewire {
     inherit (pluginLib) mkRustOpenDeckPlugin;
   };

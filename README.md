@@ -237,6 +237,7 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [OpenAction Discord Plugin](https://github.com/OpenActionPlugins/discord) | `opendeck-plugin-oadiscord` |
 | [HomeAssistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugin-homeassistant` |
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugin-mpris` |
+| [On Air Clock](https://github.com/wortkrieg/streamdeck-onairclock) | `opendeck-onairclock` |
 | [Pipewire Audio Control](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugin-pipewire` |
 | [TikClock](https://github.com/GDWhisper/opendeck-tikclock) | `opendeck-plugin-tikclock` |
 | [Tomato Timer](https://github.com/gallowaylabs/streamdeck-tomato-timer) | `opendeck-plugin-tomatotimer` |
