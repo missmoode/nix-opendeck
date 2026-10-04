@@ -19,7 +19,6 @@
 
   bundledPlugins ? [ ],
   pname ? "opendeck-core",
-  webviewZoom ? null,
 }:
 # Make sure we're not bundling the same plugin multiple times
 let
@@ -81,17 +80,6 @@ rustPlatform.buildRustPackage (
         --replace-fail \
         'libayatana-appindicator3.so.1' \
         '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
-
-      ${lib.optionalString (webviewZoom != null) ''
-        substituteInPlace src-tauri/src/main.rs \
-          --replace-fail \
-            'APP_HANDLE.set(app.handle().clone()).unwrap();' \
-            'APP_HANDLE.set(app.handle().clone()).unwrap();
-
-              app.get_webview_window("main")
-                .ok_or_else(|| tauri::Error::WebviewNotFound)?
-                .set_zoom(${toString webviewZoom})?;'
-      ''}
     '';
 
     cargoHash = "sha256-AZ32cl5qbq/lROow9CpBgl3eztLos7VMqOnQV4kdvJU=";

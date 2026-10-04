@@ -213,19 +213,6 @@ By default, this is set to `opendeck`, however you can change it if you want to 
 of the package, for example `opendeck-core`, in which case you will need to manually declare
 `opendeck-plugin-starterpack` as a plugin in your Home Manager configuration.
 
-### Changing the zoom of the OpenDeck UI interface
-This derivation also adds a lever for a convenience feature to change the scale of the OpenDeck GUI.
-To use it, modify the `webviewZoom` argument:
-```nix
-opendeck-local = (
-  _final: prev: {
-    opendeck = prev.opendeck.override {
-      webviewZoom = 0.8; # By default, it's at 1.
-    };
-  }
-);
-```
-
 ## Plugin Listing
 Below is a list of the plugins where a derivation is included in this repo. You can check their upstream sources for more information.
 
