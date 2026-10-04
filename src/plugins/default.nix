@@ -4,6 +4,9 @@
 }:
 
 {
+  analogclock = pkgs.callPackage ./analogclock {
+    inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+  };
 
   desktopentry = pkgs.callPackage ./desktopentry {
     inherit (pluginLib)
@@ -11,6 +14,7 @@
       mkGitHubReleaseUpdateScript
       ;
   };
+
   oadiscord = pkgs.callPackage ./discord {
     inherit (pluginLib)
       mkRustOpenDeckPlugin

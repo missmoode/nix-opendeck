@@ -232,6 +232,7 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | Upstream Plugin | Package name |
 | --- | --- |
 | [Starterpack](https://github.com/nekename/OpenDeck/tree/main/plugins/com.amansprojects.starterpack.sdPlugin) | `opendeck-plugin-starterpack` |
+| [Analog Clock](https://github.com/elgatosf/streamdeck-analogclock/) | `opendeck-plugin-analogclock` |
 | [Linux App Launcher](https://github.com/OpenActionPlugins/desktopentry) | `opendeck-plugin-desktopentry` |
 | [OpenAction Discord Plugin](https://github.com/OpenActionPlugins/discord) | `opendeck-plugin-oadiscord` |
 | [HomeAssistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugin-homeassistant` |
