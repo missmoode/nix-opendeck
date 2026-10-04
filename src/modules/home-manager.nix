@@ -20,8 +20,6 @@ let
   bundledPluginConflicts = lib.filter (pluginId: lib.elem pluginId bundledPluginIds) pluginIds;
   externalPlugins = lib.filter (plugin: !(lib.elem plugin.pluginId bundledPluginIds)) cfg.plugins;
 
-  externalPluginIds = map (plugin: plugin.pluginId) externalPlugins;
-
   runtimePackages = lib.unique (lib.concatMap (plugin: plugin.runtimePackages or [ ]) cfg.plugins);
 
   installPlugins = lib.concatMapStringsSep "\n" (plugin: ''
@@ -55,8 +53,6 @@ let
 
     installedPluginIds+="$pluginId"$'\n'
   '') externalPlugins;
-
-  pluginIdList = lib.concatStringsSep "\n" externalPluginIds;
 in
 {
   options.programs.opendeck = {
