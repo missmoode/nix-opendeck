@@ -19,6 +19,7 @@
 
   bundledPlugins ? [ ],
   pname ? "opendeck-core",
+  updateScript ? null,
 }:
 # Make sure we're not bundling the same plugin multiple times
 let
@@ -157,6 +158,9 @@ rustPlatform.buildRustPackage (
 
     passthru = {
       bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
+    }
+    // lib.optionalAttrs (updateScript != null) {
+      inherit updateScript;
     };
   }
 )

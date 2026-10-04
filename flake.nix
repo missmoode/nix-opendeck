@@ -104,6 +104,11 @@
             bundledPlugins = [
               plugins.starterpack
             ];
+
+            updateScript = pluginLib.mkGitHubReleaseUpdateScript {
+              owner = "nekename";
+              repo = "OpenDeck";
+            };
           };
         in
         {
