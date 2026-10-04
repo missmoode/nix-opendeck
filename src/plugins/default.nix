@@ -62,6 +62,13 @@
     inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
   };
 
+  weather = pkgs.callPackage ./weather {
+    inherit (pluginLib)
+      mkRustOpenDeckPlugin
+      mkGitHubReleaseUpdateScript
+      ;
+  };
+
   xivdeck = pkgs.callPackage ./xivdeck {
     inherit (pluginLib)
       mkYarnOpenDeckPlugin
