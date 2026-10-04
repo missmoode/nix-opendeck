@@ -8,7 +8,7 @@
 }:
 
 mkRustOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-weather";
+  pname = "opendeck-jfms7s-weather";
   version = "0.1.1";
 
   src = fetchFromGitHub {

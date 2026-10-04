@@ -62,7 +62,7 @@
     inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
   };
 
-  weather = pkgs.callPackage ./weather {
+  jfms7s-weather = pkgs.callPackage ./jfms7s-weather {
     inherit (pluginLib)
       mkRustOpenDeckPlugin
       mkGitHubReleaseUpdateScript
