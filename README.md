@@ -41,7 +41,7 @@ By default, the [NixOS Module](#nixos-module) and [Home Manager Module](#home-ma
 use the `opendeck` package.
 
 ### Plugins
-Plugins installed via the OpenDeck UI are often prone to failure due to being unpatched for NixOS’s non-traditional environment.
+Plugins installed via the OpenDeck UI are often prone to failure due to incompatibilities with Nix’s non-traditional environment.
 
 Because of that, and to allow for declarative configuration, this flake also contains derivations which
 patch and package plugins and their dependencies so that they can work properly in a Nix environment.
@@ -127,7 +127,7 @@ in
 
 > [!IMPORTANT]  
 > nix-opendeck patches OpenDeck to prevent updates or removal of plugins installed via Home Manager.
-> You will also recieve a warning from the Home Manager module if you attempt to overwrite a plugin
+> You will also receive a warning from the Home Manager module if you attempt to overwrite a plugin
 > with Home Manager which is already installed via the graphical interface.
 
 ### Usage without the NixOS or Home Manager modules
@@ -142,7 +142,7 @@ They are available in the upstream repository [here](https://raw.githubuserconte
 
 OpenDeck looks for plugins at `$XDG_CONFIG/opendeck/plugins/`. You could symlink the plugins from the nix store directly into there, and the patched `opendeck` should be able to use them.
 
-Alternatvely, you could override the `opendeck` or `opendeck-core` packages to [bundle](#bundled-plugins) plugins into them.
+Alternatively, you could override the `opendeck` or `opendeck-core` packages to [bundle](#bundled-plugins) plugins into them.
 
 ### Overlay
 The flake emits an overlay to add the flake's packages to your local nixpkgs at `inputs.opendeck.overlays.default`.
