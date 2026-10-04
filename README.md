@@ -26,7 +26,7 @@ use the `opendeck` package.
 
 More information on the difference between a bundled plugin and a regular plugin [can be found here](#bundled-plugins).
 
-## Using plugins
+### Plugins
 Plugins installed via the OpenDeck UI are often prone to failure due to being unpatched for NixOS.
 
 Because of that, and to allow for declarative configuration, this flake also contains derivations for
