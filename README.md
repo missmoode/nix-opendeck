@@ -82,7 +82,8 @@ If you're not using NixOS, you must set them up yourself. See the section on [us
 
 ### Home Manager Module
 
-The home manager module will automatically load plugins into OpenDeck's XDG config directory.
+The Home Manager module lets you declare plugins you’d like to use, and installs them to OpenDeck by making them available in OpenDeck's
+XDG plugin directory via links from the Nix store.
 
 ```nix
 {
