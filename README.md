@@ -1,5 +1,11 @@
 # OpenDeck for NixOS
 
+<div align="center">
+
+[Installation](#installation) | [Usage](#usage) | [Included plugin derivations](#plugin-listing)
+
+</div>
+
 Nix-OpenDeck lets you install [OpenDeck](https://github.com/nekename/OpenDeck) and its plugins declaratively through Nix, 
 with the plugins able to remain immutable in the Nix store.
 
