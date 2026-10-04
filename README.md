@@ -35,10 +35,10 @@ It emits two packages for OpenDeck:
 - `opendeck`, which contains the bundled StarterPack plugin the upstream releases are built with.
   - `default` is an alias of `opendeck`.
 
+More information on the difference between a bundled plugin and a regular plugin [can be found here](#bundled-plugins).
+
 By default, the [NixOS Module](#nixos-module) and [Home Manager Module](#home-manager-module)
 use the `opendeck` package.
-
-More information on the difference between a bundled plugin and a regular plugin [can be found here](#bundled-plugins).
 
 ### Plugins
 Plugins installed via the OpenDeck UI are often prone to failure due to being unpatched for NixOS’s environment.
