@@ -34,7 +34,7 @@ nix-opendeck provides:
 ### Core
 This flake includes a patched version of OpenDeck to support plugins symlinked from the Nix store,
 as well as protect against collisions between plugins managed through the GUI and those managed by
-the [Home Manager Module](#home-manager-module).
+the [Home Manager module](#home-manager-module).
 
 It emits two packages for OpenDeck:
 - `opendeck-core`, which is the baseline opendeck with the patches applied.
@@ -43,7 +43,7 @@ It emits two packages for OpenDeck:
 
 More information on the difference between a bundled plugin and a regular plugin [can be found here](#bundled-plugins).
 
-By default, the [NixOS Module](#nixos-module) and [Home Manager Module](#home-manager-module)
+By default, the [NixOS module](#nixos-module) and [Home Manager module](#home-manager-module)
 use the `opendeck` package.
 
 ### Plugins
