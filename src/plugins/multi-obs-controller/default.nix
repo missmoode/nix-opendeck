@@ -1,20 +1,27 @@
 {
   lib,
   fetchFromGitHub,
-
+  mkGitHubReleaseUpdateScript,
   mkNpmOpenDeckPlugin,
 }:
 
 mkNpmOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-multi-obs-controller";
-  version = "0.8.3";
+  version = "0.8.2";
 
   src = fetchFromGitHub {
     owner = "theca11";
     repo = "multi-obs-controller";
     tag = "v${finalAttrs.version}";
     fetchSubmodules = true;
-    hash = "sha256-j/Y12Yi3/U37+QLM5xwaaCWmqzjNloiQxSgP2GEfHpc=";
+    hash = "sha256-2k5EWYrhYmp4GD2LxupNpTRPpFTw6O47WpFfo4wVpG8=";
+  };
+
+  passthru = {
+    updateScript = mkGitHubReleaseUpdateScript {
+      owner = "theca11";
+      repo = "multi-obs-controller";
+    };
   };
 
   pluginId = "dev.theca11.multiobs.sdPlugin";
