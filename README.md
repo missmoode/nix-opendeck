@@ -26,7 +26,7 @@ nix-opendeck provides:
 
 ## Scope
 ### Core
-This flake includes a patched version of OpenDeck to support plugins symlinked from the nix store,
+This flake includes a patched version of OpenDeck to support plugins symlinked from the Nix store,
 as well as protect against collisions between plugins managed through the GUI and those managed by
 the [Home Manager Module](#home-manager-module).
 
