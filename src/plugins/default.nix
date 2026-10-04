@@ -8,6 +8,13 @@
     inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
   };
 
+  decks-vscode = pkgs.callPackage ./decks-vscode {
+    inherit (pluginLib)
+      mkWindowsOpenDeckPlugin
+      mkGitHubReleaseUpdateScript
+      ;
+  };
+
   desktopentry = pkgs.callPackage ./desktopentry {
     inherit (pluginLib)
       mkRustOpenDeckPlugin
@@ -48,6 +55,13 @@
 
   pipewire = pkgs.callPackage ./pipewire {
     inherit (pluginLib) mkRustOpenDeckPlugin;
+  };
+
+  redline-monitor = pkgs.callPackage ./redline-monitor {
+    inherit (pluginLib)
+      mkNpmOpenDeckPlugin
+      mkGitHubReleaseUpdateScript
+      ;
   };
 
   starterpack = pkgs.callPackage ./starterpack {
