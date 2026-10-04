@@ -11,7 +11,7 @@
       mkGitHubReleaseUpdateScript
       ;
   };
-  discord = pkgs.callPackage ./discord {
+  oadiscord = pkgs.callPackage ./discord {
     inherit (pluginLib)
       mkRustOpenDeckPlugin
       mkGitHubReleaseUpdateScript
