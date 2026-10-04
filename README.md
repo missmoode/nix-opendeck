@@ -242,5 +242,5 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [Pipewire Audio Control](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugin-pipewire` |
 | [TikClock](https://github.com/GDWhisper/opendeck-tikclock) | `opendeck-plugin-tikclock` |
 | [Tomato Timer](https://github.com/gallowaylabs/streamdeck-tomato-timer) | `opendeck-plugin-tomatotimer` |
-| [OpenDeck Weather](https://github.com/jfms7s/opendeck-weather) | `opendeck-plugin-weather` |
+| [OpenDeck Weather](https://github.com/jfms7s/opendeck-weather) | `opendeck-plugin-jfms7s-weather` |
 | [XIVDeck](https://github.com/KazWolfe/XIVDeck) | `opendeck-plugin-xivdeck` |
