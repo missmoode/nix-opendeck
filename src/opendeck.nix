@@ -17,6 +17,8 @@
   wrapGAppsHook4,
   libayatana-appindicator,
 
+  gst_all_1,
+
   bundledPlugins ? [ ],
   pname ? "opendeck-core",
   updateScript ? null,
@@ -28,6 +30,16 @@ let
   duplicateBundledPluginIds = lib.filter (
     pluginId: lib.count (id: id == pluginId) bundledPluginIds > 1
   ) (lib.unique bundledPluginIds);
+
+  gstPlugins = with gst_all_1; [
+    gstreamer
+    gst-plugins-base
+    gst-plugins-good
+    gst-plugins-bad
+    gst-libav
+  ];
+
+  gstPluginPath = lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" gstPlugins;
 in
 assert duplicateBundledPluginIds == [ ];
 rustPlatform.buildRustPackage (
@@ -131,14 +143,26 @@ rustPlatform.buildRustPackage (
     '';
 
     # Tools needed to perform the nix build
-    buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
-      dbus
-      glib-networking
-      libayatana-appindicator
-      openssl
-      udev
-      webkitgtk_4_1
-    ];
+    buildInputs = lib.optionals stdenv.hostPlatform.isLinux (
+      gstPlugins
+      ++ [
+        dbus
+        glib-networking
+        libayatana-appindicator
+        openssl
+        udev
+        webkitgtk_4_1
+      ]
+    );
+
+    # Explicitly expose the GStreamer plugin directories to WebKit.
+    # WebKitWebProcess otherwise may fail when attempting HTML audio
+    # playback on NixOS.
+    preFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
+      gappsWrapperArgs+=(
+        --set GST_PLUGIN_PATH_1_0 "${gstPluginPath}"
+      )
+    '';
 
     # Debian bundle contains all the important linux integration files.
     tauriBundleType = "deb";
