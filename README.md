@@ -209,8 +209,9 @@ environment.systemPackages = [
 ### Changing the package used by the NixOS or Home Manager modules
 The package used by the NixOS and Home Manager modules can be changed by modifying `programs.opendeck.package`.
 
-By default, this is set to `opendeck`, however you can change it to `opendeck-core`, in which case you will
-need to manually declare `opendeck-plugin-starterpack` as a plugin in your Home Manager configuration.
+By default, this is set to `opendeck`, however you can change it if you want to use a different version
+of the package, for example `opendeck-core`, in which case you will need to manually declare
+`opendeck-plugin-starterpack` as a plugin in your Home Manager configuration.
 
 ### Changing the zoom of the OpenDeck UI interface
 This derivation also adds a lever for a convenience feature to change the scale of the OpenDeck GUI.
