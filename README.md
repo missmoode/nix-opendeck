@@ -239,7 +239,6 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugin-mpris` |
 | [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugin-multi-obs-controller` |
 | [On Air Clock](https://github.com/wortkrieg/streamdeck-onairclock) | `opendeck-plugin-onairclock` |
-| [OpenWeather](https://github.com/Lyzev/OpenWeather) | `opendeck-plugin-openweather` |
 | [Pipewire Audio Control](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugin-pipewire` |
 | [TikClock](https://github.com/GDWhisper/opendeck-tikclock) | `opendeck-plugin-tikclock` |
 | [Tomato Timer](https://github.com/gallowaylabs/streamdeck-tomato-timer) | `opendeck-plugin-tomatotimer` |

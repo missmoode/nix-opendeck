@@ -62,10 +62,6 @@
     inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
   };
 
-  openweather = pkgs.callPackage ./openweather {
-    inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
-  };
-
   xivdeck = pkgs.callPackage ./xivdeck {
     inherit (pluginLib)
       mkYarnOpenDeckPlugin
