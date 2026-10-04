@@ -130,7 +130,7 @@ Alternatvely, you could override the `opendeck` or `opendeck-core` packages to [
 ### Overlay
 The flake emits an overlay to add the flake's packages to your local nixpkgs at `inputs.opendeck.overlays.default`.
 
-Once you've applied it, as an example, your Home Manager configuration can be simplified to just use your existing `pkgs` argument:
+Once you've applied it, your configuration can be simplified to just use your existing `pkgs` argument:
 ```nix
 {
   inputs,
