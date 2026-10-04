@@ -1,7 +1,12 @@
 # OpenDeck for NixOS
 
-This is a derivation of [OpenDeck](https://github.com/nekename/OpenDeck) which allows for
-declarative installation using NixOS and Home Manager. It's still in early development, and is
+Nix-OpenDeck lets you install [OpenDeck](https://github.com/nekename/OpenDeck) and its plugins declaratively through Nix, 
+with the plugins able to remain immutable in the Nix store.
+
+This is useful on NixOS because many OpenDeck plugins expect a conventional system environment and so don’t work correctly
+when installed through OpenDeck’s GUI.
+
+It's still in early development, and is
 also my first attempt at derivations. I made it for myself, so I make no promises to maintain this
 long-term, but in the spirit of Nix, here ya go.
 
@@ -27,10 +32,10 @@ use the `opendeck` package.
 More information on the difference between a bundled plugin and a regular plugin [can be found here](#bundled-plugins).
 
 ### Plugins
-Plugins installed via the OpenDeck UI are often prone to failure due to being unpatched for NixOS.
+Plugins installed via the OpenDeck UI are often prone to failure due to being unpatched for NixOS’s environment.
 
-Because of that, and to allow for declarative configuration, this flake also contains derivations for
-plugins and machinery for creating more. [Check here for a list of plugins included in this flake](#plugin-listing).
+Because of that, and to allow for declarative configuration, this flake also contains derivations which
+patch and package plugins and their dependencies. [Check here for a list of plugins included in this flake](#plugin-listing).
 
 Alternatively, you could try using [nix-ld](https://github.com/nix-community/nix-ld) to better resemble
 the environment the unpatched plugins expect.
