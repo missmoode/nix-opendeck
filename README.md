@@ -12,7 +12,7 @@ long-term, but in the spirit of Nix, here ya go.
 
 > [!IMPORTANT]  
 > If you encounter bugs with the packages produced by this repo, it might not be
-> the fault of the upstream repos, but a problem with this derivation.
+> the fault of the upstream repos, but a problem with nix-opendeck’s derivation.
 > Be certain before contacting the upstream devs!
 
 ## Overview
@@ -41,10 +41,12 @@ By default, the [NixOS Module](#nixos-module) and [Home Manager Module](#home-ma
 use the `opendeck` package.
 
 ### Plugins
-Plugins installed via the OpenDeck UI are often prone to failure due to being unpatched for NixOS’s environment.
+Plugins installed via the OpenDeck UI are often prone to failure due to being unpatched for NixOS’s non-traditional environment.
 
 Because of that, and to allow for declarative configuration, this flake also contains derivations which
-patch and package plugins and their dependencies. [Check here for a list of plugins included in this flake](#plugin-listing).
+patch and package plugins and their dependencies so that they can work properly in a Nix environment.
+
+[Check here for a list of plugins included in this flake](#plugin-listing).
 
 Alternatively, you could try using [nix-ld](https://github.com/nix-community/nix-ld) to better resemble
 the environment the unpatched plugins expect.
