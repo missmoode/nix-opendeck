@@ -64,7 +64,7 @@ opendeck = {
 
 ## Usage
 > [!IMPORTANT]  
-> When using both the NixOS and Home Manager modules, make sure that they're using the same [package](#changing-the-package-used-in-the-modules)!
+> When using both the NixOS and Home Manager modules, make sure that they're using the same [package](#changing-the-package-used-by-the-nixos-or-home-manager-modules)!
 
 ### NixOS Module
 
