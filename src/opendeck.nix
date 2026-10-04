@@ -50,7 +50,7 @@ rustPlatform.buildRustPackage (
         deno install --frozen
       '';
 
-      outputHash = "sha256-4ANt7w0xEMOqlrKg+TzyC843a6RuvO44JmsdPt56SBA=";
+      outputHash = "sha256-GVwHzDMaVRWHXtK5CPy9GYHW9UWT6Anq0DvoBSlrw9U=";
       outputHashMode = "recursive";
     };
   in

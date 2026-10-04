@@ -5,7 +5,7 @@ index f8780d1..806f4c7 100644
 @@ -9,6 +9,22 @@ use std::sync::mpsc;
  use tauri::{AppHandle, Emitter, Manager, command};
  use tokio::fs;
- 
+
 +fn is_home_manager_plugin(id: &str) -> bool {
 +	let state_file = std::env::var_os("XDG_STATE_HOME")
 +		.map(std::path::PathBuf::from)
@@ -28,24 +28,24 @@ index f8780d1..806f4c7 100644
 @@ -94,6 +110,13 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
  		},
  	};
- 
+
 +	if is_home_manager_plugin(&id) {
 +		return Err(anyhow::anyhow!(
-+			"plugin '{}' is managed by Home Manager and cannot be modified through OpenDeck",
++			"This plugin is managed by Home Manager and cannot be modified through OpenDeck. ({})",
 +			id
 +		).into());
 +	}
 +
  	let _ = deactivate_plugin(&app, &id).await;
- 
+
  	let config_dir = config_dir();
 @@ -129,6 +152,13 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
- 
+
  #[command]
  pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
 +	if is_home_manager_plugin(&id) {
 +		return Err(anyhow::anyhow!(
-+			"plugin '{}' is managed by Home Manager and cannot be modified through OpenDeck",
++			"This plugin is managed by Home Manager and cannot be modified through OpenDeck.  ({})",
 +			id
 +		).into());
 +	}
