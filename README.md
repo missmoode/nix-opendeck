@@ -235,7 +235,7 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [Analog Clock](https://github.com/elgatosf/streamdeck-analogclock/) | `opendeck-plugin-analogclock` |
 | [Linux App Launcher](https://github.com/OpenActionPlugins/desktopentry) | `opendeck-plugin-desktopentry` |
 | [OpenAction Discord Plugin](https://github.com/OpenActionPlugins/discord) | `opendeck-plugin-oadiscord` |
-| [HomeAssistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugin-homeassistant` |
+| [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugin-homeassistant` |
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugin-mpris` |
 | [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugin-multi-obs-controller` |
 | [On Air Clock](https://github.com/wortkrieg/streamdeck-onairclock) | `opendeck-plugin-onairclock` |
