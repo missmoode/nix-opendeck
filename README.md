@@ -15,6 +15,15 @@ long-term, but in the spirit of Nix, here ya go.
 > the fault of the upstream repos, but a problem with this derivation.
 > Be certain before contacting the upstream devs!
 
+## Overview
+nix-opendeck provides:
+- A Nix-packaged build of OpenDeck patched  for NixOS and plugins in the Nix store.
+- Declarative packaging of OpenDeck/OpenActions plugins.
+- A Home Manager module for declaratively installing plugins.
+- A NixOS module for configuring OpenDeck and its required UDev rules.
+- Protection against OpenDeck overwriting Home Manager-managed plugins.
+- Optional bundling of plugins directly into the OpenDeck package.
+
 ## Scope
 ### Core
 This flake includes a patched version of OpenDeck to support plugins symlinked from the nix store,
