@@ -239,4 +239,5 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugin-mpris` |
 | [Pipewire Audio Control](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugin-pipewire` |
 | [TikClock](https://github.com/GDWhisper/opendeck-tikclock) | `opendeck-plugin-tikclock` |
+| [Tomato Timer](https://github.com/gallowaylabs/streamdeck-tomato-timer) | `opendeck-plugin-tomatotimer` |
 | [XIVDeck](https://github.com/KazWolfe/XIVDeck) | `opendeck-plugin-xivdeck` |

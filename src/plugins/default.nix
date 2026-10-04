@@ -47,6 +47,10 @@
     inherit (pluginLib) mkRustOpenDeckPlugin;
   };
 
+  tomatotimer = pkgs.callPackage ./tomatotimer {
+    inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+  };
+
   xivdeck = pkgs.callPackage ./xivdeck {
     inherit (pluginLib)
       mkYarnOpenDeckPlugin
