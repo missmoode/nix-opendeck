@@ -36,7 +36,10 @@
   };
 
   multi-obs-controller = pkgs.callPackage ./multi-obs-controller {
-    inherit (pluginLib) mkNpmOpenDeckPlugin;
+    inherit (pluginLib)
+      mkNpmOpenDeckPlugin
+      mkGitHubReleaseUpdateScript
+      ;
   };
 
   onairclock = pkgs.callPackage ./onairclock {
