@@ -20,7 +20,13 @@ let
   bundledPluginConflicts = lib.filter (pluginId: lib.elem pluginId bundledPluginIds) pluginIds;
   externalPlugins = lib.filter (plugin: !(lib.elem plugin.pluginId bundledPluginIds)) cfg.plugins;
 
-  runtimePackages = lib.unique (lib.concatMap (plugin: plugin.runtimePackages or [ ]) cfg.plugins);
+  runtimeRequirements = lib.concatMap (
+    plugin:
+    map (requirement: {
+      inherit requirement;
+      pluginId = plugin.pluginId;
+    }) (plugin.runtimeRequirements or [ ])
+  ) cfg.plugins;
 
   installPlugins = lib.concatMapStringsSep "\n" (plugin: ''
     pluginId=${lib.escapeShellArg plugin.pluginId}
@@ -104,8 +110,26 @@ in
 
     home.packages = [
       cfg.package
-    ]
-    ++ runtimePackages;
+    ];
+
+    home.activation.opendeckRuntimeRequirements = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      missing=0
+
+      ${lib.concatMapStringsSep "\n" (
+        { pluginId, requirement }:
+        ''
+          if ! command -v ${lib.escapeShellArg requirement} >/dev/null 2>&1; then
+            echo "error: OpenDeck plugin '${lib.escapeShellArg pluginId}' requires '${lib.escapeShellArg requirement}', but it was not found in PATH." >&2
+            echo "error: Provide '${lib.escapeShellArg requirement}' through your system or another package manager before enabling this plugin." >&2
+            missing=1
+          fi
+        ''
+      ) runtimeRequirements}
+
+      if (( missing )); then
+        exit 1
+      fi
+    '';
 
     home.activation.opendeckPlugins = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       configDir="''${XDG_CONFIG_HOME:-$HOME/.config}"

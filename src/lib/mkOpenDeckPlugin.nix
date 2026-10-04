@@ -8,7 +8,7 @@
   meta ? { },
   passthru ? { },
 
-  runtimePackages ? [ ],
+  runtimeRequirements ? [ ],
   licenseFiles ? [ ],
   licenseSource ? null,
 }:
@@ -35,7 +35,7 @@
   inherit meta;
 
   passthru = passthru // {
-    inherit pluginId runtimePackages;
+    inherit pluginId runtimeRequirements;
 
     updateScript = passthru.updateScript or (nix-update-script { });
   };
