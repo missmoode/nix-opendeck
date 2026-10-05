@@ -182,9 +182,8 @@ Alternatively, you could override the `opendeck` or `opendeck-core` packages to 
   plugins into them.
 
 You could also use the `opendeck-with-plugins` package, which bundles every plugin in the 
-  [Plugin Listing](#plugin-listing) which do not declare required commands. This is
-  not recommended, as bundling many plugins increases the size of the resulting package and
-  requires OpenDeck to be rebuilt whenever the bundle changes.
+  [Plugin Listing](#plugin-listing) which does not declare required commands. This is
+  not recommended, as any changes to OpenDeck or its plugins will require recompiling the whole thing.
 
 ### Overlay
 The flake emits an overlay to add the flake's packages to your local nixpkgs at 
