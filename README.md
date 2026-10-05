@@ -133,6 +133,10 @@ in
     programs.opendeck = {
       enable = true;
 
+      # You can change this option to use a different
+      # OpenDeck package from the default.
+      # package = opendeckpkgs.opendeck;
+      
       # You can also avoid having the module install the
       # package for you, if you want to do it yourself.
       # installPackage = false;
