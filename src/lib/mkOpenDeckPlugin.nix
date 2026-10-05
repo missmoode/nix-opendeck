@@ -20,6 +20,11 @@
   serviceRequirements ? [ ],
 
   licenseFiles ? [ ],
+
+  # Useful for retrieving license files when the upstream repo hasn't
+  # placed them in an expected place, or has ommitted them from the
+  # current source. You only need to set it if the licenses can't be
+  # found from `src`.
   licenseSource ? null,
 }:
 {
