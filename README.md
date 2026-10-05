@@ -109,7 +109,7 @@ in
     # 
     # environment.systemPackages = [
     #   opendeck
-    # ]
+    # ];
   };
 }
 ```
