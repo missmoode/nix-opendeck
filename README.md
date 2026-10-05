@@ -26,7 +26,7 @@ This is still in early development, and is also my first attempt at derivations.
 
 ## Overview
 nix-opendeck provides:
-- A Nix-packaged build of OpenDeck patched  to support NixOS and plugins stored in the Nix store.
+- A Nix-packaged build of OpenDeck patched to support NixOS and plugins included via symlink.
 - Declarative packaging of OpenDeck/OpenActions plugins.
 - A Home Manager module to declaratively manage plugins, and optionally install OpenDeck.
 - A NixOS hardware module for installing the udev rules required by OpenDeck.
