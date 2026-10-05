@@ -17,7 +17,8 @@ buildNpmPackage (
         cp -a "${finalAttrs.pluginDir}/." "$plugin/"
       '';
 
-      runtimeRequirements = attrs.runtimeRequirements or [ ];
+      requiredCommands = attrs.requiredCommands or [ ];
+      serviceRequirements = attrs.serviceRequirements or [ ];
 
       meta = attrs.meta or { };
       passthru = attrs.passthru or { };

@@ -37,7 +37,8 @@ rustPlatform.buildRustPackage (
           "$plugin/${binaryInstallPath}"
       '';
 
-      runtimeRequirements = attrs.runtimeRequirements or [ ];
+      requiredCommands = attrs.requiredCommands or [ ];
+      serviceRequirements = attrs.serviceRequirements or [ ];
 
       meta = attrs.meta or { };
       passthru = attrs.passthru or { };

@@ -101,6 +101,8 @@ mkRustOpenDeckPlugin (
       "LICENSE.md"
     ];
 
+    serviceRequirements = [ "discord" ];
+
     meta = {
       description = "OpenAction plugin for controlling the Discord desktop client";
       homepage = "https://github.com/OpenActionPlugins/discord";

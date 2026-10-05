@@ -8,13 +8,6 @@
     inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
   };
 
-  decks-vscode = pkgs.callPackage ./decks-vscode {
-    inherit (pluginLib)
-      mkWindowsOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
-  };
-
   desktopentry = pkgs.callPackage ./desktopentry {
     inherit (pluginLib)
       mkRustOpenDeckPlugin

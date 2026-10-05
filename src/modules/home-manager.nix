@@ -20,12 +20,12 @@ let
   bundledPluginConflicts = lib.filter (pluginId: lib.elem pluginId bundledPluginIds) pluginIds;
   externalPlugins = lib.filter (plugin: !(lib.elem plugin.pluginId bundledPluginIds)) cfg.plugins;
 
-  runtimeRequirements = lib.concatMap (
+  requiredCommands = lib.concatMap (
     plugin:
     map (requirement: {
       inherit requirement;
       pluginId = plugin.pluginId;
-    }) (plugin.runtimeRequirements or [ ])
+    }) (plugin.requiredCommands or [ ])
   ) cfg.plugins;
 
   installPlugins = lib.concatMapStringsSep "\n" (plugin: ''
@@ -112,7 +112,7 @@ in
       cfg.package
     ];
 
-    home.activation.opendeckRuntimeRequirements = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    home.activation.opendeckrequiredCommands = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       missing=0
 
       ${lib.concatMapStringsSep "\n" (
@@ -124,7 +124,7 @@ in
             missing=1
           fi
         ''
-      ) runtimeRequirements}
+      ) requiredCommands}
 
       if (( missing )); then
         exit 1

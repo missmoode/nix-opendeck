@@ -37,6 +37,8 @@ mkRustOpenDeckPlugin (finalAttrs: {
   LIBCLANG_PATH = "${libclang.lib}/lib";
   BINDGEN_EXTRA_CLANG_ARGS = builtins.readFile "${clangStdenv.cc}/nix-support/libc-cflags";
 
+  serviceRequirements = [ "pipewire" ];
+
   meta = {
     description = "PipeWire / WirePlumber audio control plugin for OpenDeck";
     homepage = "https://github.com/sjourdois/opendeck-pipewire";

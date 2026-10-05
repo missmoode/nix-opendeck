@@ -1,3 +1,5 @@
+# For packaging: Where there are software dependencies, package them.
+# Declare system service requirements where needed - things that the plugin expects to exist.
 {
   nix-update-script,
 }:
@@ -8,7 +10,15 @@
   meta ? { },
   passthru ? { },
 
-  runtimeRequirements ? [ ],
+  # Commands the plugin directly invokes at runtime which must be
+  # provided by the user's environment, rather than by Nix-Opendeck.
+  requiredCommands ? [ ],
+
+  # Purely informational metadata. Services or applications the plugin
+  # interacts with at runtime, but which are not dependencies provided
+  # by the plugin package.
+  serviceRequirements ? [ ],
+
   licenseFiles ? [ ],
   licenseSource ? null,
 }:
@@ -35,7 +45,7 @@
   inherit meta;
 
   passthru = passthru // {
-    inherit pluginId runtimeRequirements;
+    inherit pluginId requiredCommands serviceRequirements;
 
     updateScript = passthru.updateScript or (nix-update-script { });
   };

@@ -100,6 +100,10 @@
             bundledPlugins = [ ];
           };
 
+          opendeck-with-plugins = pkgs.callPackage ./src/opendeck.nix {
+            bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ]) (lib.attrValues plugins);
+          };
+
           opendeck = pkgs.callPackage ./src/opendeck.nix {
             bundledPlugins = [
               plugins.starterpack
@@ -116,6 +120,7 @@
             inherit
               opendeck
               opendeck-core
+              opendeck-with-plugins
               ;
 
             default = opendeck;
@@ -126,6 +131,7 @@
             inherit
               opendeck
               opendeck-core
+              opendeck-with-plugins
               ;
           }
           // pluginPackages;

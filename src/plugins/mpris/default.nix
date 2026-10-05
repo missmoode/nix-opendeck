@@ -43,6 +43,8 @@ mkRustOpenDeckPlugin (finalAttrs: {
   # This is the filename expected by assets/manifest.json.
   binaryInstallPath = "oampris-${stdenv.hostPlatform.rust.rustcTarget}";
 
+  serviceRequirements = [ "mpris-compatible player" ];
+
   licenseFiles = [
     "LICENSE"
   ];

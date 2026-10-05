@@ -25,6 +25,11 @@ mkYarnOpenDeckPlugin (finalAttrs: {
 
   licenseFiles = [ ];
 
+  serviceRequirements = [
+    "dalamud"
+    "ffxiv"
+  ];
+
   meta = {
     description = "XIVDeck Stream Deck plugin";
     homepage = "https://github.com/KazWolfe/XIVDeck";
