@@ -52,17 +52,23 @@ rustPlatform.buildRustPackage (
 
       nativeBuildInputs = [ deno ];
 
-      # We're just retrieving the dependencies right now
       dontConfigure = true;
       dontBuild = true;
 
-      # Get the dependencies as explicitly laid out in the lockfile
       installPhase = ''
-        export DENO_DIR="$out"
-        deno install --frozen
+        runHook preInstall
+
+        export DENO_DIR="$TMPDIR/deno"
+
+        deno ci
+
+        mkdir -p "$out"
+        cp -a node_modules/. "$out/"
+
+        runHook postInstall
       '';
 
-      outputHash = "sha256-GVwHzDMaVRWHXtK5CPy9GYHW9UWT6Anq0DvoBSlrw9U=";
+      outputHash = "sha256-J3mIc+eF6ET07BV5x39yw0p2E2JZCAArOJKxrqqhcDk=";
       outputHashMode = "recursive";
     };
   in
@@ -115,12 +121,7 @@ rustPlatform.buildRustPackage (
     #  Copy them over and make them writable so that deno can modify
     #  as it builds if needed
     preBuild = ''
-      export DENO_DIR="$TMPDIR/deno"
-
-      cp -a ${denoDeps} "$DENO_DIR"
-      chmod -R u+w "$DENO_DIR"
-
-      deno install --frozen
+      cp -a ${denoDeps}/. node_modules/
 
       mkdir -p "${finalAttrs.cargoRoot}/target/plugins"
 
