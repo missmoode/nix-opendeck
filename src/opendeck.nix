@@ -146,6 +146,14 @@ rustPlatform.buildRustPackage (
       rm -rf plugins
       mkdir plugins
 
+      # SvelteKit defaults version.name to Date.now(), which makes the generated
+      # frontend — and therefore Tauri's embedded resources — non-reproducible.
+      # Prior art: https://github.com/Kitt3120/opendeck-nix
+      substituteInPlace svelte.config.ts \
+        --replace-fail \
+        'adapter: adapter(),' \
+        'adapter: adapter(), version: { name: "${finalAttrs.version}" },'
+
       # Identify this as the nix-opendeck build without maintaining another
       # source patch solely for the build-info string.
       substituteInPlace src-tauri/src/events/frontend/settings.rs \
@@ -174,6 +182,8 @@ rustPlatform.buildRustPackage (
     ];
 
     preBuild = ''
+      export DENO_DIR="$TMPDIR/deno-cache"
+
       cp -a ${denoDeps}/. node_modules/
 
       mkdir -p "${finalAttrs.cargoRoot}/target/plugins"
