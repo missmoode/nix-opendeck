@@ -9,7 +9,7 @@
 
 </div>
 
-Nix-OpenDeck lets you install [OpenDeck](https://github.com/nekename/OpenDeck) and its plugins
+nix-opendeck lets you install [OpenDeck](https://github.com/nekename/OpenDeck) and its plugins
   declaratively through Nix, while keeping the plugins immutable in the Nix store.
 
 This is useful on NixOS because many OpenDeck plugins expect a conventional system
