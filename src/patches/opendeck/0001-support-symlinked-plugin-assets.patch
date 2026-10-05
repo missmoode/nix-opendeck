@@ -1,0 +1,49 @@
+diff --git a/src-tauri/src/plugins/webserver.rs b/src-tauri/src/plugins/webserver.rs
+index 95097e3..a7ac7c5 100644
+--- a/src-tauri/src/plugins/webserver.rs
++++ b/src-tauri/src/plugins/webserver.rs
+@@ -14,6 +14,35 @@ fn mime(extension: &str) -> String {
+ 	}
+ }
+ 
++fn path_is_allowed(path: &Path, prefix: &Path) -> bool {
++	let Ok(canonical_path) = path.canonicalize() else {
++		return false;
++	};
++
++	if canonical_path.starts_with(prefix) {
++		return true;
++	}
++
++	let plugins_dir = prefix.join("plugins");
++
++	let Ok(relative_path) = path.strip_prefix(&plugins_dir) else {
++		return false;
++	};
++
++	let Some(plugin_name) = relative_path.components().next() else {
++		return false;
++	};
++
++	let plugin_path = plugins_dir.join(plugin_name.as_os_str());
++
++	plugin_path
++		.symlink_metadata()
++		.is_ok_and(|metadata| metadata.file_type().is_symlink())
++		&& plugin_path
++			.canonicalize()
++			.is_ok_and(|plugin_root| plugin_root.is_dir() && canonical_path.starts_with(plugin_root))
++}
++
+ /// Start a simple webserver to serve files of plugins that run in a browser environment.
+ pub async fn init_webserver(prefix: PathBuf) {
+ 	let prefix = prefix.canonicalize().unwrap();
+@@ -47,7 +76,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+ 
+ 		// Ensure the requested path is within the config directory to prevent unrestricted access to the filesystem.
+ 		let developer = crate::store::get_settings().value.developer;
+-		if !developer && !path.canonicalize().is_ok_and(|p| p.starts_with(&prefix)) {
++		if !developer && !path_is_allowed(path, &prefix) {
+ 			let _ = request.respond(Response::empty(403));
+ 			continue;
+ 		}

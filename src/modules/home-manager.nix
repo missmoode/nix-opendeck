@@ -28,6 +28,14 @@ let
     }) (plugin.requiredCommands or [ ])
   ) cfg.plugins;
 
+  # These correspond to OpenDeck's Tauri application config directory on Linux.
+  #
+  # Keeping them defined here makes the platform-specific path easy to replace
+  # if the Home Manager module later gains Darwin support.
+  configDir = "${config.xdg.configHome}/opendeck";
+  pluginDir = "${configDir}/plugins";
+  externallyManagedPluginsFile = "${configDir}/externally-managed-plugins";
+
   installPlugins = lib.concatMapStringsSep "\n" (plugin: ''
     pluginId=${lib.escapeShellArg plugin.pluginId}
     source=${lib.escapeShellArg "${plugin}/${plugin.pluginId}"}
@@ -70,6 +78,12 @@ in
       description = "The OpenDeck package to install.";
     };
 
+    installPackage = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Whether or not this module should install OpenDeck for convenience.";
+    };
+
     plugins = lib.mkOption {
       type = lib.types.listOf lib.types.package;
       default = [ ];
@@ -108,9 +122,7 @@ in
       }
     ];
 
-    home.packages = [
-      cfg.package
-    ];
+    home.packages = lib.optional cfg.installPackage cfg.package;
 
     home.activation.opendeckrequiredCommands = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       missing=0
@@ -132,27 +144,26 @@ in
     '';
 
     home.activation.opendeckPlugins = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      configDir="''${XDG_CONFIG_HOME:-$HOME/.config}"
-      pluginDir="$configDir/opendeck/plugins"
-      stateDir="''${XDG_STATE_HOME:-$HOME/.local/state}/opendeck"
-      stateFile="$stateDir/home-manager-plugins"
+      configDir=${lib.escapeShellArg configDir}
+      pluginDir=${lib.escapeShellArg pluginDir}
+      externallyManagedPluginsFile=${lib.escapeShellArg externallyManagedPluginsFile}
 
       if [[ -n "''${DRY_RUN:-}" ]]; then
         verboseEcho "Would update Home Manager managed OpenDeck plugins"
       else
-        mkdir -p "$pluginDir" "$stateDir"
+        mkdir -p "$pluginDir"
 
         previousState=""
-        if [[ -f "$stateFile" ]]; then
-          previousState=$(cat "$stateFile")
+        if [[ -f "$externallyManagedPluginsFile" ]]; then
+          previousState=$(cat "$externallyManagedPluginsFile")
         fi
 
         installedPluginIds=""
 
-        # Remove plugins that were managed by the previous Home Manager
+        # Remove plugins which were managed by the previous Home Manager
         # generation but are no longer declared.
         #
-        # Only remove a symlink which still points into the Nix store.
+        # Only remove a symlink which still resolves into the Nix store.
         # This prevents stale state from deleting a manually installed
         # graphical plugin with the same ID.
         if [[ -n "$previousState" ]]; then
@@ -173,7 +184,7 @@ in
 
         ${installPlugins}
 
-        printf '%s' "$installedPluginIds" > "$stateFile"
+        printf '%s' "$installedPluginIds" > "$externallyManagedPluginsFile"
       fi
     '';
   };

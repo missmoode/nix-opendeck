@@ -7,26 +7,14 @@
 }:
 
 let
-  cfg = config.programs.opendeck;
+  cfg = config.hardware.opendeck;
 in
 {
-  options.programs.opendeck = {
-    enable = lib.mkEnableOption "OpenDeck";
-
-    package = lib.mkOption {
-      type = lib.types.package;
-      default = defaultPackage;
-      description = "The OpenDeck package to install.";
-    };
-  };
+  options.hardware.opendeck.enable = lib.mkEnableOption "hardware access required by OpenDeck";
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [
-      cfg.package
-    ];
-
     services.udev.packages = [
-      cfg.package
+      defaultPackage
     ];
   };
 }

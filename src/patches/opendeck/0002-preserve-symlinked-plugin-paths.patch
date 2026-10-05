@@ -1,0 +1,48 @@
+diff --git a/src-tauri/src/events/frontend/mod.rs b/src-tauri/src/events/frontend/mod.rs
+index 565e905..02225f9 100644
+--- a/src-tauri/src/events/frontend/mod.rs
++++ b/src-tauri/src/events/frontend/mod.rs
+@@ -83,10 +83,7 @@ pub async fn get_localisations(locale: &str) -> Result<HashMap<String, serde_jso
+ 	};
+
+ 	while let Ok(Some(entry)) = entries.next_entry().await {
+-		let path = match entry.metadata().await.unwrap().is_symlink() {
+-			true => tokio::fs::read_link(entry.path()).await.unwrap(),
+-			false => entry.path(),
+-		};
++		let path = entry.path();
+ 		let metadata = tokio::fs::metadata(&path).await.unwrap();
+ 		if metadata.is_dir() {
+ 			let Ok(locale) = tokio::fs::read(path.join(format!("{locale}.json"))).await else { continue };
+diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
+index f8780d1..4d56bcc 100644
+--- a/src-tauri/src/events/frontend/plugins.rs
++++ b/src-tauri/src/events/frontend/plugins.rs
+@@ -37,10 +37,7 @@ pub async fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, Error> {
+ 	};
+
+ 	while let Ok(Some(entry)) = entries.next_entry().await {
+-		let path = match entry.metadata().await.unwrap().is_symlink() {
+-			true => fs::read_link(entry.path()).await.unwrap(),
+-			false => entry.path(),
+-		};
++		let path = entry.path();
+ 		let metadata = fs::metadata(&path).await.unwrap();
+ 		if metadata.is_dir() {
+ 			let id = path.file_name().unwrap().to_str().unwrap().to_owned();
+diff --git a/src-tauri/src/plugins/mod.rs b/src-tauri/src/plugins/mod.rs
+index 7f0aec4..0c75444 100644
+--- a/src-tauri/src/plugins/mod.rs
++++ b/src-tauri/src/plugins/mod.rs
+@@ -478,10 +478,7 @@ pub fn initialise_plugins() {
+ 	// Iterate through all directory entries in the plugins folder and initialise them as plugins if appropriate
+ 	for entry in entries {
+ 		if let Ok(entry) = entry {
+-			let path = match entry.metadata().unwrap().is_symlink() {
+-				true => entry.path().parent().unwrap_or_else(|| path::Path::new(".")).join(fs::read_link(entry.path()).unwrap()),
+-				false => entry.path(),
+-			};
++			let path = entry.path();
+ 			let metadata = fs::metadata(&path).unwrap();
+ 			if metadata.is_dir() {
+ 				let spawner_tx = tx.clone();

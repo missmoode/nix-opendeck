@@ -1,7 +1,7 @@
 # OpenDeck for NixOS
 
 > [!WARNING]
-> Breaking changes may still happen for a little while, so you probably shouldn't use this just yet.
+> Breaking changes may still happen for a little while.
 
 <div align="center">
 
@@ -28,16 +28,15 @@ This is still in early development, and is also my first attempt at derivations.
 nix-opendeck provides:
 - A Nix-packaged build of OpenDeck patched  to support NixOS and plugins stored in the Nix store.
 - Declarative packaging of OpenDeck/OpenActions plugins.
-- A Home Manager module for declaratively installing plugins.
-- A NixOS module for configuring OpenDeck and its required udev rules.
-- Protection against OpenDeck overwriting Home Manager-managed plugins.
+- A Home Manager module to declaratively manage plugins, and optionally install OpenDeck.
+- A NixOS hardware module for installing the udev rules required by OpenDeck.
+- Protection against OpenDeck modifying externally managed plugins.
 - Optional bundling of plugins directly into the OpenDeck package.
 
 ## Scope
 ### Core
 This flake includes a patched version of OpenDeck to support plugins symlinked from the Nix store,
-  as well as protection against collisions between plugins managed through the GUI and those managed by
-  the [Home Manager module](#home-manager-module).
+  as well as protection against collisions between plugins managed through the GUI and plugins managed externally, for example by the [Home Manager module](#home-manager-module).
 
 It emits three packages for OpenDeck:
 - `opendeck-core`, which is the baseline OpenDeck with the patches applied.
@@ -48,8 +47,7 @@ It emits three packages for OpenDeck:
 
 More information on the difference between a bundled plugin and a regular plugin [can be found here](#bundled-plugins).
 
-By default, the [NixOS module](#nixos-module) and [Home Manager module](#home-manager-module)
-use the `opendeck` package.
+By default, the [Home Manager module](#home-manager-module) installs the `opendeck` package.
 
 ### Plugins
 Plugins installed via the OpenDeck UI are often prone to failure due to incompatibilities with
@@ -75,12 +73,10 @@ opendeck = {
 ```
 
 ## Usage
-> [!IMPORTANT]  
-> When using both the NixOS and Home Manager modules, make sure that they're using the same [package](#changing-the-package-used-by-the-nixos-or-home-manager-modules)!
 
 ### NixOS Module
 
-Use of this module is required to automatically set up udev rules.
+This module automatically sets up udev rules. It **does not install OpenDeck**. If you're not using the Home Manager module, you'll have to install it yourself.
 
 If you're not using NixOS, you must set them up yourself. See the section on [usage without the modules](#usage-without-the-nixos-or-home-manager-modules).
 
@@ -90,6 +86,9 @@ If you're not using NixOS, you must set them up yourself. See the section on [us
   pkgs,
   ...
 }:
+let
+  opendeck = inputs.opendeck.${pkgs.stdenv.hostPlatform.system}.packages.opendeck;
+in
 {
   imports = [
     inputs.opendeck.nixosModules.default
@@ -97,8 +96,15 @@ If you're not using NixOS, you must set them up yourself. See the section on [us
 
   config = {
     # ...
-    programs.opendeck.enable = true;
+    hardware.opendeck.enable = true;
     # ...
+
+    # If you're not using the Home Manager module or
+    # want the installation available system-wide:
+    # 
+    # environment.systemPackages = [
+    #   opendeck
+    # ]
   };
 }
 ```
@@ -126,6 +132,11 @@ in
     # ...
     programs.opendeck = {
       enable = true;
+
+      # You can also avoid having the module install the
+      # package for you, if you want to do it yourself.
+      # installPackage = false;
+
       plugins = with opendeckpkgs; [
         opendeck-plugin-desktopentry
         opendeck-plugin-pipewire
@@ -137,10 +148,16 @@ in
 }
 ```
 
+If `programs.opendeck.installPackage` is `false`, `programs.opendeck.package` should still match the
+  OpenDeck package you installed elsewhere. The module uses it to check which plugins are already
+  bundled and prevent accidental double-declarations of installed plugins.
+
 > [!IMPORTANT]  
-> nix-opendeck patches OpenDeck to prevent updates or removal of plugins installed via Home Manager.
-> You will also receive a warning from the Home Manager module if you attempt to overwrite a plugin
-> with Home Manager which is already installed via the graphical interface.
+> Plugins managed by the Home Manager module are marked as externally managed. This derivation patches
+> OpenDeck to prevent updates or removal of externally managed plugins through its plugin manager.
+> 
+> Plugins installed through the GUI are unaffected. The Home Manager module will refuse to overwrite 
+> plugins unless they're marked as externally managed.
 
 ### Usage without the NixOS or Home Manager modules
 
@@ -152,8 +169,10 @@ They are available in the upstream repository [here](https://raw.githubuserconte
 
 #### Using the plugin derivations
 
-OpenDeck looks for plugins at `$XDG_CONFIG/opendeck/plugins/`. You could symlink the plugins from the
-  Nix store directly into there, and the patched `opendeck` should be able to use them.
+OpenDeck looks for plugins within its config directory (`$XDG_CONFIG_HOME/opendeck/plugins/` on Linux systems).
+  You could symlink the plugins from the Nix store (or elsewhere) directly into there, and the patched `opendeck` should
+  be able to use them. However, without the Home Manager module they will not be protected from modification
+  through the GUI.
 
 Alternatively, you could override the `opendeck` or `opendeck-core` packages to [bundle](#bundled-plugins)
   plugins into them.
@@ -231,8 +250,8 @@ environment.systemPackages = [
 ];
 ```
 
-### Changing the package used by the NixOS or Home Manager modules
-The package used by the NixOS and Home Manager modules can be changed by modifying `programs.opendeck.package`.
+### Changing the package used by the Home Manager module
+The package used by the Home Manager module can be changed by modifying `programs.opendeck.package`.
 
 By default, this is set to `opendeck`. However, you can change it if you want to use a different version of
   the package, for example `opendeck-core`, in which case you will need to manually declare

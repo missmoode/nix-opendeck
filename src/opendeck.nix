@@ -2,6 +2,7 @@
   lib,
   stdenv,
   fetchFromGitHub,
+  fetchpatch2,
 
   rustPlatform,
   cargo-tauri,
@@ -85,15 +86,72 @@ rustPlatform.buildRustPackage (
     };
 
     patches = [
-      ./patches/opendeck/0001-fix-plugin-webserver-path-check.patch
-      ./patches/opendeck/0002-support-symlinked-plugin-executables.patch
-      ./patches/opendeck/0003-protect-home-manager-plugins.patch
-      ./patches/opendeck/0004-identify-nix-build.patch
+      # Upstream fix merged after 2.14.0.
+      #
+      # Restrict OpenDeck's plugin WebSocket and asset servers to the loopback
+      # interface instead of listening on all network interfaces.
+      #
+      # Remove this backport when updating to an OpenDeck release containing:
+      # a4cfec6c738e5ea5d1841da9076c474a644defab
+      (fetchpatch2 {
+        name = "bind-plugin-servers-to-loopback.patch";
+        url = "https://github.com/nekename/OpenDeck/commit/a4cfec6c738e5ea5d1841da9076c474a644defab.patch?full_index=1";
+
+        includes = [
+          "src-tauri/src/plugins/mod.rs"
+          "src-tauri/src/plugins/webserver.rs"
+          "src-tauri/capabilities/corsfetch.json"
+          "src-tauri/tauri.conf.json"
+          "src/lib/ports.ts"
+        ];
+
+        hash = "sha256-VorU93TtdvsXYWJGSAv4Vk62vwm4QKLC2kEn8pMlFHc=";
+      })
+
+      # Allow the local asset webserver to serve files through symlinked plugin
+      # directories, while retaining its path-containment checks.
+      #
+      # Requests must still originate through a specific plugin entry under
+      # OpenDeck's plugin directory, and the requested file must canonicalize
+      # beneath that plugin's canonical target.
+      ./patches/opendeck/0001-support-symlinked-plugin-assets.patch
+
+      # Preserve plugin directory symlinks instead of replacing them with their
+      # resolved targets.
+      #
+      # Normal filesystem access already follows the symlink when reading plugin
+      # contents, while retaining the lexical plugin path preserves plugin IDs and
+      # ensures asset URLs continue to pass through OpenDeck's plugin directory.
+      ./patches/opendeck/0002-preserve-symlinked-plugin-paths.patch
+
+      # Avoid rewriting Unix permissions when a plugin executable is already
+      # executable.
+      #
+      # This allows executables stored in immutable locations such as the Nix
+      # store to be used without attempting to chmod them.
+      ./patches/opendeck/0003-avoid-redundant-plugin-chmod.patch
+
+      # Support an optional externally-managed-plugins file in OpenDeck's config
+      # directory.
+      #
+      # Plugin IDs listed in that file cannot be replaced or removed through
+      # OpenDeck's plugin manager. If the file is absent or unreadable, OpenDeck
+      # retains the normal upstream behaviour.
+      #
+      # This is a downstream functionality used by nix-opendeck,
+      ./patches/opendeck/0004-protect-externally-managed-plugins.patch
     ];
 
     postPatch = ''
       rm -rf plugins
       mkdir plugins
+
+      # Identify this as the nix-opendeck build without maintaining another
+      # source patch solely for the build-info string.
+      substituteInPlace src-tauri/src/events/frontend/settings.rs \
+        --replace-fail \
+        'built_info::PKG_VERSION,' \
+        'format!("{}+nix", built_info::PKG_VERSION),'
 
       substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
         --replace-fail \
@@ -103,11 +161,9 @@ rustPlatform.buildRustPackage (
 
     cargoHash = "sha256-AZ32cl5qbq/lROow9CpBgl3eztLos7VMqOnQV4kdvJU=";
 
-    # Identify location of cargo project
     cargoRoot = "src-tauri";
     buildAndTestSubdir = finalAttrs.cargoRoot;
 
-    # Packages used to run the build (similar to devdependencies in npm?)
     nativeBuildInputs = [
       cargo-tauri.hook
       deno
@@ -117,9 +173,6 @@ rustPlatform.buildRustPackage (
       wrapGAppsHook4
     ];
 
-    # Install using the dependencies we downloaded earlier
-    #  Copy them over and make them writable so that deno can modify
-    #  as it builds if needed
     preBuild = ''
       cp -a ${denoDeps}/. node_modules/
 
@@ -134,7 +187,6 @@ rustPlatform.buildRustPackage (
       chmod -R u+rwX "${finalAttrs.cargoRoot}/target/plugins"
     '';
 
-    # Install udev rules
     postInstall = ''
       install -Dm644 \
         ${finalAttrs.cargoRoot}/bundle/40-streamdeck.rules \
@@ -145,7 +197,6 @@ rustPlatform.buildRustPackage (
         "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
     '';
 
-    # Tools needed to perform the nix build
     buildInputs = lib.optionals stdenv.hostPlatform.isLinux (
       gstPlugins
       ++ [
@@ -158,16 +209,12 @@ rustPlatform.buildRustPackage (
       ]
     );
 
-    # Explicitly expose the GStreamer plugin directories to WebKit.
-    # WebKitWebProcess otherwise may fail when attempting HTML audio
-    # playback on NixOS.
     preFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
       gappsWrapperArgs+=(
         --set GST_PLUGIN_PATH_1_0 "${gstPluginPath}"
       )
     '';
 
-    # Debian bundle contains all the important linux integration files.
     tauriBundleType = "deb";
 
     meta = {

@@ -1,0 +1,47 @@
+diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
+index f8780d1..1ac5fb0 100644
+--- a/src-tauri/src/events/frontend/plugins.rs
++++ b/src-tauri/src/events/frontend/plugins.rs
+@@ -9,6 +9,11 @@ use std::sync::mpsc;
+ use tauri::{AppHandle, Emitter, Manager, command};
+ use tokio::fs;
+ 
++fn is_externally_managed_plugin(id: &str) -> bool {
++	std::fs::read_to_string(crate::shared::config_dir().join("externally-managed-plugins"))
++		.is_ok_and(|plugins| plugins.lines().any(|plugin_id| plugin_id == id))
++}
++
+ #[derive(serde::Serialize)]
+ pub struct PluginInfo {
+ 	id: String,
+@@ -94,6 +99,14 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+ 		},
+ 	};
+ 
++	if is_externally_managed_plugin(&id) {
++		return Err(anyhow::anyhow!(
++			"This plugin is managed externally and cannot be modified through OpenDeck. ({})",
++			id
++		)
++		.into());
++	}
++
+ 	let _ = deactivate_plugin(&app, &id).await;
+ 
+ 	let config_dir = config_dir();
+@@ -129,6 +142,15 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+ 
+ #[command]
+ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
++
++	if is_externally_managed_plugin(&id) {
++		return Err(anyhow::anyhow!(
++			"This plugin is managed externally and cannot be modified through OpenDeck. ({})",
++			id
++		)
++		.into());
++	}
++
+ 	let locks = acquire_locks().await;
+ 	let all = locks.profile_stores.all_from_plugin(&id);
+ 	drop(locks);
