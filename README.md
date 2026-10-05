@@ -1,5 +1,8 @@
 # OpenDeck for NixOS
 
+> [!WARNING]
+> Breaking changes may still happen for a little while, so you probably shouldn't use this just yet.
+
 <div align="center">
 
 [Installation](#installation) | [Usage](#usage) | [Plugin Listing](#plugin-listing)
