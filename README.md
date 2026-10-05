@@ -2,23 +2,23 @@
 
 <div align="center">
 
-[Installation](#installation) | [Usage](#usage) | [Included plugin derivations](#plugin-listing)
+[Installation](#installation) | [Usage](#usage) | [Plugin Listing](#plugin-listing)
 
 </div>
 
 Nix-OpenDeck lets you install [OpenDeck](https://github.com/nekename/OpenDeck) and its plugins
-  declaratively through Nix, with the plugins able to remain immutable in the Nix store.
+  declaratively through Nix, while keeping the plugins immutable in the Nix store.
 
 This is useful on NixOS because many OpenDeck plugins expect a conventional system
   environment and so don’t work correctly when installed through OpenDeck’s GUI.
 
-It's still in early development, and is
- also my first attempt at derivations. I made it for myself, so I make no promises to maintain this
- long-term, but in the spirit of Nix, here ya go.
+This is still in early development, and is also my first attempt at derivations.
+  I made it for myself, so I make no promises to maintain this long-term, but
+  in the spirit of Nix, here ya go.
 
 > [!IMPORTANT]  
 > If you encounter bugs with the packages produced by this repo, it might not be
-> the fault of the upstream repos, but a problem with nix-opendeck’s derivation, or OpenDeck’s handling of them.
+> the fault of the upstream projects, but a problem with nix-opendeck’s derivation, or OpenDeck’s handling of them.
 > Be certain before contacting the upstream devs!
 
 ## Overview
@@ -33,7 +33,7 @@ nix-opendeck provides:
 ## Scope
 ### Core
 This flake includes a patched version of OpenDeck to support plugins symlinked from the Nix store,
-  as well as protect against collisions between plugins managed through the GUI and those managed by
+  as well as protection against collisions between plugins managed through the GUI and those managed by
   the [Home Manager module](#home-manager-module).
 
 It emits three packages for OpenDeck:
@@ -52,7 +52,7 @@ use the `opendeck` package.
 Plugins installed via the OpenDeck UI are often prone to failure due to incompatibilities with
   Nix’s non-traditional environment.
 
-Because of that, and to allow for declarative configuration, this flake also contains derivations which
+Because of that, and to allow for declarative configuration, this flake also contains derivations that
   patch and package plugins and their dependencies so that they can work properly in a Nix environment.
 
 [Check here for a list of plugins included in this flake](#plugin-listing).
@@ -150,13 +150,13 @@ They are available in the upstream repository [here](https://raw.githubuserconte
 #### Using the plugin derivations
 
 OpenDeck looks for plugins at `$XDG_CONFIG/opendeck/plugins/`. You could symlink the plugins from the
-  nix store directly into there, and the patched `opendeck` should be able to use them.
+  Nix store directly into there, and the patched `opendeck` should be able to use them.
 
 Alternatively, you could override the `opendeck` or `opendeck-core` packages to [bundle](#bundled-plugins)
   plugins into them.
 
-You could also use the `opendeck-with-plugins` package, which comes with every plugin in the 
-  [Plugin Listing](#plugin-listing) which does not declare required commands, though this is
+You could also use the `opendeck-with-plugins` package, which bundles every plugin in the 
+  [Plugin Listing](#plugin-listing) which do not declare required commands. This is
   not recommended, as bundling many plugins increases the size of the resulting package and
   requires OpenDeck to be rebuilt whenever the bundle changes.
 
@@ -200,8 +200,8 @@ When the program starts up, OpenDeck will check its bundled plugins against the 
   If any are missing or outdated compared to the plugin in its bundle, it will copy the bundled version into 
   the user's `plugins` directory.
 
-Modifying or updating bundled plugins necessitates recompiling the entire binary. They're only really useful
-  if you want to use the nix-built plugins, but can't use nix-opendeck's Home Manager module and don't want
+Modifying or updating bundled plugins necessitates recompiling the entire binary. Bundled plugins are mainly useful
+  if you want to use the Nix-built plugins, but can't use nix-opendeck's Home Manager module, and don't want
   to symlink them from the store.
 
 Upstream OpenDeck comes with the "Starter Pack" plugin bundled by default, so the `opendeck` package does
@@ -231,13 +231,13 @@ environment.systemPackages = [
 ### Changing the package used by the NixOS or Home Manager modules
 The package used by the NixOS and Home Manager modules can be changed by modifying `programs.opendeck.package`.
 
-By default, this is set to `opendeck`, however you can change it if you want to use a different version of
+By default, this is set to `opendeck`. However, you can change it if you want to use a different version of
   the package, for example `opendeck-core`, in which case you will need to manually declare
   `opendeck-plugin-starterpack` as a plugin in your Home Manager configuration.
 
 ### Required runtime commands
 Some plugins invoke external commands at runtime. When nix-opendeck does not provide such a command as
-  part of the plugin package, it is listed as a runtime command and must be available in your `PATH`.
+  part of the plugin package, it is listed as a required runtime command and must be available in your `PATH`.
 
 Required runtime commands are checked by the Home Manager module when the plugin is enabled.
 
