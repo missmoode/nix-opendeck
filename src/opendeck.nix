@@ -126,7 +126,9 @@ rustPlatform.buildRustPackage (
       mkdir -p "${finalAttrs.cargoRoot}/target/plugins"
 
       ${lib.concatMapStringsSep "\n" (plugin: ''
-        cp -a ${plugin}/. "${finalAttrs.cargoRoot}/target/plugins/"
+        cp -a --no-preserve=mode \
+          "${plugin}/." \
+          "${finalAttrs.cargoRoot}/target/plugins/"
       '') bundledPlugins}
 
       chmod -R u+rwX "${finalAttrs.cargoRoot}/target/plugins"
