@@ -5,8 +5,11 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
 
-    # Intentionally independent from nixpkgs, so that differences in the builder's deno
-    # package don't change the hash of the dependencies.
+    # Intentionally independent from nixpkgs, so that differences
+    # in the builder's deno package don't change the hash of the
+    # dependencies.
+    #
+    # Do NOT use deno-nixpkgs.follows!
     deno-nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
