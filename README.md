@@ -1,7 +1,12 @@
 # OpenDeck for NixOS
 
 > [!WARNING]
-> Breaking changes may still happen for a little while.
+> Breaking changes may still happen for a little while. I also might swap plugins for different ones while I explore the available options.
+
+> [!NOTE]
+> A quick note:
+> 
+> I’m pretty sure that this is properly reproducible, but I’ve not gotten around to testing it on another system yet. The main issues were Deno’s lack of a viable helper, which I think I’ve solved by pinning it, and Svelte, where I think replacing the version string let it act deterministically.
 
 <div align="center">
 
