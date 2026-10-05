@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+
+    # Intentionally independent from nixpkgs, so that differences in the builder's deno
+    # package don't change the hash of the dependencies.
+    deno-nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs =
@@ -85,10 +89,18 @@
           ...
         }:
         let
+          denoPkgs = import inputs.deno-nixpkgs {
+            system = pkgs.stdenv.buildPlatform.system;
+          };
+
+          buildTools = {
+            deno = denoPkgs.deno;
+          };
+
           pluginLib = mkPluginLib pkgs;
 
           plugins = import ./src/plugins {
-            inherit pkgs pluginLib;
+            inherit pkgs pluginLib buildTools;
           };
 
           pluginPackages = lib.mapAttrs' (name: plugin: {
@@ -97,14 +109,20 @@
           }) plugins;
 
           opendeck-core = pkgs.callPackage ./src/opendeck.nix {
+            deno = denoPkgs.deno;
+
             bundledPlugins = [ ];
           };
 
           opendeck-with-plugins = pkgs.callPackage ./src/opendeck.nix {
+            deno = denoPkgs.deno;
+
             bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ]) (lib.attrValues plugins);
           };
 
           opendeck = pkgs.callPackage ./src/opendeck.nix {
+            deno = denoPkgs.deno;
+
             bundledPlugins = [
               plugins.starterpack
             ];

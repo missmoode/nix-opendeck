@@ -1,6 +1,7 @@
 {
   pkgs,
   pluginLib,
+  buildTools,
 }:
 
 {
@@ -9,6 +10,7 @@
   };
 
   desktopentry = pkgs.callPackage ./desktopentry {
+    deno = buildTools.deno;
     inherit (pluginLib)
       mkRustOpenDeckPlugin
       mkGitHubReleaseUpdateScript
@@ -16,6 +18,7 @@
   };
 
   oadiscord = pkgs.callPackage ./discord {
+    deno = buildTools.deno;
     inherit (pluginLib)
       mkRustOpenDeckPlugin
       mkGitHubReleaseUpdateScript
