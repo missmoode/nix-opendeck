@@ -78,7 +78,7 @@ opendeck = {
 
 This module automatically sets up udev rules. It **does not install OpenDeck**. If you're not using the Home Manager module, you'll have to install it yourself.
 
-If you're not using NixOS, you must set them up yourself. See the section on [usage without the modules](#usage-without-the-nixos-or-home-manager-modules).
+If you're not using NixOS, you must set up the udev rules yourself. See the section on [usage without the modules](#usage-without-the-nixos-or-home-manager-modules).
 
 ```nix
 {
