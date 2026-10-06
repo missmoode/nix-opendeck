@@ -20,13 +20,7 @@ let
   bundledPluginConflicts = lib.filter (pluginId: lib.elem pluginId bundledPluginIds) pluginIds;
   externalPlugins = lib.filter (plugin: !(lib.elem plugin.pluginId bundledPluginIds)) cfg.plugins;
 
-  requiredCommands = lib.concatMap (
-    plugin:
-    map (requirement: {
-      inherit requirement;
-      pluginId = plugin.pluginId;
-    }) (plugin.requiredCommands or [ ])
-  ) cfg.plugins;
+  desiredState = lib.concatMapStrings (plugin: "${plugin.pluginId}\n") externalPlugins;
 
   # These correspond to OpenDeck's Tauri application config directory on Linux.
   #
@@ -36,24 +30,30 @@ let
   pluginDir = "${configDir}/plugins";
   externallyManagedPluginsFile = "${configDir}/externally-managed-plugins";
 
+  validatePlugins = lib.concatMapStringsSep "\n" (plugin: ''
+    pluginId=${lib.escapeShellArg plugin.pluginId}
+    source=${lib.escapeShellArg "${plugin}/${plugin.pluginId}"}
+    target="$pluginDir/$pluginId"
+
+    if [[ ! -d "$source" ]]; then
+      echo "error: OpenDeck plugin '$pluginId' does not contain '$pluginId'" >&2
+      validationFailed=1
+    fi
+
+    if [[ -e "$target" || -L "$target" ]]; then
+      if ! isManagedPluginTarget "$pluginId"; then
+        echo "error: OpenDeck plugin '$pluginId' is already installed but is not managed by Home Manager." >&2
+        echo "error: Remove the existing plugin before declaring '$pluginId' in Home Manager." >&2
+        validationFailed=1
+      fi
+    fi
+  '') externalPlugins;
+
   installPlugins = lib.concatMapStringsSep "\n" (plugin: ''
     pluginId=${lib.escapeShellArg plugin.pluginId}
     source=${lib.escapeShellArg "${plugin}/${plugin.pluginId}"}
     target="$pluginDir/$pluginId"
     temp="$pluginDir/.$pluginId.hm-tmp"
-
-    if [[ ! -d "$source" ]]; then
-      echo "error: OpenDeck plugin '$pluginId' does not contain '$pluginId'" >&2
-      exit 1
-    fi
-
-    if [[ -e "$target" || -L "$target" ]]; then
-      if ! grep -Fqx -- "$pluginId" <<<"$previousState"; then
-        echo "warning: OpenDeck plugin '$pluginId' is already installed but is not managed by Home Manager." >&2
-        echo "warning: Remove the existing plugin before declaring '$pluginId' in Home Manager." >&2
-        continue
-      fi
-    fi
 
     rm -f "$temp"
 
@@ -61,11 +61,10 @@ let
     # in OpenDeck's mutable plugin directory.
     ln -s "$source" "$temp"
 
-    # At this point an existing target is known to be Home Manager-owned.
-    rm -rf "$target"
+    # Preflight validation guarantees that an existing target is a
+    # Home Manager-managed symlink.
+    rm -f "$target"
     mv "$temp" "$target"
-
-    installedPluginIds+="$pluginId"$'\n'
   '') externalPlugins;
 in
 {
@@ -95,6 +94,9 @@ in
         Plugins declared here are managed by Home Manager and should not also
         be installed or updated through OpenDeck's graphical plugin store.
         Plugins with other IDs may still be installed normally through OpenDeck.
+
+        Runtime requirements declared by plugin packages are not checked by
+        this module.
       '';
     };
   };
@@ -124,67 +126,73 @@ in
 
     home.packages = lib.optional cfg.installPackage cfg.package;
 
-    home.activation.opendeckrequiredCommands = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      missing=0
-
-      ${lib.concatMapStringsSep "\n" (
-        { pluginId, requirement }:
-        ''
-          if ! command -v ${lib.escapeShellArg requirement} >/dev/null 2>&1; then
-            echo "error: OpenDeck plugin '${lib.escapeShellArg pluginId}' requires '${lib.escapeShellArg requirement}', but it was not found in PATH." >&2
-            echo "error: Provide '${lib.escapeShellArg requirement}' through your system or another package manager before enabling this plugin." >&2
-            missing=1
-          fi
-        ''
-      ) requiredCommands}
-
-      if (( missing )); then
-        exit 1
-      fi
-    '';
-
     home.activation.opendeckPlugins = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       configDir=${lib.escapeShellArg configDir}
       pluginDir=${lib.escapeShellArg pluginDir}
       externallyManagedPluginsFile=${lib.escapeShellArg externallyManagedPluginsFile}
+      desiredState=${lib.escapeShellArg desiredState}
 
       if [[ -n "''${DRY_RUN:-}" ]]; then
         verboseEcho "Would update Home Manager managed OpenDeck plugins"
       else
-        mkdir -p "$pluginDir"
-
         previousState=""
         if [[ -f "$externallyManagedPluginsFile" ]]; then
           previousState=$(cat "$externallyManagedPluginsFile")
         fi
 
-        installedPluginIds=""
+        # A plugin is considered Home Manager-managed only when both our
+        # ownership state and the filesystem agree.
+        isManagedPluginTarget() {
+          local pluginId="$1"
+          local target="$pluginDir/$pluginId"
+          local targetPath
+
+          grep -Fqx -- "$pluginId" <<<"$previousState" || return 1
+          [[ -L "$target" ]] || return 1
+
+          targetPath=$(readlink -f "$target" 2>/dev/null || true)
+          [[ "$targetPath" == /nix/store/* ]]
+        }
+
+        # Validate the complete desired state before modifying anything.
+        validationFailed=0
+
+        ${validatePlugins}
+
+        if (( validationFailed )); then
+          exit 1
+        fi
+
+        mkdir -p "$pluginDir"
+
+        # Prepare the new ownership state before changing installed plugins.
+        # The existing state remains authoritative until reconciliation
+        # completes successfully.
+        stateTemp="$externallyManagedPluginsFile.hm-tmp"
+        rm -f "$stateTemp"
+        printf '%s' "$desiredState" > "$stateTemp"
 
         # Remove plugins which were managed by the previous Home Manager
         # generation but are no longer declared.
         #
-        # Only remove a symlink which still resolves into the Nix store.
-        # This prevents stale state from deleting a manually installed
-        # graphical plugin with the same ID.
+        # Only remove targets which are still recognisably Home Manager-owned.
         if [[ -n "$previousState" ]]; then
           while IFS= read -r pluginId; do
             [[ -n "$pluginId" ]] || continue
 
-            target="$pluginDir/$pluginId"
+            if grep -Fqx -- "$pluginId" <<<"$desiredState"; then
+              continue
+            fi
 
-            if [[ -L "$target" ]]; then
-              targetPath=$(readlink -f "$target" 2>/dev/null || true)
-
-              if [[ "$targetPath" == /nix/store/* ]]; then
-                rm -f "$target"
-              fi
+            if isManagedPluginTarget "$pluginId"; then
+              rm -f "$pluginDir/$pluginId"
             fi
           done <<<"$previousState"
         fi
 
         ${installPlugins}
 
-        printf '%s' "$installedPluginIds" > "$externallyManagedPluginsFile"
+        mv "$stateTemp" "$externallyManagedPluginsFile"
       fi
     '';
   };
