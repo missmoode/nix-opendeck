@@ -29,8 +29,6 @@ mkNpmOpenDeckPlugin (finalAttrs: {
 
   npmDepsHash = "sha256-VJwtguDjRBjzVPZnsnBySdg55+igmvtZXBT1xb0egAY=";
 
-  serviceRequirements = [ "obs studio" ];
-
   licenseFiles = [
     "LICENSE"
   ];

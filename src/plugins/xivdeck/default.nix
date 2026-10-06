@@ -23,12 +23,7 @@ mkYarnOpenDeckPlugin (finalAttrs: {
 
   yarnDepsHash = "sha256-ecluMlQxkiHzv4pxaPOIBLWP8xvHzOma/z9KLnxE+FA=";
 
-  licenseFiles = [ ];
-
-  serviceRequirements = [
-    "dalamud"
-    "ffxiv"
-  ];
+  licenseFiles = [ "LICENSE" ];
 
   meta = {
     description = "XIVDeck Stream Deck plugin";

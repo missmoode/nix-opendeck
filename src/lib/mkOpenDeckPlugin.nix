@@ -14,11 +14,6 @@
   # provided by the user's environment, rather than by Nix-Opendeck.
   requiredCommands ? [ ],
 
-  # Purely informational metadata. Services or applications the plugin
-  # interacts with at runtime, but which are not dependencies provided
-  # by the plugin package.
-  serviceRequirements ? [ ],
-
   licenseFiles ? [ ],
 
   # Useful for retrieving license files when the upstream repo hasn't
@@ -50,7 +45,7 @@
   inherit meta;
 
   passthru = passthru // {
-    inherit pluginId requiredCommands serviceRequirements;
+    inherit pluginId requiredCommands;
 
     updateScript = passthru.updateScript or (nix-update-script { });
   };

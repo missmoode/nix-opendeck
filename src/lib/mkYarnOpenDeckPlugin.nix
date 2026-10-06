@@ -23,7 +23,6 @@ stdenv.mkDerivation (
       '';
 
       requiredCommands = attrs.requiredCommands or [ ];
-      serviceRequirements = attrs.serviceRequirements or [ ];
 
       meta = attrs.meta or { };
       passthru = attrs.passthru or { };
