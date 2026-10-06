@@ -87,6 +87,7 @@
 
       perSystem =
         {
+          final,
           lib,
           pkgs,
           ...
@@ -100,25 +101,27 @@
             deno = denoPkgs.deno;
           };
 
-          pluginLib = mkPluginLib pkgs;
+          pluginLib = mkPluginLib final;
 
           plugins = import ./src/plugins {
-            inherit pkgs pluginLib buildTools;
+            pkgs = final;
+
+            inherit pluginLib buildTools;
           };
 
-          opendeck-core = pkgs.callPackage ./src/opendeck.nix {
+          opendeck-core = final.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
 
             bundledPlugins = [ ];
           };
 
-          opendeck-with-plugins = pkgs.callPackage ./src/opendeck.nix {
+          opendeck-with-plugins = final.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
 
             bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ]) (lib.attrValues plugins);
           };
 
-          opendeck = pkgs.callPackage ./src/opendeck.nix {
+          opendeck = final.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
 
             bundledPlugins = [
