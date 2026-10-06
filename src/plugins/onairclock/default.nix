@@ -12,7 +12,7 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
   src = fetchFromGitHub {
     owner = "wortkrieg";
     repo = "streamdeck-onairclock";
-    tag = "1.3.0"; # Upstream forgot to add a V
+    tag = finalAttrs.version; # Upstream forgot to add a v
     hash = "sha256-lFknS4VbkManf56YivdvV4xD5MKc9afpSsMkkcpacqQ=";
   };
 
