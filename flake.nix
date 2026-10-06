@@ -106,11 +106,6 @@
             inherit pkgs pluginLib buildTools;
           };
 
-          pluginPackages = lib.mapAttrs' (name: plugin: {
-            name = "opendeck-plugin-${name}";
-            value = plugin;
-          }) plugins;
-
           opendeck-core = pkgs.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
 
@@ -145,8 +140,13 @@
               ;
 
             default = opendeck;
-          }
-          // pluginPackages;
+          };
+
+          legacyPackages = {
+            opendeck-plugins = plugins // {
+              recurseForDerivations = true;
+            };
+          };
 
           overlayAttrs = {
             inherit
@@ -154,8 +154,9 @@
               opendeck-core
               opendeck-with-plugins
               ;
-          }
-          // pluginPackages;
+
+            opendeck-plugins = plugins;
+          };
         };
 
       flake = {
