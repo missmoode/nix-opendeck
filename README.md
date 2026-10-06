@@ -92,7 +92,7 @@ If you're not using NixOS, you must set up the udev rules yourself. See the sect
   ...
 }:
 let
-  opendeck = inputs.opendeck.${pkgs.stdenv.hostPlatform.system}.packages.opendeck;
+  opendeck = inputs.opendeck.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
 in
 {
   imports = [
@@ -126,7 +126,10 @@ The Home Manager module lets you declare plugins you’d like to use, and instal
   ...
 }:
 let
-  opendeckpkgs = inputs.opendeck.${pkgs.stdenv.hostPlatform.system}.packages;
+  system = pkgs.stdenv.hostPlatform.system;
+  
+  opendeckpkgs = inputs.opendeck.packages.${system};
+  opendeck-plugins = inputs.opendeck.legacyPackages.${system}.opendeck-plugins;
 in
 {
   imports = [
@@ -146,9 +149,9 @@ in
       # package for you, if you want to do it yourself.
       # installPackage = false;
 
-      plugins = with opendeckpkgs; [
-        opendeck-plugins.desktopentry
-        opendeck-plugins.pipewire
+      plugins = with opendeck-plugins; [
+        desktopentry
+        pipewire
         # ...
       ];
     };
