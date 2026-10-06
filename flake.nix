@@ -14,7 +14,7 @@
   };
 
   outputs =
-    inputs@{ flake-parts, ... }:
+    inputs@{ self, flake-parts, ... }:
     let
       mkPluginLib =
         pkgs:
@@ -180,14 +180,14 @@
         nixosModules.default =
           { pkgs, ... }@moduleArgs:
           (import ./src/modules/nixos.nix {
-            defaultPackage = pkgs.opendeck;
+            defaultPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
           })
             moduleArgs;
 
         homeManagerModules.default =
           { pkgs, ... }@moduleArgs:
           (import ./src/modules/home-manager.nix {
-            defaultPackage = pkgs.opendeck;
+            defaultPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
           })
             moduleArgs;
       };
