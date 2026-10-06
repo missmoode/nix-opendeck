@@ -177,6 +177,8 @@
           mkGitHubReleaseUpdateScript = pkgs: (mkPluginLib pkgs).mkGitHubReleaseUpdateScript;
         };
 
+        # this breaks overlays. TODO: fix
+
         nixosModules.default =
           { pkgs, ... }@moduleArgs:
           (import ./src/modules/nixos.nix {
