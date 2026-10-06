@@ -112,17 +112,23 @@
           opendeck-core = final.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
 
+            pname = "opendeck-core";
+
             bundledPlugins = [ ];
           };
 
           opendeck-with-plugins = final.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
 
+            pname = "opendeck-with-plugins";
+
             bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ]) (lib.attrValues plugins);
           };
 
           opendeck = final.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
+
+            pname = "opendeck";
 
             bundledPlugins = [
               plugins.starterpack
