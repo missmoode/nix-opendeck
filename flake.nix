@@ -196,9 +196,7 @@
         nixosModules.default =
           { pkgs, ... }@moduleArgs:
           (import ./src/modules/nixos.nix {
-            defaultUdevPackages = [
-              self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck-udev-rules
-            ];
+            defaultUdevPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck-udev-rules;
           })
             moduleArgs;
 

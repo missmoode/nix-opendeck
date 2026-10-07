@@ -1,4 +1,4 @@
-{ defaultUdevPackages }:
+{ defaultUdevPackage }:
 
 {
   config,
@@ -13,6 +13,12 @@ in
   options.hardware.opendeck = {
     enable = lib.mkEnableOption "hardware access required by OpenDeck";
 
+    udevPackage = lib.mkOption {
+      type = lib.types.package;
+      default = defaultUdevPackage;
+      description = "Package providing OpenDeck's core udev rules.";
+    };
+
     extraUdevPackages = lib.mkOption {
       type = lib.types.listOf lib.types.package;
       default = [ ];
@@ -21,6 +27,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    services.udev.packages = defaultUdevPackages ++ cfg.extraUdevPackages;
+    services.udev.packages = [ cfg.udevPackage ] ++ cfg.extraUdevPackages;
   };
 }
