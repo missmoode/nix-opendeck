@@ -67,7 +67,10 @@ mkRustOpenDeckPlugin (
       lockFile = ./Cargo.lock;
     };
 
-    patches = [ ./patches/icon-lookup.patch ];
+    patches = [
+      ./patches/icon-lookup.patch
+      ./patches/stable-desktop-entry-id.patch
+    ];
 
     postPatch = ''
       ln -s ${./Cargo.lock} Cargo.lock
