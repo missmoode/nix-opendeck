@@ -64,7 +64,7 @@ Because of that, and to allow for declarative configuration, this flake also con
 [Check here for a list of plugins included in this flake](#plugin-listing).
 
 Alternatively, you could try using [nix-ld](https://github.com/nix-community/nix-ld) to better resemble
-  the environment the unpatched plugins expect.
+  the environment that unpatched plugins expect.
 
 ## Installation
 ### Flakes
