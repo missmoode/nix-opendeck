@@ -10,7 +10,7 @@
 }:
 
 mkRustOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-mpris";
+  pname = "opendeck-openactionplugins-mpris";
   version = "1.4.0";
 
   src = fetchFromGitHub {

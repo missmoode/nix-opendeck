@@ -7,7 +7,7 @@
 }:
 
 mkYarnOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-xivdeck";
+  pname = "opendeck-kazwolfe-xivdeck";
   version = "0.4.5";
 
   src = fetchFromGitHub {

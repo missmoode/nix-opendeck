@@ -9,7 +9,7 @@
   mkRustOpenDeckPlugin,
 }:
 mkRustOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-pipewire";
+  pname = "opendeck-sjourdois-pipewire";
   version = "0.4.0";
 
   src = fetchFromGitHub {

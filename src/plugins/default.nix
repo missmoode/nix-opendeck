@@ -5,84 +5,108 @@
 }:
 
 {
-  analogclock = pkgs.callPackage ./analogclock {
-    inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+  elgato = {
+    analogclock = pkgs.callPackage ./elgato/analogclock {
+      inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+    };
   };
 
-  desktopentry = pkgs.callPackage ./desktopentry {
-    deno = buildTools.deno;
-    inherit (pluginLib)
-      mkRustOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
+  openactionplugins = {
+    desktopentry = pkgs.callPackage ./openactionplugins/desktopentry {
+      deno = buildTools.deno;
+      inherit (pluginLib)
+        mkRustOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
+
+    discord = pkgs.callPackage ./openactionplugins/discord {
+      deno = buildTools.deno;
+      inherit (pluginLib)
+        mkRustOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
+
+    mpris = pkgs.callPackage ./openactionplugins/mpris {
+      inherit (pluginLib)
+        mkRustOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
   };
 
-  oadiscord = pkgs.callPackage ./discord {
-    deno = buildTools.deno;
-    inherit (pluginLib)
-      mkRustOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
+  cgiesche = {
+    homeassistant = pkgs.callPackage ./cgiesche/homeassistant {
+      inherit (pluginLib)
+        mkNpmOpenDeckPlugin
+        ;
+    };
   };
 
-  homeassistant = pkgs.callPackage ./homeassistant {
-    inherit (pluginLib)
-      mkNpmOpenDeckPlugin
-      ;
+  the_ca11 = {
+    multi-obs-controller = pkgs.callPackage ./the_ca11/multi-obs-controller {
+      inherit (pluginLib)
+        mkNpmOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
   };
 
-  mpris = pkgs.callPackage ./mpris {
-    inherit (pluginLib)
-      mkRustOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
+  wortkrieg = {
+    onairclock = pkgs.callPackage ./wortkrieg/onairclock {
+      inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+    };
   };
 
-  multi-obs-controller = pkgs.callPackage ./multi-obs-controller {
-    inherit (pluginLib)
-      mkNpmOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
+  sjourdois = {
+    pipewire = pkgs.callPackage ./sjourdois/pipewire {
+      inherit (pluginLib) mkRustOpenDeckPlugin;
+    };
   };
 
-  onairclock = pkgs.callPackage ./onairclock {
-    inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+  kahikara = {
+    redline-monitor = pkgs.callPackage ./kahikara/redline-monitor {
+      inherit (pluginLib)
+        mkNpmOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
   };
 
-  pipewire = pkgs.callPackage ./pipewire {
-    inherit (pluginLib) mkRustOpenDeckPlugin;
+  nekename = {
+    starterpack = pkgs.callPackage ./nekename/starterpack {
+      inherit (pluginLib) mkRustOpenDeckPlugin;
+    };
   };
 
-  redline-monitor = pkgs.callPackage ./redline-monitor {
-    inherit (pluginLib)
-      mkNpmOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
+  gdwhisper = {
+    tikclock = pkgs.callPackage ./gdwhisper/tikclock {
+      inherit (pluginLib) mkRustOpenDeckPlugin;
+    };
   };
 
-  starterpack = pkgs.callPackage ./starterpack {
-    inherit (pluginLib) mkRustOpenDeckPlugin;
+  gallowaylabs = {
+    tomato-timer = pkgs.callPackage ./gallowaylabs/tomato-timer {
+      inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+    };
   };
 
-  tikclock = pkgs.callPackage ./tikclock {
-    inherit (pluginLib) mkRustOpenDeckPlugin;
+  jfms7s = {
+    weather = pkgs.callPackage ./jfms7s/weather {
+      inherit (pluginLib)
+        mkRustOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
   };
 
-  tomatotimer = pkgs.callPackage ./tomatotimer {
-    inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
-  };
-
-  jfms7s-weather = pkgs.callPackage ./jfms7s-weather {
-    inherit (pluginLib)
-      mkRustOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
-  };
-
-  xivdeck = pkgs.callPackage ./xivdeck {
-    inherit (pluginLib)
-      mkYarnOpenDeckPlugin
-      mkGitHubReleaseUpdateScript
-      ;
+  kazwolfe = {
+    xivdeck = pkgs.callPackage ./kazwolfe/xivdeck {
+      inherit (pluginLib)
+        mkYarnOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
   };
 }

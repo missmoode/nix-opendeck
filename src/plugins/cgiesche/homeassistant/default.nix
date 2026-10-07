@@ -6,7 +6,7 @@
 }:
 
 mkNpmOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-homeassistant";
+  pname = "opendeck-cgiesche-homeassistant";
   version = "3.8.4";
 
   src = fetchFromGitHub {

@@ -53,7 +53,7 @@ mkRustOpenDeckPlugin (
     };
   in
   {
-    pname = "opendeck-discord";
+    pname = "opendeck-openactionplugins-discord";
     version = "0.5.0";
 
     src = fetchFromGitHub {

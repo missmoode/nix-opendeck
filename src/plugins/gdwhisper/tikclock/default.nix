@@ -7,7 +7,7 @@
 }:
 
 mkRustOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-tikclock";
+  pname = "opendeck-gdwhisper-tikclock";
   version = "1.1.0";
 
   src = fetchFromGitHub {

@@ -74,6 +74,7 @@
             mkGitHubReleaseUpdateScript
             ;
         };
+
     in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
@@ -117,12 +118,13 @@
             bundledPlugins = [ ];
           };
 
+          allPlugins = lib.collect lib.isDerivation plugins;
           opendeck-with-plugins = final.callPackage ./src/opendeck.nix {
             deno = denoPkgs.deno;
 
             pname = "opendeck-with-plugins";
 
-            bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ]) (lib.attrValues plugins);
+            bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ]) allPlugins;
           };
 
           opendeck = final.callPackage ./src/opendeck.nix {
@@ -131,7 +133,7 @@
             pname = "opendeck";
 
             bundledPlugins = [
-              plugins.starterpack
+              plugins.nekename.starterpack
             ];
 
             updateScript = pluginLib.mkGitHubReleaseUpdateScript {
@@ -152,9 +154,9 @@
           };
 
           legacyPackages = {
-            opendeck-plugins = plugins // {
-              recurseForDerivations = true;
-            };
+            opendeck-plugins = lib.recurseIntoAttrs (
+              lib.mapAttrs (_: ownerPlugins: lib.recurseIntoAttrs ownerPlugins) plugins
+            );
           };
 
           overlayAttrs = {

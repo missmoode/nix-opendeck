@@ -10,7 +10,7 @@
   mkRustOpenDeckPlugin,
 }:
 mkRustOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-starterpack";
+  pname = "opendeck-nekename-starterpack";
   version = "2.14.0";
 
   src = fetchFromGitHub {

@@ -6,7 +6,7 @@
 }:
 
 mkPrebuiltOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-analogclock";
+  pname = "opendeck-elgato-analogclock";
   version = "2.0.0";
 
   src = fetchFromGitHub {

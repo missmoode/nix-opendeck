@@ -6,7 +6,7 @@
 }:
 
 mkNpmOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-multi-obs-controller";
+  pname = "opendeck-the_ca11-multi-obs-controller";
   version = "0.8.2";
 
   src = fetchFromGitHub {

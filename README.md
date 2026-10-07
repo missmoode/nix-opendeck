@@ -284,17 +284,17 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 
 | Upstream plugin | Package name | External integrations | Required runtime commands |
 | --- | --- | --- | --- |
-| [Starterpack](https://github.com/nekename/OpenDeck/tree/main/plugins/com.amansprojects.starterpack.sdPlugin) | `opendeck-plugins.starterpack` | - | - |
-| [Analog Clock](https://github.com/elgatosf/streamdeck-analogclock/) | `opendeck-plugins.analogclock` | - | - |
-| [Linux App Launcher](https://github.com/OpenActionPlugins/desktopentry) | `opendeck-plugins.desktopentry` | - | - |
-| [OpenAction Discord Plugin](https://github.com/OpenActionPlugins/discord) | `opendeck-plugins.oadiscord` | Discord IPC | - |
-| [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugins.homeassistant` | - | - |
-| [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugins.mpris` | MPRIS-compatible player | - |
-| [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugins.multi-obs-controller` | OBS Studio | - |
-| [On Air Clock](https://github.com/wortkrieg/streamdeck-onairclock) | `opendeck-plugins.onairclock` | - | - |
-| [PipeWire Audio Control](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugins.pipewire` | PipeWire | - |
-| [Redline Monitor](https://github.com/kahikara/opendeck-redline-monitor) | `opendeck-plugins.redline-monitor` | See upstream | - |
-| [TikClock](https://github.com/GDWhisper/opendeck-tikclock) | `opendeck-plugins.tikclock` | - | - |
-| [Tomato Timer](https://github.com/gallowaylabs/streamdeck-tomato-timer) | `opendeck-plugins.tomatotimer` | - | - |
-| [OpenDeck Weather](https://github.com/jfms7s/opendeck-weather) | `opendeck-plugins.jfms7s-weather` | - | - |
-| [XIVDeck](https://github.com/KazWolfe/XIVDeck) | `opendeck-plugins.xivdeck` | FFXIV / Dalamud | - |
+| [Starterpack](https://github.com/nekename/OpenDeck/tree/main/plugins/com.amansprojects.starterpack.sdPlugin) | `opendeck-plugins.nekename.starterpack` | - | - |
+| [Analog Clock](https://github.com/elgatosf/streamdeck-analogclock/) | `opendeck-plugins.elgato.analogclock` | - | - |
+| [Linux App Launcher](https://github.com/OpenActionPlugins/desktopentry) | `opendeck-plugins.openactionplugins.desktopentry` | - | - |
+| [OpenAction Discord Plugin](https://github.com/OpenActionPlugins/discord) | `opendeck-plugins.openactionplugins.discord` | Discord IPC | - |
+| [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugins.cgiesche.homeassistant` | - | - |
+| [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugins.openactionplugins.mpris` | MPRIS-compatible player | - |
+| [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugins.theca11.multi-obs-controller` | OBS Studio | - |
+| [On Air Clock](https://github.com/wortkrieg/streamdeck-onairclock) | `opendeck-plugins.wortkrieg.onairclock` | - | - |
+| [PipeWire Audio Control](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugins.sjourdois.pipewire` | PipeWire | - |
+| [Redline Monitor](https://github.com/kahikara/opendeck-redline-monitor) | `opendeck-plugins.kahikara.redline-monitor` | See upstream | - |
+| [TikClock](https://github.com/GDWhisper/opendeck-tikclock) | `opendeck-plugins.gdwhisper.tikclock` | - | - |
+| [Tomato Timer](https://github.com/gallowaylabs/streamdeck-tomato-timer) | `opendeck-plugins.gallowaylabs.tomato-timer` | - | - |
+| [OpenDeck Weather](https://github.com/jfms7s/opendeck-weather) | `opendeck-plugins.jfms7s.weather` | - | - |
+| [XIVDeck](https://github.com/KazWolfe/XIVDeck) | `opendeck-plugins.kazwolfe.xivdeck` | FFXIV / Dalamud | - |

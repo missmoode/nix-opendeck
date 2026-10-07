@@ -6,7 +6,7 @@
 }:
 
 mkPrebuiltOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-onairclock";
+  pname = "opendeck-wortkrieg-onairclock";
   version = "1.3.0";
 
   src = fetchFromGitHub {

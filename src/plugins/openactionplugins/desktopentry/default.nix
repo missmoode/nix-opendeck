@@ -53,7 +53,7 @@ mkRustOpenDeckPlugin (
     };
   in
   {
-    pname = "opendeck-desktopentry";
+    pname = "opendeck-openactionplugins-desktopentry";
     version = "1.0.2";
 
     src = fetchFromGitHub {

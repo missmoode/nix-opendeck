@@ -10,7 +10,7 @@
 }:
 
 mkNpmOpenDeckPlugin (finalAttrs: {
-  pname = "opendeck-redline-monitor";
+  pname = "opendeck-kahikara-redline-monitor";
   version = "1.0.9.1";
 
   src = fetchFromGitHub {
