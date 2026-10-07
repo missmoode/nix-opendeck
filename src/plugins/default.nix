@@ -44,8 +44,8 @@
     };
   };
 
-  the_ca11 = {
-    multi-obs-controller = pkgs.callPackage ./the_ca11/multi-obs-controller {
+  theca11 = {
+    multi-obs-controller = pkgs.callPackage ./theca11/multi-obs-controller {
       inherit (pluginLib)
         mkNpmOpenDeckPlugin
         mkGitHubReleaseUpdateScript
