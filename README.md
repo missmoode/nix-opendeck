@@ -266,7 +266,7 @@ The package used by the Home Manager module can be changed by modifying `program
 
 By default, this is set to `opendeck`. However, you can change it if you want to use a different version of
   the package, for example `opendeck-core`, in which case you will need to manually declare
-  `opendeck-plugins.starterpack` as a plugin in your Home Manager configuration.
+  `opendeck-plugins.nekename.starterpack` as a plugin in your Home Manager configuration.
 
 ### Required runtime commands
 Some plugins invoke external commands at runtime. When nix-opendeck does not provide such a command as
