@@ -1,7 +1,7 @@
 # OpenDeck for NixOS
 
 > [!WARNING]
-> Breaking changes may still happen for a little while. I also might swap plugins for different ones while I explore the available options.
+> Breaking changes may still happen for a little while.
 
 > [!NOTE]
 > A quick note:
@@ -150,8 +150,8 @@ in
       # installPackage = false;
 
       plugins = with opendeck-plugins; [
-        desktopentry
-        pipewire
+        openactionplugins.desktopentry
+        sjourdois.pipewire
         # ...
       ];
     };
@@ -214,8 +214,8 @@ Once you've applied it, your configuration can be simplified to just use your ex
   programs.opendeck = {
     enable = true;
     plugins = with pkgs; [
-      opendeck-plugins.desktopentry
-      opendeck-plugins.pipewire
+      opendeck-plugins.openactionplugins.desktopentry
+      opendeck-plugins.sjourdois.pipewire
       # ...
     ];
   };
@@ -250,11 +250,11 @@ environment.systemPackages = [
     bundledPlugins = with pkgs; [
       # This plugin is only in the bundledPlugins of pkgs.opendeck, so we'll need to re-add it
       # or override pkgs.opendeck instead.
-      opendeck-plugins.starterpack
+      opendeck-plugins.nekename.starterpack
 
       # Other bundled plugins...
-      opendeck-plugins.pipewire
-      opendeck-plugins.mpris
+      opendeck-plugins.sjourdois.pipewire
+      opendeck-plugins.openactionplugins.mpris
       # ... etc
     ];
   });
@@ -290,7 +290,7 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [OpenAction Discord Plugin](https://github.com/OpenActionPlugins/discord) | `opendeck-plugins.openactionplugins.discord` | Discord IPC | - |
 | [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugins.cgiesche.homeassistant` | - | - |
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugins.openactionplugins.mpris` | MPRIS-compatible player | - |
-| [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugins.theca11.multi-obs-controller` | OBS Studio | - |
+| [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugins.the_ca11.multi-obs-controller` | OBS Studio | - |
 | [On Air Clock](https://github.com/wortkrieg/streamdeck-onairclock) | `opendeck-plugins.wortkrieg.onairclock` | - | - |
 | [PipeWire Audio Control](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugins.sjourdois.pipewire` | PipeWire | - |
 | [Redline Monitor](https://github.com/kahikara/opendeck-redline-monitor) | `opendeck-plugins.kahikara.redline-monitor` | See upstream | - |
