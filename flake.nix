@@ -141,6 +141,12 @@
               repo = "OpenDeck";
             };
           };
+
+          opendeck-udev-rules = final.runCommand "opendeck-udev-rules-${opendeck.version}" { } ''
+            install -Dm644 \
+              ${opendeck-core.src}/src-tauri/bundle/40-streamdeck.rules \
+              "$out/lib/udev/rules.d/40-streamdeck.rules"
+          '';
         in
         {
           packages = {
@@ -148,6 +154,7 @@
               opendeck
               opendeck-core
               opendeck-with-plugins
+              opendeck-udev-rules
               ;
 
             default = opendeck;
@@ -164,6 +171,7 @@
               opendeck
               opendeck-core
               opendeck-with-plugins
+              opendeck-udev-rules
               ;
 
             opendeck-plugins = plugins;
@@ -188,7 +196,9 @@
         nixosModules.default =
           { pkgs, ... }@moduleArgs:
           (import ./src/modules/nixos.nix {
-            defaultPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
+            defaultUdevPackages = [
+              self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck-udev-rules
+            ];
           })
             moduleArgs;
 
