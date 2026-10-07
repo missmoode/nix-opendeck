@@ -142,7 +142,7 @@
             };
           };
 
-          opendeck-udev-rules = final.runCommand "opendeck-udev-rules-${opendeck.version}" { } ''
+          opendeck-udev-rules = final.runCommand "opendeck-udev-rules-${opendeck-core.version}" { } ''
             install -Dm644 \
               ${opendeck-core.src}/src-tauri/bundle/40-streamdeck.rules \
               "$out/lib/udev/rules.d/40-streamdeck.rules"
