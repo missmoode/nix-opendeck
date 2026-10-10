@@ -1,7 +1,7 @@
 # OpenDeck for NixOS
 
 > [!WARNING]
-> Breaking changes may still happen for a little while.
+> Breaking changes may still happen for a little while. This README will remain up-to-date.
 
 > [!NOTE]
 > A quick note:
