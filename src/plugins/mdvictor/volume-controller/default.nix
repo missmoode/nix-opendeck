@@ -7,9 +7,9 @@
   glib,
   gsettings-desktop-schemas,
   makeWrapper,
+  nix-update-script,
 
   mkRustOpenDeckPlugin,
-  mkGitHubReleaseUpdateScript,
 }:
 
 mkRustOpenDeckPlugin (finalAttrs: {
@@ -64,9 +64,11 @@ mkRustOpenDeckPlugin (finalAttrs: {
   };
 
   passthru = {
-    updateScript = mkGitHubReleaseUpdateScript {
-      owner = "mdvictor";
-      repo = "opendeck-volume-controller";
+    updateScript = nix-update-script {
+      extraArgs = [
+        "--flake"
+        "--use-github-releases"
+      ];
     };
   };
 })

@@ -19,17 +19,6 @@
       mkPluginLib =
         pkgs:
         let
-          mkGitHubReleaseUpdateScript = import ./src/lib/mkGitHubReleaseUpdateScript.nix {
-            inherit (pkgs)
-              lib
-              writeShellApplication
-              curl
-              jq
-              nix
-              nix-update
-              ;
-          };
-
           mkOpenDeckPlugin = import ./src/lib/mkOpenDeckPlugin.nix {
             inherit (pkgs) nix-update-script;
           };
@@ -71,7 +60,6 @@
             mkNpmOpenDeckPlugin
             mkYarnOpenDeckPlugin
             mkPrebuiltOpenDeckPlugin
-            mkGitHubReleaseUpdateScript
             ;
         };
 
@@ -135,16 +123,6 @@
             bundledPlugins = [
               plugins.nekename.starterpack
             ];
-
-            updateScript = pluginLib.mkGitHubReleaseUpdateScript {
-              owner = "nekename";
-              repo = "OpenDeck";
-
-              extraArgs = [
-                "--subpackage"
-                "denoDeps"
-              ];
-            };
           };
 
           opendeck-udev-rules = final.runCommand "opendeck-udev-rules-${opendeck-core.version}" { } ''
@@ -194,8 +172,6 @@
           mkYarnOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkYarnOpenDeckPlugin;
 
           mkPrebuiltOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkPrebuiltOpenDeckPlugin;
-
-          mkGitHubReleaseUpdateScript = pkgs: (mkPluginLib pkgs).mkGitHubReleaseUpdateScript;
         };
 
         nixosModules.default =

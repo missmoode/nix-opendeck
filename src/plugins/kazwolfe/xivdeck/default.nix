@@ -1,7 +1,7 @@
 {
   lib,
   fetchFromGitHub,
-  mkGitHubReleaseUpdateScript,
+  nix-update-script,
 
   mkYarnOpenDeckPlugin,
 }:
@@ -36,9 +36,11 @@ mkYarnOpenDeckPlugin (finalAttrs: {
     ];
   };
   passthru = {
-    updateScript = mkGitHubReleaseUpdateScript {
-      owner = "KazWolfe";
-      repo = "XIVDeck";
+    updateScript = nix-update-script {
+      extraArgs = [
+        "--flake"
+        "--use-github-releases"
+      ];
     };
   };
 })

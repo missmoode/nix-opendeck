@@ -14,25 +14,16 @@
   openactionplugins = {
     desktopentry = pkgs.callPackage ./openactionplugins/desktopentry {
       deno = buildTools.deno;
-      inherit (pluginLib)
-        mkRustOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkRustOpenDeckPlugin;
     };
 
     discord = pkgs.callPackage ./openactionplugins/discord {
       deno = buildTools.deno;
-      inherit (pluginLib)
-        mkRustOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkRustOpenDeckPlugin;
     };
 
     mpris = pkgs.callPackage ./openactionplugins/mpris {
-      inherit (pluginLib)
-        mkRustOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkRustOpenDeckPlugin;
     };
   };
 
@@ -46,10 +37,7 @@
 
   theca11 = {
     multi-obs-controller = pkgs.callPackage ./theca11/multi-obs-controller {
-      inherit (pluginLib)
-        mkNpmOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkNpmOpenDeckPlugin;
     };
   };
 
@@ -67,10 +55,7 @@
 
   kahikara = {
     redline-monitor = pkgs.callPackage ./kahikara/redline-monitor {
-      inherit (pluginLib)
-        mkNpmOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkNpmOpenDeckPlugin;
     };
   };
 
@@ -94,28 +79,19 @@
 
   jfms7s = {
     weather = pkgs.callPackage ./jfms7s/weather {
-      inherit (pluginLib)
-        mkRustOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkRustOpenDeckPlugin;
     };
   };
 
   kazwolfe = {
     xivdeck = pkgs.callPackage ./kazwolfe/xivdeck {
-      inherit (pluginLib)
-        mkYarnOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkYarnOpenDeckPlugin;
     };
   };
 
   mdvictor = {
     volume-controller = pkgs.callPackage ./mdvictor/volume-controller {
-      inherit (pluginLib)
-        mkRustOpenDeckPlugin
-        mkGitHubReleaseUpdateScript
-        ;
+      inherit (pluginLib) mkRustOpenDeckPlugin;
     };
   };
 

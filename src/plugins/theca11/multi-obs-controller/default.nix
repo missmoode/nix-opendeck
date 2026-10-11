@@ -1,7 +1,7 @@
 {
   lib,
   fetchFromGitHub,
-  mkGitHubReleaseUpdateScript,
+  nix-update-script,
   mkNpmOpenDeckPlugin,
 }:
 
@@ -18,9 +18,11 @@ mkNpmOpenDeckPlugin (finalAttrs: {
   };
 
   passthru = {
-    updateScript = mkGitHubReleaseUpdateScript {
-      owner = "theca11";
-      repo = "multi-obs-controller";
+    updateScript = nix-update-script {
+      extraArgs = [
+        "--flake"
+        "--use-github-releases"
+      ];
     };
   };
 

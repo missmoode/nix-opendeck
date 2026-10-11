@@ -4,9 +4,9 @@
   stdenv,
   pkg-config,
   openssl,
+  nix-update-script,
 
   mkRustOpenDeckPlugin,
-  mkGitHubReleaseUpdateScript,
 }:
 
 mkRustOpenDeckPlugin (finalAttrs: {
@@ -61,9 +61,11 @@ mkRustOpenDeckPlugin (finalAttrs: {
   };
 
   passthru = {
-    updateScript = mkGitHubReleaseUpdateScript {
-      owner = "OpenActionPlugins";
-      repo = "mpris";
+    updateScript = nix-update-script {
+      extraArgs = [
+        "--flake"
+        "--use-github-releases"
+      ];
     };
   };
 })

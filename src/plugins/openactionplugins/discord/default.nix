@@ -5,9 +5,9 @@
   deno,
   pkg-config,
   openssl,
+  nix-update-script,
 
   mkRustOpenDeckPlugin,
-  mkGitHubReleaseUpdateScript,
 }:
 
 mkRustOpenDeckPlugin (
@@ -113,9 +113,15 @@ mkRustOpenDeckPlugin (
     };
 
     passthru = {
-      updateScript = mkGitHubReleaseUpdateScript {
-        owner = "OpenActionPlugins";
-        repo = "discord";
+      inherit denoDeps;
+
+      updateScript = nix-update-script {
+        extraArgs = [
+          "--flake"
+          "--use-github-releases"
+          "--subpackage"
+          "denoDeps"
+        ];
       };
     };
   }

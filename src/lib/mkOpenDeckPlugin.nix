@@ -47,6 +47,8 @@
   passthru = passthru // {
     inherit pluginId requiredCommands;
 
-    updateScript = passthru.updateScript or (nix-update-script { });
+    updateScript = passthru.updateScript or (nix-update-script {
+      extraArgs = [ "--flake" ];
+    });
   };
 }

@@ -4,9 +4,9 @@
   nodejs,
   python3,
   zip,
+  nix-update-script,
 
   mkNpmOpenDeckPlugin,
-  mkGitHubReleaseUpdateScript,
 }:
 
 mkNpmOpenDeckPlugin (finalAttrs: {
@@ -42,10 +42,13 @@ mkNpmOpenDeckPlugin (finalAttrs: {
   '';
 
   passthru = {
-    updateScript = mkGitHubReleaseUpdateScript {
-      owner = "kahikara";
-      repo = "opendeck-redline-monitor";
-      tagPrefix = "v.";
+    updateScript = nix-update-script {
+      extraArgs = [
+        "--flake"
+        "--use-github-releases"
+        "--version-regex"
+        "^v[.]?([0-9.]+)$"
+      ];
     };
   };
 

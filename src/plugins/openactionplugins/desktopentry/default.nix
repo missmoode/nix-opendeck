@@ -5,9 +5,9 @@
   deno,
   glib,
   makeWrapper,
+  nix-update-script,
 
   mkRustOpenDeckPlugin,
-  mkGitHubReleaseUpdateScript,
 }:
 
 mkRustOpenDeckPlugin (
@@ -115,9 +115,15 @@ mkRustOpenDeckPlugin (
     };
 
     passthru = {
-      updateScript = mkGitHubReleaseUpdateScript {
-        owner = "OpenActionPlugins";
-        repo = "desktopentry";
+      inherit denoDeps;
+
+      updateScript = nix-update-script {
+        extraArgs = [
+          "--flake"
+          "--use-github-releases"
+          "--subpackage"
+          "denoDeps"
+        ];
       };
     };
   }

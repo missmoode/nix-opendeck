@@ -2,9 +2,9 @@
   lib,
   fetchFromGitHub,
   stdenv,
+  nix-update-script,
 
   mkRustOpenDeckPlugin,
-  mkGitHubReleaseUpdateScript,
 }:
 
 mkRustOpenDeckPlugin (finalAttrs: {
@@ -40,9 +40,11 @@ mkRustOpenDeckPlugin (finalAttrs: {
   };
 
   passthru = {
-    updateScript = mkGitHubReleaseUpdateScript {
-      owner = "jfms7s";
-      repo = "opendeck-weather";
+    updateScript = nix-update-script {
+      extraArgs = [
+        "--flake"
+        "--use-github-releases"
+      ];
     };
   };
 })
