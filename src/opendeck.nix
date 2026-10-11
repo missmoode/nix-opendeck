@@ -142,12 +142,15 @@ rustPlatform.buildRustPackage (
         'adapter: adapter(),' \
         'adapter: adapter(), version: { name: "${finalAttrs.version}" },'
 
-      # Identify this as the nix-opendeck build without maintaining another
-      # source patch solely for the build-info string.
+      # Identify this as the nix-opendeck build and replace the unavailable
+      # upstream Git commit hash with a Nix-specific build identifier.
       substituteInPlace src-tauri/src/events/frontend/settings.rs \
         --replace-fail \
         'built_info::PKG_VERSION,' \
-        'format!("{}+nix", built_info::PKG_VERSION),'
+        'format!("{}+nix", built_info::PKG_VERSION),' \
+        --replace-fail \
+        'built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("commit hash unknown"),' \
+        '"built via nix-opendeck",'
 
       # Use nix-patched libatatana
       substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
