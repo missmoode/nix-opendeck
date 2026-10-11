@@ -125,6 +125,9 @@ rustPlatform.buildRustPackage (
       # before starting Tokio's multithreaded runtime.
       ./patches/opendeck/0005-preserve-wrapper-path.patch
 
+      # Direct users of the Nix build to nix-opendeck's plugin
+      # compatibility documentation before reporting upstream issues.
+      ./patches/opendeck/0006-nix-plugin-store-warning.patch
     ];
 
     postPatch = ''

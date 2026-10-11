@@ -1,0 +1,31 @@
+diff --git a/src/components/PluginManager.svelte b/src/components/PluginManager.svelte
+--- a/src/components/PluginManager.svelte
++++ b/src/components/PluginManager.svelte
+@@ -314,6 +314,16 @@
+ 	<div class="flex flex-row items-center mx-2 my-4 p-3 space-x-2 bg-yellow-900/20 border-l-4 border-yellow-500 rounded">
+ 		<WarningCircle size="20" class="mt-0.5 text-yellow-500" />
+ 		<div class="text-sm text-yellow-200">
+ 			{$t("plugin_manager.warning", { PRODUCT_NAME })}
++			<p class="mt-2">
++				<a
++					href="https://github.com/missmoode/nix-opendeck#plugins"
++					class="underline"
++					on:click|preventDefault={(event) =>
++						invoke("open_url", { url: event.currentTarget.href })}
++				>
++					{$t("plugin_manager.nix_warning")}
++				</a>
++			</p>
+ 		</div>
+ 	</div>
+diff --git a/translations/en.json b/translations/en.json
+--- a/translations/en.json
++++ b/translations/en.json
+@@ -87,6 +87,7 @@
+ 	"plugin_manager.view_details": "View details",
+ 	"plugin_manager.view_logs": "View logs",
+ 	"plugin_manager.visit_website": "Visit website",
+ 	"plugin_manager.warning": "If you are experiencing issues with a plugin, please reach out on one of the {{PRODUCT_NAME}} support channels before attempting to contact the plugin developer.",
++	"plugin_manager.nix_warning": "Using nix-opendeck? Read the NixOS plugin compatibility notes before reporting issues.",
+ 	"profile_manager.application_profiles": "Application profiles",
+ 	"profile_manager.application_profiles.aria": "{{name}} profile",
