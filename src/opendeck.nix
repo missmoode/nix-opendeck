@@ -2,7 +2,6 @@
   lib,
   stdenv,
   fetchFromGitHub,
-  fetchpatch2,
 
   rustPlatform,
   cargo-tauri,
@@ -69,44 +68,23 @@ rustPlatform.buildRustPackage (
         runHook postInstall
       '';
 
-      outputHash = "sha256-J3mIc+eF6ET07BV5x39yw0p2E2JZCAArOJKxrqqhcDk=";
+      outputHash = "sha256-5iMi4aJMXQEeq8TF1kvxLrSTnC2y9m3G3FSb2PVeA9w=";
       outputHashMode = "recursive";
     };
   in
   {
     pname = pname;
 
-    version = "2.14.0";
+    version = "2.14.1";
 
     src = fetchFromGitHub {
       owner = "nekename";
       repo = "OpenDeck";
       tag = "v${finalAttrs.version}";
-      hash = "sha256-2zI1asMPLxllKaDaCaGbIZ1PwiQJCCsiuyG/gUKe0Mk=";
+      hash = "sha256-pI2duQ1xc72Bp0DMqBeUtrNeywL81UhSUooy5Op1qRc=";
     };
 
     patches = [
-      # Upstream fix merged after 2.14.0.
-      #
-      # Restrict OpenDeck's plugin WebSocket and asset servers to the loopback
-      # interface instead of listening on all network interfaces.
-      #
-      # Remove this backport when updating to an OpenDeck release containing:
-      # a4cfec6c738e5ea5d1841da9076c474a644defab
-      (fetchpatch2 {
-        name = "bind-plugin-servers-to-loopback.patch";
-        url = "https://github.com/nekename/OpenDeck/commit/a4cfec6c738e5ea5d1841da9076c474a644defab.patch?full_index=1";
-
-        includes = [
-          "src-tauri/src/plugins/mod.rs"
-          "src-tauri/src/plugins/webserver.rs"
-          "src-tauri/capabilities/corsfetch.json"
-          "src-tauri/tauri.conf.json"
-          "src/lib/ports.ts"
-        ];
-
-        hash = "sha256-VorU93TtdvsXYWJGSAv4Vk62vwm4QKLC2kEn8pMlFHc=";
-      })
 
       # Allow the local asset webserver to serve files through symlinked plugin
       # directories, while retaining its path-containment checks.
@@ -167,7 +145,7 @@ rustPlatform.buildRustPackage (
         '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
     '';
 
-    cargoHash = "sha256-AZ32cl5qbq/lROow9CpBgl3eztLos7VMqOnQV4kdvJU=";
+    cargoHash = "sha256-4cKyjYHNQ/2tw8QGGINehtcj23Ey22S7ZKJpvLs7IBI=";
 
     cargoRoot = "src-tauri";
     buildAndTestSubdir = finalAttrs.cargoRoot;

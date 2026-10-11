@@ -11,20 +11,20 @@
 }:
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-nekename-starterpack";
-  version = "2.14.0";
+  version = "2.14.1";
 
   src = fetchFromGitHub {
     owner = "nekename";
     repo = "OpenDeck";
     tag = "v${finalAttrs.version}";
     rootDir = "plugins/com.amansprojects.starterpack.sdPlugin";
-    hash = "sha256-JEZqvwiCX28jeXXJNRmg+h8LaIV4/BDdxA477a4J7oE=";
+    hash = "sha256-AU6Dzz6hueqZRWJwl6ORWedRQbyA2RLwSOki0/vu8ao=";
   };
 
   pluginId = "com.amansprojects.starterpack.sdPlugin";
   binaryName = "opendeck-starterpack";
 
-  cargoHash = "sha256-s8GPWbPMJY9XTTC4QajY2sYUXcJ0g2OSl/YYhK/UZLQ=";
+  cargoHash = "sha256-maCwWfZzsko2t4BtwJJiIBqK4lZYuUZgz4MR7YvWAy4=";
 
   nativeBuildInputs = [
     pkg-config
