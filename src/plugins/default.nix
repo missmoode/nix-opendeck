@@ -109,4 +109,14 @@
         ;
     };
   };
+
+  mdvictor = {
+    volume-controller = pkgs.callPackage ./mdvictor/volume-controller {
+      inherit (pluginLib)
+        mkRustOpenDeckPlugin
+        mkGitHubReleaseUpdateScript
+        ;
+    };
+  };
+
 }
