@@ -5,6 +5,12 @@
 }:
 
 {
+  cronusak = {
+    pipewire-audio = pkgs.callPackage ./cronusak/pipewire-audio {
+      inherit (pluginLib) mkNpmOpenDeckPlugin;
+    };
+  };
+
   elgato = {
     analogclock = pkgs.callPackage ./elgato/analogclock {
       inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
