@@ -119,6 +119,12 @@ rustPlatform.buildRustPackage (
       #
       # This is a downstream functionality used by nix-opendeck,
       ./patches/opendeck/0004-protect-externally-managed-plugins.patch
+
+      # Preserve Nix wrapper-provided runtime paths when OpenDeck reconstructs
+      # PATH from the user's login shell. Perform environment initialization
+      # before starting Tokio's multithreaded runtime.
+      ./patches/opendeck/0005-preserve-wrapper-path.patch
+
     ];
 
     postPatch = ''
@@ -140,6 +146,7 @@ rustPlatform.buildRustPackage (
         'built_info::PKG_VERSION,' \
         'format!("{}+nix", built_info::PKG_VERSION),'
 
+      # Use nix-patched libatatana
       substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
         --replace-fail \
         'libayatana-appindicator3.so.1' \
