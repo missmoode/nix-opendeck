@@ -219,6 +219,8 @@ rustPlatform.buildRustPackage (
     };
 
     passthru = {
+      inherit denoDeps;
+
       bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
     }
     // lib.optionalAttrs (updateScript != null) {

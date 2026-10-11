@@ -139,6 +139,11 @@
             updateScript = pluginLib.mkGitHubReleaseUpdateScript {
               owner = "nekename";
               repo = "OpenDeck";
+
+              extraArgs = [
+                "--subpackage"
+                "denoDeps"
+              ];
             };
           };
 

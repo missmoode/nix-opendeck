@@ -11,6 +11,7 @@
   owner,
   repo,
   tagPrefix ? "v",
+  extraArgs ? [ ],
 }:
 
 lib.getExe (writeShellApplication {
@@ -69,6 +70,7 @@ lib.getExe (writeShellApplication {
     nix-update \
       --flake \
       "$UPDATE_NIX_ATTR_PATH" \
-      --version "$version"
+      --version "$version" \
+      ${lib.escapeShellArgs extraArgs}
   '';
 })
