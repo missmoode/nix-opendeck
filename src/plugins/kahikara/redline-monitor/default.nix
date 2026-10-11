@@ -1,7 +1,6 @@
 {
   lib,
   fetchFromGitHub,
-  nodejs,
   python3,
   zip,
   nix-update-script,
@@ -34,11 +33,6 @@ mkNpmOpenDeckPlugin (finalAttrs: {
   # without polluting the rest of the environment
   postPatch = ''
     patchShebangs build-plugin.sh start.sh
-
-    substituteInPlace start.sh \
-      --replace-fail \
-      'NODE_BIN="''${NODE_BIN:-}"' \
-      'NODE_BIN="''${NODE_BIN:-${nodejs}/bin/node}"'
   '';
 
   passthru = {

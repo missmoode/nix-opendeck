@@ -16,6 +16,7 @@
   openssl,
   webkitgtk_4_1,
   wrapGAppsHook4,
+  nodejs,
   libayatana-appindicator,
 
   gst_all_1,
@@ -200,6 +201,7 @@ rustPlatform.buildRustPackage (
     preFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
       gappsWrapperArgs+=(
         --set GST_PLUGIN_PATH_1_0 "${gstPluginPath}"
+        --prefix PATH : "${lib.makeBinPath [ nodejs ]}"
       )
     '';
 
