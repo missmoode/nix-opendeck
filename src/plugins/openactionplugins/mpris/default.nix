@@ -65,6 +65,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
       extraArgs = [
         "--flake"
         "--use-github-releases"
+        "--src-only"
       ];
     };
   };

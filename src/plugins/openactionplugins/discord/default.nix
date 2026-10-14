@@ -119,8 +119,7 @@ mkRustOpenDeckPlugin (
         extraArgs = [
           "--flake"
           "--use-github-releases"
-          "--subpackage"
-          "denoDeps"
+          "--src-only"
         ];
       };
     };
