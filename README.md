@@ -34,7 +34,9 @@ This is my first attempt at packing software for Nix, made out of a personal nee
 
 > [!IMPORTANT]  
 > If you encounter bugs with the packages produced by this repo, it might not be
-> the fault of the upstream projects, but a problem with nix-opendeck’s derivation, or OpenDeck’s handling of them.
+> the fault of the upstream projects, but a problem with nix-opendeck’s derivation,
+> or OpenDeck’s handling of them.
+> 
 > Be certain before contacting the upstream devs!
 
 ## Overview
@@ -49,7 +51,8 @@ nix-opendeck provides:
 ## Scope
 ### Core
 This flake includes a patched version of OpenDeck to support plugins symlinked from the Nix store,
-  as well as protection against collisions between plugins managed through the GUI and plugins managed externally, for example by the [Home Manager module](#home-manager-module).
+  as well as protection against collisions between plugins managed through the GUI and plugins
+  managed externally, for example by the [Home Manager module](#home-manager-module).
 
 It emits three packages for OpenDeck:
 - `opendeck-core`, which is the baseline OpenDeck with the patches applied.
@@ -89,9 +92,11 @@ opendeck = {
 
 ### NixOS Module
 
-This module automatically sets up udev rules. It **does not install OpenDeck**. If you're not using the Home Manager module, you'll have to install it yourself.
+This module automatically sets up udev rules. It **does not install OpenDeck**. If you're not using
+the Home Manager module, you'll have to install it yourself.
 
-If you're not using NixOS, you must set up the udev rules yourself. See the section on [usage without the modules](#usage-without-the-nixos-or-home-manager-modules).
+If you're not using NixOS, you must set up the udev rules yourself. See the section 
+on [usage without the modules](#usage-without-the-nixos-or-home-manager-modules).
 
 ```nix
 {
