@@ -35,9 +35,7 @@
 
   cgiesche = {
     homeassistant = pkgs.callPackage ./cgiesche/homeassistant {
-      inherit (pluginLib)
-        mkNpmOpenDeckPlugin
-        ;
+      inherit (pluginLib) mkNpmOpenDeckPlugin;
     };
   };
 
