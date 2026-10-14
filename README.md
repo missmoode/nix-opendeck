@@ -2,11 +2,18 @@
 
 > [!WARNING]
 > Breaking changes may still happen for a little while. This README will remain up-to-date.
+>
+> I *think* the shape of the module configuration should stay the same from this point on,
+> however I **may still make some changes to the NixOS module**: I'd like to make it so that
+> you can just bundle in support plugins for non-elgato devices to the package, and the
+> NixOS module will automatically install the udev rules.
 
 > [!NOTE]
 > A quick note:
 > 
-> I’m pretty sure that this is properly reproducible, but I’ve not gotten around to testing it on another system yet. The main issues were Deno’s lack of a viable helper, which I think I’ve solved by pinning it, and Svelte, where I think replacing the version string let it act deterministically.
+> I’m pretty sure that this is properly reproducible, but I’ve not gotten around to testing it on another system
+> yet. The main issues were Deno’s lack of a viable helper, which I think I’ve solved by pinning it, and Svelte,
+> where I *think* replacing the version string allowed it to act deterministically.
 
 <div align="center">
 
@@ -20,9 +27,10 @@ nix-opendeck lets you install [OpenDeck](https://github.com/nekename/OpenDeck) a
 This is useful on NixOS because many OpenDeck plugins expect a conventional system
   environment and so don’t work correctly when installed through OpenDeck’s GUI.
 
-This is still in early development, and is also my first attempt at derivations.
-  I made it for myself, so I make no promises to maintain this long-term, but
-  in the spirit of Nix, here ya go.
+This is my first attempt at packing software for Nix, made out of a personal need
+  for my Stream Deck to just work on NixOS. I make no promises to maintain this
+  long-term, but in the spirit of Nix, I'm making it public and doing what I can
+  to make it useful for everyone.
 
 > [!IMPORTANT]  
 > If you encounter bugs with the packages produced by this repo, it might not be
