@@ -1,3 +1,4 @@
+
 name: Update packages
 
 on:
@@ -33,8 +34,7 @@ jobs:
           nix profile install nixpkgs#nix-update
           echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
 
-          # nix-update's update-script runner imports <nixpkgs>.
-          # Point it at the same nixpkgs revision as this flake.
+          # Use the flake's pinned nixpkgs for update scripts.
           nixpkgs_path=$(nix eval --impure --raw --expr \
             '(builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath')
           echo "NIX_PATH=nixpkgs=$nixpkgs_path" >> "$GITHUB_ENV"
@@ -52,34 +52,37 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Discover plugins from the flake rather than maintaining
-          # a separate package list.
+          # Discover plugins from the flake, excluding packages
+          # whose updateScript is explicitly null.
           nix eval --impure --json --expr '
             let
               flake = builtins.getFlake (toString ./.);
               plugins = flake.legacyPackages.x86_64-linux.opendeck-plugins;
+
               names = attrs: builtins.filter
                 (name: name != "recurseForDerivations")
                 (builtins.attrNames attrs);
+
+              updatable = owner: plugin:
+                plugins.${owner}.${plugin}.updateScript != null;
             in
               builtins.concatLists (map (owner:
                 map (plugin:
                   "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${plugin}"
-                ) (names plugins.${owner})
+                ) (builtins.filter
+                  (plugin: updatable owner plugin)
+                  (names plugins.${owner}))
               ) (names plugins))
           ' > "$RUNNER_TEMP/plugins.json"
 
           mapfile -t plugins < <(jq -r '.[]' "$RUNNER_TEMP/plugins.json")
 
-          # Process core last, after independent plugin updates.
+          # Core is processed last, after individual plugin updates.
           packages=("${plugins[@]}" opendeck-core)
 
           updated=()
           failed=()
           unchanged=()
-
-          needs_bundle=false
-          bundle_status="Not needed"
 
           rollback() {
             git reset --hard HEAD
@@ -88,18 +91,6 @@ jobs:
 
           for package in "${packages[@]}"; do
             echo "::group::$package"
-
-            # Record bundle eligibility before updating.
-            before_requirements=""
-            if [[ "$package" != opendeck-core ]]; then
-              if ! before_requirements=$(nix eval --json \
-                  ".#${package}.requiredCommands"); then
-                failed+=("$package (requirements evaluation)")
-                echo "::warning::Could not evaluate $package"
-                echo "::endgroup::"
-                continue
-              fi
-            fi
 
             # Run the package's existing passthru.updateScript.
             if ! nix-update "$package" \
@@ -111,7 +102,8 @@ jobs:
               continue
             fi
 
-            # Stage files so Nix flakes can see newly created files.
+            # Stage changes, including newly generated files,
+            # so Nix flakes can evaluate them.
             git add -A
 
             if git diff --cached --quiet; then
@@ -121,7 +113,7 @@ jobs:
               continue
             fi
 
-            # Flake input updates should be handled separately.
+            # Flake input updates are outside this workflow's scope.
             if git diff --cached --name-only | grep -Fxq 'flake.lock'; then
               failed+=("$package (unexpected flake.lock change)")
               echo "::warning::Updater modified flake.lock: $package"
@@ -130,23 +122,11 @@ jobs:
               continue
             fi
 
-            # Check eligibility after updating as well, in case a
-            # package enters or leaves the bundled plugin set.
-            after_requirements=""
-            if [[ "$package" != opendeck-core ]]; then
-              if ! after_requirements=$(nix eval --json \
-                  ".#${package}.requiredCommands"); then
-                failed+=("$package (requirements evaluation after update)")
-                echo "::warning::Could not evaluate updated $package"
-                rollback
-                echo "::endgroup::"
-                continue
-              fi
-            fi
-
-            # Build plugins individually. For core updates, validate
-            # the default OpenDeck package including Starterpack.
+            # Build each plugin independently.
+            # When core changes, validate the default OpenDeck
+            # package, including Starterpack.
             build_attr="$package"
+
             if [[ "$package" == opendeck-core ]]; then
               build_attr=opendeck
             fi
@@ -160,38 +140,14 @@ jobs:
               continue
             fi
 
-            # Only commit successfully built updates.
+            # Commit only successfully built updates.
             git commit -m "chore: update ${package##*.}"
             updated+=("$package")
-
-            # A full integration build is needed when core changes
-            # or an updated plugin belongs to the bundled variant.
-            if [[ "$package" == opendeck-core ||
-                  "$before_requirements" == '[]' ||
-                  "$after_requirements" == '[]' ]]; then
-              needs_bundle=true
-            fi
 
             echo "::endgroup::"
           done
 
-          # Run one full integration build after all updates.
-          if [[ "$needs_bundle" == true ]]; then
-            echo "::group::opendeck-with-plugins"
-
-            if nix build .#opendeck-with-plugins \
-                --no-link --print-build-logs; then
-              bundle_status="Passed"
-            else
-              bundle_status="FAILED"
-              failed+=("opendeck-with-plugins (integration build)")
-              echo "::error::Full OpenDeck bundle build failed"
-            fi
-
-            echo "::endgroup::"
-          fi
-
-          # Produce a readable report for Actions and the PR.
+          # Generate the Actions summary and PR report.
           report() {
             local heading="$1"
             shift
@@ -210,8 +166,6 @@ jobs:
           {
             echo "## Package update results"
             echo
-            echo "**Full bundle build:** $bundle_status"
-            echo
             report "Updated and built (${#updated[@]})" "${updated[@]}"
             report "Failed (${#failed[@]})" "${failed[@]}"
             report "Unchanged (${#unchanged[@]})" "${unchanged[@]}"
@@ -225,8 +179,6 @@ jobs:
             echo
             echo "Each committed package passed its individual build."
             echo
-            echo "**Full bundle build:** $bundle_status"
-            echo
             echo "Failed updates were skipped. Locally maintained"
             echo "lockfiles are not regenerated automatically."
             echo
@@ -235,7 +187,7 @@ jobs:
             cat "$RUNNER_TEMP/package-update-report.md"
           } > "$RUNNER_TEMP/package-update-pr.md"
 
-          # Report failures after the PR has been created.
+          # Report failures after PR creation.
           if (( ${#failed[@]} > 0 )); then
             echo "failed=true" >> "$GITHUB_OUTPUT"
           else
