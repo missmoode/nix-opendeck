@@ -3,8 +3,8 @@
   fetchFromGitHub,
   pkg-config,
   pipewire,
-  libclang,
   clangStdenv,
+  rustPlatform,
 
   mkRustOpenDeckPlugin,
 }:
@@ -28,7 +28,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
 
   nativeBuildInputs = [
     pkg-config
-    libclang
+    rustPlatform.bindgenHook
   ];
 
   buildInputs = [
@@ -36,9 +36,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
   ];
 
   licenseFiles = [ "LICENSE" ];
-
-  LIBCLANG_PATH = "${libclang.lib}/lib";
-  BINDGEN_EXTRA_CLANG_ARGS = builtins.readFile "${clangStdenv.cc}/nix-support/libc-cflags";
 
   meta = {
     description = "PipeWire / WirePlumber audio control plugin for OpenDeck";
