@@ -23,6 +23,8 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     "LICENSE"
   ];
 
+  passthru.updateScript = null;
+
   meta = {
     description = "Analog clock plugin for OpenDeck";
     homepage = "https://github.com/elgatosf/streamdeck-analogclock";
