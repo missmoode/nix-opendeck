@@ -5,12 +5,12 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
 
-    # Intentionally independent from nixpkgs, so that differences
-    # in the builder's deno package don't change the hash of the
-    # dependencies.
+    # Intentionally pinned independently of nixpkgs.
+    # Updating Deno can change the fixed-output hashes of Deno dependencies,
+    # so this revision should only be changed deliberately.
     #
     # Do NOT use deno-nixpkgs.follows!
-    deno-nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    deno-nixpkgs.url = "github:NixOS/nixpkgs/a7868a727837f3c09cee2ce0ca671c76b1589fed";
   };
 
   outputs =
