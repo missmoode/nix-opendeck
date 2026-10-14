@@ -213,6 +213,9 @@ jobs:
           delete-branch: true
           title: "chore: update OpenDeck packages"
           body-path: ${{ runner.temp }}/package-update-pr.md
+          labels: |
+            updates
+            upstream
 
       - name: Fail on update or build errors
         if: steps.updates.outputs.failed == 'true'

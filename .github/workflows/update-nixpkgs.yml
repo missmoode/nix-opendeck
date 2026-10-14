@@ -1,0 +1,176 @@
+
+name: Update nixpkgs
+
+on:
+  schedule:
+    - cron: "43 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nixpkgs-updates
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ github.token }}
+
+      - name: Update nixpkgs
+        id: update
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Only update the main nixpkgs input, not the pinned Deno input.
+          nix flake update nixpkgs
+          git add flake.lock
+
+          if git diff --cached --quiet -- flake.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "nixpkgs is already up to date." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check flake evaluation
+        id: evaluation
+        if: steps.update.outputs.changed == 'true'
+        continue-on-error: true
+        run: nix flake check --no-build --all-systems
+
+      - name: Build OpenDeck and every plugin
+        id: builds
+        if: steps.update.outputs.changed == 'true' && steps.evaluation.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Include all plugins
+          nix eval --impure --json --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              plugins = flake.legacyPackages.x86_64-linux.opendeck-plugins;
+              names = attrs: builtins.filter
+                (name: name != "recurseForDerivations")
+                (builtins.attrNames attrs);
+            in
+              builtins.concatLists (map (owner:
+                map (plugin:
+                  "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${plugin}"
+                ) (names plugins.${owner})
+              ) (names plugins))
+          ' > "$RUNNER_TEMP/plugins.json"
+
+          mapfile -t plugins < <(jq -r '.[]' "$RUNNER_TEMP/plugins.json")
+
+          # The default package also builds OpenDeck Core and Starterpack.
+          targets=( '.#opendeck' )
+          for plugin in "${plugins[@]}"; do
+            targets+=( ".#${plugin}" )
+          done
+
+          echo "Building OpenDeck and ${#plugins[@]} plugins"
+          nix build --no-link --keep-going --print-build-logs "${targets[@]}"
+
+      - name: Check for concurrent changes to main
+        id: base
+        if: steps.update.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${{ github.event.repository.default_branch }}"
+          git fetch origin "$branch"
+
+          if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "origin/$branch")" ]]; then
+            echo "unchanged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "unchanged=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Main moved during validation; automatic merge is disabled for this run"
+          fi
+
+      - name: Write validation report
+        if: steps.update.outputs.changed == 'true'
+        shell: bash
+        env:
+          EVALUATION: ${{ steps.evaluation.outcome }}
+          BUILDS: ${{ steps.builds.outcome }}
+          BASE_UNCHANGED: ${{ steps.base.outputs.unchanged }}
+        run: |
+          set -euo pipefail
+
+          old_rev=$(git show HEAD:flake.lock | jq -r '.nodes.nixpkgs.locked.rev')
+          new_rev=$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)
+
+          {
+            echo "## Weekly nixpkgs update"
+            echo
+            echo "- Old revision: \`$old_rev\`"
+            echo "- New revision: \`$new_rev\`"
+            echo "- Flake evaluation (all declared systems): **$EVALUATION**"
+            echo "- Builds (OpenDeck + all plugins on x86_64-linux): **$BUILDS**"
+            echo "- Base branch unchanged during validation: **$BASE_UNCHANGED**"
+            echo
+            echo "The separately pinned \`deno-nixpkgs\` input was not targeted."
+            echo
+            echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          } > "$RUNNER_TEMP/nixpkgs-report.md"
+
+          cat "$RUNNER_TEMP/nixpkgs-report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create or update pull request
+        id: pr
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: automated/nixpkgs-update
+          delete-branch: true
+          title: "chore: update nixpkgs (unstable)"
+          commit-message: "chore: update nixpkgs"
+          add-paths: flake.lock
+          body-path: ${{ runner.temp }}/nixpkgs-report.md
+          labels: |
+            updates
+            nixpkgs
+
+      # Do not queue auto-merge on a reusable PR branch: a later
+      # failed update could otherwise replace the validated commit.
+      # Merge this exact tested PR revision, only after all checks pass.
+      - name: Merge validated update
+        if: >-
+          steps.pr.outputs.pull-request-number != '' &&
+          steps.evaluation.outcome == 'success' &&
+          steps.builds.outcome == 'success' &&
+          steps.base.outputs.unchanged == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.pull-request-number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.pull-request-head-sha }}
+        run: |
+          gh pr merge "$PR_NUMBER" \
+            --squash \
+            --match-head-commit "$PR_HEAD_SHA"
+
+      # Fail the workflow only after preserving the failed update in a PR.
+      - name: Fail if validation failed
+        if: >-
+          steps.update.outputs.changed == 'true' &&
+          (steps.evaluation.outcome != 'success' ||
+           steps.builds.outcome != 'success' ||
+           steps.base.outputs.unchanged != 'true')
+        run: exit 1
