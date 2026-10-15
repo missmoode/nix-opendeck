@@ -285,8 +285,6 @@ By default, this is set to `opendeck`. However, you can change it if you want to
 Some plugins invoke external commands at runtime. When nix-opendeck does not provide such a command as
   part of the plugin package, it is listed as a required runtime command and must be available in your `PATH`.
 
-Required runtime commands are checked by the Home Manager module when the plugin is enabled.
-
 Plugins may also integrate with external services, such as PipeWire, D-Bus services, or another running
   application. These integrations are documented in the plugin listing, but are not checked or provided
   by nix-opendeck.
