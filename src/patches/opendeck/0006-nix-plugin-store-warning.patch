@@ -26,6 +26,6 @@ diff --git a/translations/en.json b/translations/en.json
  	"plugin_manager.view_logs": "View logs",
  	"plugin_manager.visit_website": "Visit website",
  	"plugin_manager.warning": "If you are experiencing issues with a plugin, please reach out on one of the {{PRODUCT_NAME}} support channels before attempting to contact the plugin developer.",
-+	"plugin_manager.nix_warning": "Using nix-opendeck? Read the NixOS plugin compatibility notes before reporting issues.",
++	"plugin_manager.nix_warning": "Using nix-opendeck? Read the plugin compatibility notes before reporting issues.",
  	"profile_manager.application_profiles": "Application profiles",
  	"profile_manager.application_profiles.aria": "{{name}} profile",
