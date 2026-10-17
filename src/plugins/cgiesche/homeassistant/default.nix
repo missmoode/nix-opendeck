@@ -1,6 +1,7 @@
 {
   lib,
   fetchFromGitHub,
+  jq,
 
   mkNpmOpenDeckPlugin,
 }:
@@ -24,6 +25,16 @@ mkNpmOpenDeckPlugin (finalAttrs: {
   licenseFiles = [
     "LICENSE"
   ];
+
+  nativeBuildInputs = [ jq ];
+
+  postInstall = ''
+    jq --arg version "${finalAttrs.version}" \
+      '.Version = $version' \
+      "$plugin/manifest.json" > "$plugin/manifest.json.tmp"
+
+    mv "$plugin/manifest.json.tmp" "$plugin/manifest.json"
+  '';
 
   meta = {
     description = "Home Assistant plugin for Elgato Stream Deck";
