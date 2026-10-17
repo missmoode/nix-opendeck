@@ -42,8 +42,7 @@
 
     runHook postInstall
 
-    # Tests
-    # Check manifest
+    # Validate the installed plugin after all post-install hooks have run.
     manifest="$plugin/manifest.json"
 
     if [[ ! -f "$manifest" ]]; then
