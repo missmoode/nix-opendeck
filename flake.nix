@@ -20,7 +20,7 @@
         pkgs:
         let
           mkOpenDeckPlugin = import ./src/lib/mkOpenDeckPlugin.nix {
-            inherit (pkgs) nix-update-script;
+            inherit (pkgs) nix-update-script jq;
           };
 
           mkRustOpenDeckPlugin = import ./src/lib/mkRustOpenDeckPlugin.nix {

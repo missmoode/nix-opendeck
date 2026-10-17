@@ -2,6 +2,7 @@
 # Declare system service requirements where needed - things that the plugin expects to exist.
 {
   nix-update-script,
+  jq,
 }:
 {
   pluginId,
@@ -23,6 +24,8 @@
   licenseSource ? null,
 }:
 {
+  nativeBuildInputs = [ jq ];
+
   installPhase = ''
     runHook preInstall
 
@@ -40,6 +43,20 @@
     )}
 
     runHook postInstall
+
+    # Tests
+    # Check manifest
+    manifest="$plugin/manifest.json"
+
+    if [[ ! -f "$manifest" ]]; then
+      echo "error: OpenDeck plugin '${pluginId}' is missing manifest.json" >&2
+      exit 1
+    fi
+
+    if ! ${jq}/bin/jq -e 'type == "object"' "$manifest" > /dev/null; then
+      echo "error: OpenDeck plugin '${pluginId}' has an invalid manifest.json" >&2
+      exit 1
+    fi
   '';
 
   inherit meta;
@@ -47,8 +64,9 @@
   passthru = passthru // {
     inherit pluginId requiredCommands;
 
-    updateScript = passthru.updateScript or (nix-update-script {
-      extraArgs = [ "--flake" ];
-    });
+    updateScript =
+      passthru.updateScript or (nix-update-script {
+        extraArgs = [ "--flake" ];
+      });
   };
 }
