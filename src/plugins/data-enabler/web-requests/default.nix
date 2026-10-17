@@ -39,6 +39,13 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
       '.Version = $version' \
       "$plugin/manifest.json" > "$plugin/manifest.json.tmp"
     mv "$plugin/manifest.json.tmp" "$plugin/manifest.json"
+
+    install -Dm644 ${
+      fetchurl {
+        url = "https://raw.githubusercontent.com/data-enabler/streamdeck-web-requests/v${finalAttrs.version}/LICENSE";
+        hash = "sha256-moIqCXvKG4wHoI6kgBUC4BZDlikU1SdfCYoHcDOM8kE=";
+      }
+    } "$plugin/LICENSE"
   '';
 
   meta = {
