@@ -39,6 +39,12 @@
     };
   };
 
+  data-enabler = {
+    web-requests = pkgs.callPackage ./data-enabler/web-requests {
+      inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+    };
+  };
+
   theca11 = {
     multi-obs-controller = pkgs.callPackage ./theca11/multi-obs-controller {
       inherit (pluginLib) mkNpmOpenDeckPlugin;
