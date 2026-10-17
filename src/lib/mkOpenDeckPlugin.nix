@@ -24,8 +24,6 @@
   licenseSource ? null,
 }:
 {
-  nativeBuildInputs = [ jq ];
-
   installPhase = ''
     runHook preInstall
 
