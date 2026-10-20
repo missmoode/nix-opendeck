@@ -340,7 +340,7 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [Analog Clock](https://github.com/elgatosf/streamdeck-analogclock/) | `opendeck-plugins.elgato.analogclock` | - | - |
 | [Linux App Launcher](https://github.com/OpenActionPlugins/desktopentry) | `opendeck-plugins.openactionplugins.desktopentry` | - | - |
 | [OpenAction Discord Plugin](https://github.com/OpenActionPlugins/discord) | `opendeck-plugins.openactionplugins.discord` | Discord IPC | - |
-| [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugins.cgiesche.homeassistant` | - | - |
+| [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugins.cgiesche.homeassistant` | Home Assistant server | - |
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugins.openactionplugins.mpris` | MPRIS-compatible player | - |
 | [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugins.theca11.multi-obs-controller` | OBS Studio | - |
 | [OBS Tools](https://github.com/FeloDeck/obs-tools) | `opendeck-plugins.felodeck.obs-tools` | OBS Studio | - |
