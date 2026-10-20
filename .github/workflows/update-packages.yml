@@ -1,4 +1,3 @@
-
 name: Update packages
 
 on:
@@ -213,6 +212,7 @@ jobs:
           delete-branch: true
           title: "chore: update OpenDeck packages"
           body-path: ${{ runner.temp }}/package-update-pr.md
+          assignees: ${{ vars.UPDATE_MAINTAINERS }}
           labels: |
             updates
             upstream
