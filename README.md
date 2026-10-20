@@ -94,7 +94,7 @@ opendeck = {
 
 ### Binary Cache
 
-A binary cache is available for `opendeck`, re-distributable plugins, and `opendeck-with-plugins`, allowing you
+A binary cache is available for `opendeck`, `opendeck-with-plugins`, and every redistributable plugin, allowing you
 to download pre-built packages instead of compiling them locally.
 
 To use it, add the following to your NixOS configuration:
@@ -320,6 +320,15 @@ Some plugins invoke external commands at runtime. When nix-opendeck does not pro
 Plugins may also integrate with external services, such as PipeWire, D-Bus services, or another running
   application. These integrations are documented in the plugin listing, but are not checked or provided
   by nix-opendeck.
+  
+### Source Code and Licenses
+nix-opendeck, via the binary cache, distributes builds of third-party open-source software under their respective licenses.
+
+The Nix derivations in this repository identify the upstream source revisions, dependencies, and build instructions used to produce these packages. Any downstream patches are also included in this repository.
+
+The source code for each package can be obtained through the upstream repositories referenced in its derivation, using the specified version or commit.
+
+For packages requiring corresponding source availability under licenses such as GPLv3 or MPL 2.0, please consult the relevant derivation and its upstream source. If any referenced source is unavailable, please open an issue so that the corresponding source can be provided.
 
 ## Plugin Listing
 Below is a list of the plugins where a derivation is included in this repo. You can check their upstream
