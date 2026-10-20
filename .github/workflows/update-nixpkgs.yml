@@ -128,6 +128,20 @@ jobs:
             echo "The separately pinned \`deno-nixpkgs\` input was not targeted."
             echo
             echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            if [[ "$BASE_UNCHANGED" == "false" ]]; then
+              echo
+              echo "### Manual retry: concurrent changes"
+              echo
+              echo "The default branch changed during validation, preventing automatic merging."
+              echo
+              echo "To retry against the latest \`main\`:"
+              echo
+              echo "1. [Open the Update nixpkgs workflow]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/update-nixpkgs.yml)."
+              echo "2. Select **Run workflow**, using the \`main\` branch."
+              echo "3. Start a fresh run (rather than re-running failed jobs)."
+              echo
+              echo "If validation succeeds without further concurrent changes, the existing PR will be updated and merged automatically."
+            fi
           } > "$RUNNER_TEMP/nixpkgs-report.md"
 
           cat "$RUNNER_TEMP/nixpkgs-report.md" >> "$GITHUB_STEP_SUMMARY"
