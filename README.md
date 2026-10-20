@@ -84,7 +84,8 @@ Import the flake as normal:
 ```nix
 opendeck = {
   url = "github:missmoode/nix-opendeck";
-  inputs.nixpkgs.follows = "nixpkgs";
+  # Optionally, bring your own nixpkgs.
+  # inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
 
