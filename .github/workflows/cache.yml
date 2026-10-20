@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # Bot-created merges using GITHUB_TOKEN do not trigger push workflows.
+  # Merges made by the update workflows using GITHUB_TOKEN do not
+  # start ordinary push workflows.
   workflow_run:
     workflows: ["Update packages", "Update nixpkgs"]
     types: [completed]
@@ -12,15 +13,13 @@ on:
 permissions:
   contents: read
 
-# Don't spend CI minutes rebuilding an older main revision after a new one arrives.
 concurrency:
   group: nix-opendeck-cache-main
   cancel-in-progress: true
 
 jobs:
   prepare:
-    # For automated updates, only publish if the workflow succeeded AND
-    # main changed while it ran. No-change scheduled updates do nothing.
+    # Ignore failed or no-change updater runs.
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
@@ -29,22 +28,25 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       plugins: ${{ steps.discover.outputs.plugins }}
+      opendeck_missing: ${{ steps.discover.outputs.opendeck_missing }}
+      bundled_missing: ${{ steps.discover.outputs.bundled_missing }}
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
 
-      - name: Discover plugins and check redistribution metadata
+      - name: Check licenses and find missing cache outputs
         id: discover
         shell: bash
         run: |
           set -euo pipefail
 
-          # Keep in sync with the plugin discovery used by the update workflows.
-          # Check all declared licenses; missing metadata fails closed.
+          # Derivation output paths are known at evaluation time. No builds
+          # or downloads of plugin binaries are required for this step.
           nix eval --impure --json --expr '
             let
               flake = builtins.getFlake (toString ./.);
               lib = flake.inputs.nixpkgs.lib;
+              packages = flake.packages.x86_64-linux;
               plugins = flake.legacyPackages.x86_64-linux.opendeck-plugins;
               names = attrs: builtins.filter
                 (name: name != "recurseForDerivations")
@@ -54,34 +56,112 @@ jobs:
                 in licenses != [] &&
                   builtins.all (license: license.redistributable or false) licenses;
             in {
-              opendeckRedistributable =
-                redistributable flake.packages.x86_64-linux.opendeck;
+              opendeck = {
+                outPath = packages.opendeck.outPath;
+                redistributable = redistributable packages.opendeck;
+              };
+              bundled = {
+                outPath = packages.opendeck-with-plugins.outPath;
+                redistributable = redistributable packages.opendeck-with-plugins;
+              };
               plugins = builtins.concatLists (map (owner:
-                map (name: {
-                  attr = "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${name}";
-                  label = "${owner}/${name}";
-                  redistributable = redistributable plugins.${owner}.${name};
-                }) (names plugins.${owner})
+                map (name:
+                  let plugin = plugins.${owner}.${name};
+                  in {
+                    attr = "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${name}";
+                    label = "${owner}/${name}";
+                    outPath = plugin.outPath;
+                    redistributable = redistributable plugin;
+                  }
+                ) (names plugins.${owner})
               ) (names plugins));
             }
-          ' > "$RUNNER_TEMP/plugin-metadata.json"
+          ' > "$RUNNER_TEMP/targets.json"
 
-          if ! jq -e \
-            '.opendeckRedistributable and all(.plugins[]; .redistributable)' \
-            "$RUNNER_TEMP/plugin-metadata.json"; then
-            echo 'Some packages have missing or non-redistributable licenses:' >&2
+          if ! jq -e '
+            .opendeck.redistributable and
+            .bundled.redistributable and
+            all(.plugins[]; .redistributable)
+          ' "$RUNNER_TEMP/targets.json" > /dev/null; then
+            echo 'Missing or non-redistributable license metadata:' >&2
             jq -r '
-              if (.opendeckRedistributable | not) then "opendeck" else empty end,
-              (.plugins[] | select(.redistributable | not) | .attr)
-            ' "$RUNNER_TEMP/plugin-metadata.json" >&2
+              if (.opendeck.redistributable | not) then "opendeck" else empty end,
+              if (.bundled.redistributable | not) then "opendeck-with-plugins" else empty end,
+              (.plugins[] | select(.redistributable | not) | .label)
+            ' "$RUNNER_TEMP/targets.json" >&2
             exit 1
           fi
 
-          echo "plugins=$(jq -c '[.plugins[] | {attr, label}]' "$RUNNER_TEMP/plugin-metadata.json")" >> "$GITHUB_OUTPUT"
+          # A narinfo file identifies an exact published store path.
+          # Treat unexpected responses as errors, not as cache misses.
+          cache_has() {
+            local path="$1" filename hash status
+            filename="${path##*/}"
+            hash="${filename%%-*}"
+
+            if [[ ! "$hash" =~ ^[0-9a-z]{32}$ ]]; then
+              echo "Unexpected Nix store path: $path" >&2
+              exit 1
+            fi
+
+            status="$(curl --silent --show-error --location --head \
+              --retry 2 --retry-delay 2 --connect-timeout 10 --max-time 30 \
+              --output /dev/null --write-out '%{http_code}' \
+              "https://nix-opendeck.cachix.org/${hash}.narinfo")" || {
+              echo "Could not query Cachix for $path" >&2
+              exit 1
+            }
+
+            case "$status" in
+              200) return 0 ;;
+              404) return 1 ;;
+              *)
+                echo "Unexpected Cachix response ($status) for $path" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          : > "$RUNNER_TEMP/missing-plugins.jsonl"
+          while IFS= read -r plugin; do
+            path="$(jq -r '.outPath' <<< "$plugin")"
+            label="$(jq -r '.label' <<< "$plugin")"
+            if cache_has "$path"; then
+              echo "Cached: $label"
+            else
+              echo "Missing: $label"
+              jq -c '{attr, label}' <<< "$plugin" \
+                >> "$RUNNER_TEMP/missing-plugins.jsonl"
+            fi
+          done < <(jq -c '.plugins[]' "$RUNNER_TEMP/targets.json")
+
+          plugins="$(jq -sc '.' "$RUNNER_TEMP/missing-plugins.jsonl")"
+          echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
+
+          for package in opendeck bundled; do
+            path="$(jq -r ".$package.outPath" "$RUNNER_TEMP/targets.json")"
+            if cache_has "$path"; then
+              echo "${package}_missing=false" >> "$GITHUB_OUTPUT"
+              echo "Cached: $package"
+            else
+              echo "${package}_missing=true" >> "$GITHUB_OUTPUT"
+              echo "Missing: $package"
+            fi
+          done
+
+          {
+            echo '## Cache status'
+            echo
+            echo "- Plugins requiring publication: $(jq 'length' <<< "$plugins")"
+            echo "- OpenDeck: $(grep '^opendeck_missing=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2) (missing)"
+            echo "- Bundled OpenDeck: $(grep '^bundled_missing=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2) (missing)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   plugins:
-    name: "Plugin: ${{ matrix.plugin.label }}"
+    name: 'Plugin: ${{ matrix.plugin.label }}'
     needs: prepare
+    # An empty dynamic matrix is not valid unless the job is skipped first.
+    if: needs.prepare.outputs.plugins != '[]'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -109,6 +189,7 @@ jobs:
 
   opendeck:
     needs: prepare
+    if: needs.prepare.outputs.opendeck_missing == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
@@ -128,9 +209,15 @@ jobs:
             | cachix push nix-opendeck
 
   bundled:
-    # Separate runners don't share a Nix store. By waiting for the plugin jobs,
-    # this build can substitute their outputs from Cachix instead of compiling them.
     needs: [prepare, plugins, opendeck]
+    # Skipped upstream jobs are expected when every plugin or OpenDeck
+    # is already cached. Still run this job if the bundled output is missing.
+    if: >-
+      !cancelled() &&
+      needs.prepare.result == 'success' &&
+      (needs.plugins.result == 'success' || needs.plugins.result == 'skipped') &&
+      (needs.opendeck.result == 'success' || needs.opendeck.result == 'skipped') &&
+      needs.prepare.outputs.bundled_missing == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
