@@ -323,8 +323,8 @@ Plugins may also integrate with external services, such as PipeWire, D-Bus servi
   
 ### Source Code and Licenses
 nix-opendeck, via the binary cache, distributes builds of third-party open-source software under their
-respective licenses. Additionally, the derivations ensure that the upstream license files are added to
-the build output.
+respective licenses. Additionally, the derivations ensure that upstream license files are added to the
+build output.
 
 The Nix derivations in this repository identify the upstream source revisions, dependencies, and build
 instructions used to produce these packages. Any downstream patches are also included in this repository.
