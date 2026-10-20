@@ -209,31 +209,3 @@ jobs:
           set -euo pipefail
           nix build --no-link --print-out-paths -L .#opendeck \
             | cachix push nix-opendeck
-
-  bundled:
-    needs: [prepare, plugins, opendeck]
-    # Skipped upstream jobs are expected when every plugin or OpenDeck
-    # is already cached. Still run this job if the bundled output is missing.
-    if: >-
-      !cancelled() &&
-      needs.prepare.result == 'success' &&
-      (needs.plugins.result == 'success' || needs.plugins.result == 'skipped') &&
-      (needs.opendeck.result == 'success' || needs.opendeck.result == 'skipped') &&
-      needs.prepare.outputs.bundled_missing == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 240
-    steps:
-      - uses: actions/checkout@v6
-      - uses: cachix/install-nix-action@v31
-      - uses: cachix/cachix-action@v17
-        with:
-          name: nix-opendeck
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-          skipPush: true
-
-      - name: Build and publish bundled OpenDeck runtime closure
-        shell: bash
-        run: |
-          set -euo pipefail
-          nix build --no-link --print-out-paths -L .#opendeck-with-plugins \
-            | cachix push nix-opendeck

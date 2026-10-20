@@ -94,7 +94,7 @@ opendeck = {
 
 ### Binary Cache
 
-A binary cache is available for `opendeck`, `opendeck-with-plugins`, and every redistributable plugin, allowing you
+A binary cache is available for `opendeck` and every redistributable plugin, allowing you
 to download pre-built packages instead of compiling them locally.
 
 To use it, add the following to your NixOS configuration:
