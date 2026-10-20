@@ -84,10 +84,41 @@ Import the flake as normal:
 ```nix
 opendeck = {
   url = "github:missmoode/nix-opendeck";
+
   # Optionally, bring your own nixpkgs.
+  # This may prevent binary cache hits.
+  # 
   # inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
+
+### Binary Cache
+
+A binary cache is available for `opendeck` and `opendeck-with-plugins`, allowing you
+to download prebuilt packages instead of compiling them locally.
+
+To use it, add the following to your NixOS configuration:
+
+```nix
+{
+  nix.settings = {
+    extra-substituters = [
+      "https://nix-opendeck.cachix.org"
+    ];
+
+    extra-trusted-public-keys = [
+      "nix-opendeck.cachix.org-1:twvVjvv6Xm9H/m9sD2YQfIDoeUZLWEX5CpokN2An9L8="
+    ];
+  };
+}
+```
+
+> [!NOTE]
+> To benefit from the cache on your first installation, rebuild your NixOS configuration
+> **after adding the cache settings but before installing OpenDeck**. Otherwise, OpenDeck
+> may be compiled locally because the new cache configuration hasn't yet been activated.
+>
+> Cache hits also depend on matching Nix derivations. Overriding this flake's `nixpkgs` input with `inputs.nixpkgs.follows` may result in cache misses.
 
 ## Usage
 

@@ -28,6 +28,12 @@ jobs:
         with:
           github_access_token: ${{ github.token }}
 
+      - name: Configure read-only binary cache
+        uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          skipPush: true
+
       - name: Update nixpkgs
         id: update
         shell: bash

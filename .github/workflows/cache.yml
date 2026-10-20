@@ -1,0 +1,148 @@
+name: Build and publish binary cache
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Bot-created merges using GITHUB_TOKEN do not trigger push workflows.
+  workflow_run:
+    workflows: ["Update packages", "Update nixpkgs"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+# Don't spend CI minutes rebuilding an older main revision after a new one arrives.
+concurrency:
+  group: nix-opendeck-cache-main
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    # For automated updates, only publish if the workflow succeeded AND
+    # main changed while it ran. No-change scheduled updates do nothing.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.sha != github.event.workflow_run.head_sha)
+    runs-on: ubuntu-24.04
+    outputs:
+      plugins: ${{ steps.discover.outputs.plugins }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+
+      - name: Discover plugins and check redistribution metadata
+        id: discover
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Keep in sync with the plugin discovery used by the update workflows.
+          # Check all declared licenses; missing metadata fails closed.
+          nix eval --impure --json --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              lib = flake.inputs.nixpkgs.lib;
+              plugins = flake.legacyPackages.x86_64-linux.opendeck-plugins;
+              names = attrs: builtins.filter
+                (name: name != "recurseForDerivations")
+                (builtins.attrNames attrs);
+              redistributable = drv:
+                let licenses = lib.toList (drv.meta.license or []);
+                in licenses != [] &&
+                  builtins.all (license: license.redistributable or false) licenses;
+            in {
+              opendeckRedistributable =
+                redistributable flake.packages.x86_64-linux.opendeck;
+              plugins = builtins.concatLists (map (owner:
+                map (name: {
+                  attr = "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${name}";
+                  redistributable = redistributable plugins.${owner}.${name};
+                }) (names plugins.${owner})
+              ) (names plugins));
+            }
+          ' > "$RUNNER_TEMP/plugin-metadata.json"
+
+          if ! jq -e \
+            '.opendeckRedistributable and all(.plugins[]; .redistributable)' \
+            "$RUNNER_TEMP/plugin-metadata.json"; then
+            echo 'Some packages have missing or non-redistributable licenses:' >&2
+            jq -r '
+              if (.opendeckRedistributable | not) then "opendeck" else empty end,
+              (.plugins[] | select(.redistributable | not) | .attr)
+            ' "$RUNNER_TEMP/plugin-metadata.json" >&2
+            exit 1
+          fi
+
+          echo "plugins=$(jq -c '[.plugins[].attr]' "$RUNNER_TEMP/plugin-metadata.json")" >> "$GITHUB_OUTPUT"
+
+  plugins:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        plugin: ${{ fromJSON(needs.prepare.outputs.plugins) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipPush: true
+
+      - name: Build and publish plugin runtime closure
+        shell: bash
+        env:
+          PLUGIN_ATTR: ${{ matrix.plugin }}
+        run: |
+          set -euo pipefail
+          nix build --no-link --print-out-paths -L ".#${PLUGIN_ATTR}" \
+            | cachix push nix-opendeck
+
+  opendeck:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipPush: true
+
+      - name: Build and publish OpenDeck runtime closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build --no-link --print-out-paths -L .#opendeck \
+            | cachix push nix-opendeck
+
+  bundled:
+    # Separate runners don't share a Nix store. By waiting for the plugin jobs,
+    # this build can substitute their outputs from Cachix instead of compiling them.
+    needs: [prepare, plugins, opendeck]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          skipPush: true
+
+      - name: Build and publish bundled OpenDeck runtime closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build --no-link --print-out-paths -L .#opendeck-with-plugins \
+            | cachix push nix-opendeck

@@ -1,6 +1,16 @@
 {
   description = "OpenDeck - Linux software for your Elgato Stream Deck";
 
+  nixConfig = {
+    extra-substituters = [
+      "https://nix-opendeck.cachix.org"
+    ];
+
+    extra-trusted-public-keys = [
+      "nix-opendeck.cachix.org-1:twvVjvv6Xm9H/m9sD2YQfIDoeUZLWEX5CpokN2An9L8="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
