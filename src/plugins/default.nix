@@ -105,4 +105,9 @@
     };
   };
 
+  felodeck = {
+    obs-tools = pkgs.callPackage ./felodeck/obs-tools {
+      inherit (pluginLib) mkRustOpenDeckPlugin;
+    };
+  };
 }
