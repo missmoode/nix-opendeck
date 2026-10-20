@@ -21,6 +21,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
 
   pluginId = "fr.jourdois.pipewire.sdPlugin";
   binaryName = "opendeck-pipewire";
+  binaryInstallPath = "${clangStdenv.hostPlatform.rust.rustcTarget}/bin/${finalAttrs.binaryName}";
 
   cargoHash = "sha256-v/D1VZEd2YCjymXj8y2pZWPBoc9qJZs3Iss3HXcbkgo=";
 

@@ -2,6 +2,7 @@
   lib,
   fetchFromGitHub,
   pkg-config,
+  stdenv,
 
   libei,
   libxkbcommon,
@@ -23,6 +24,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
 
   pluginId = "com.amansprojects.starterpack.sdPlugin";
   binaryName = "opendeck-starterpack";
+  binaryInstallPath = "${stdenv.hostPlatform.rust.rustcTarget}/bin/${finalAttrs.binaryName}";
 
   cargoHash = "sha256-maCwWfZzsko2t4BtwJJiIBqK4lZYuUZgz4MR7YvWAy4=";
 

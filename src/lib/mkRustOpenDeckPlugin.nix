@@ -17,8 +17,8 @@ rustPlatform.buildRustPackage (
       attrs.binaryPath
         or "target/${stdenv.hostPlatform.rust.rustcTarget}/release/${finalAttrs.binaryName}";
 
-    binaryInstallPath =
-      attrs.binaryInstallPath or "${stdenv.hostPlatform.rust.rustcTarget}/bin/${finalAttrs.binaryName}";
+    # The destination comes from the plugin's manifest, not Cargo conventions.
+    binaryInstallPath = attrs.binaryInstallPath;
 
     assetsDir = attrs.assetsDir or "assets";
 
