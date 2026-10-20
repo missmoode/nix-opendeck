@@ -23,7 +23,7 @@ mkRustOpenDeckPlugin (
         deno
       ];
 
-      outputHash = "sha256-0QPWjZ9u/Ytiph9vy7FpyGJQwDC//VhzTYYka2t0NVg=";
+      outputHash = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
       outputHashMode = "recursive";
 
       buildPhase = ''
@@ -54,13 +54,13 @@ mkRustOpenDeckPlugin (
   in
   {
     pname = "opendeck-openactionplugins-discord";
-    version = "0.5.0";
+    version = "0.5.1";
 
     src = fetchFromGitHub {
       owner = "OpenActionPlugins";
       repo = "discord";
       tag = "v${finalAttrs.version}";
-      hash = "sha256-h5/ld2BEVZa/4i5KLjutlUpcqPZOBq5+M4rlP4qap+w=";
+      hash = "sha256-mUX0jqxsZ6kB9NrbULSfa/2KQPHisWeWNE6Q9eOaZgI=";
     };
 
     cargoLock = {

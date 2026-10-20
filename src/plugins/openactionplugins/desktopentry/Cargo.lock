@@ -74,9 +74,9 @@ dependencies = [
 
 [[package]]
 name = "base64"
-version = "0.22.1"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bitflags"
@@ -579,9 +579,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openaction"
-version = "2.7.0"
+version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc341c5cf8cc8953582dbf6fcf6423b335b8b104ef07e6ca7e580ad3a2d68f98"
+checksum = "336948ccb035d932ca20347c83c549e8dc6ef64a66e6329b2707b9cb010cc133"
 dependencies = [
  "async-trait",
  "dashmap",
@@ -940,9 +940,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.54.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "a0c168a474b95bfecfe908a65d4bdffc523144b649a74c09c286afb35d53e0bc"
 dependencies = [
  "bytes",
  "libc",
@@ -995,9 +995,9 @@ dependencies = [
 
 [[package]]
 name = "tux-icons"
-version = "0.4.5"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae547a0bdd4ab8091fd5edcbf38fd57a1dea4984dcfb29ca7e1fff59ba5bb389"
+checksum = "488008e7a8083090d6832b9f16faea4cfd386fd2269599600582b68ee340c5ed"
 dependencies = [
  "clap",
  "dirs",
