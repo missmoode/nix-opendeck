@@ -59,6 +59,7 @@ jobs:
               plugins = builtins.concatLists (map (owner:
                 map (name: {
                   attr = "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${name}";
+                  label = "${owner}/${name}";
                   redistributable = redistributable plugins.${owner}.${name};
                 }) (names plugins.${owner})
               ) (names plugins));
@@ -76,9 +77,10 @@ jobs:
             exit 1
           fi
 
-          echo "plugins=$(jq -c '[.plugins[].attr]' "$RUNNER_TEMP/plugin-metadata.json")" >> "$GITHUB_OUTPUT"
+          echo "plugins=$(jq -c '[.plugins[] | {attr, label}]' "$RUNNER_TEMP/plugin-metadata.json")" >> "$GITHUB_OUTPUT"
 
   plugins:
+    name: "Plugin: ${{ matrix.plugin.label }}"
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -99,7 +101,7 @@ jobs:
       - name: Build and publish plugin runtime closure
         shell: bash
         env:
-          PLUGIN_ATTR: ${{ matrix.plugin }}
+          PLUGIN_ATTR: ${{ matrix.plugin.attr }}
         run: |
           set -euo pipefail
           nix build --no-link --print-out-paths -L ".#${PLUGIN_ATTR}" \
