@@ -56,12 +56,14 @@ jobs:
                 in licenses != [] &&
                   builtins.all (license: license.redistributable or false) licenses;
             in {
+              # Avoid the special Nix `outPath` attribute name here: JSON
+              # serialization would coerce each object to a store-path string.
               opendeck = {
-                outPath = packages.opendeck.outPath;
+                storePath = packages.opendeck.outPath;
                 redistributable = redistributable packages.opendeck;
               };
               bundled = {
-                outPath = packages.opendeck-with-plugins.outPath;
+                storePath = packages.opendeck-with-plugins.outPath;
                 redistributable = redistributable packages.opendeck-with-plugins;
               };
               plugins = builtins.concatLists (map (owner:
@@ -70,7 +72,7 @@ jobs:
                   in {
                     attr = "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${name}";
                     label = "${owner}/${name}";
-                    outPath = plugin.outPath;
+                    storePath = plugin.outPath;
                     redistributable = redistributable plugin;
                   }
                 ) (names plugins.${owner})
@@ -124,7 +126,7 @@ jobs:
 
           : > "$RUNNER_TEMP/missing-plugins.jsonl"
           while IFS= read -r plugin; do
-            path="$(jq -r '.outPath' <<< "$plugin")"
+            path="$(jq -r '.storePath' <<< "$plugin")"
             label="$(jq -r '.label' <<< "$plugin")"
             if cache_has "$path"; then
               echo "Cached: $label"
@@ -139,7 +141,7 @@ jobs:
           echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
 
           for package in opendeck bundled; do
-            path="$(jq -r ".$package.outPath" "$RUNNER_TEMP/targets.json")"
+            path="$(jq -r ".$package.storePath" "$RUNNER_TEMP/targets.json")"
             if cache_has "$path"; then
               echo "${package}_missing=false" >> "$GITHUB_OUTPUT"
               echo "Cached: $package"
