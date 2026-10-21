@@ -82,6 +82,7 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
+        "aarch64-darwin"
       ];
 
       perSystem =
@@ -147,10 +148,12 @@
               opendeck
               opendeck-core
               opendeck-with-plugins
-              opendeck-udev-rules
               ;
 
             default = opendeck;
+          }
+          // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+            inherit opendeck-udev-rules;
           };
 
           legacyPackages = {
@@ -164,10 +167,12 @@
               opendeck
               opendeck-core
               opendeck-with-plugins
-              opendeck-udev-rules
               ;
 
             opendeck-plugins = plugins;
+          }
+          // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+            inherit opendeck-udev-rules;
           };
         };
 
@@ -208,10 +213,12 @@
               opendeck
               opendeck-core
               opendeck-with-plugins
-              opendeck-udev-rules
               ;
 
             opendeck-plugins = self.legacyPackages.${system}.opendeck-plugins;
+          }
+          // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isLinux {
+            inherit (self.packages.${system}) opendeck-udev-rules;
           };
       };
     };
