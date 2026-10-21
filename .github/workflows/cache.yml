@@ -43,7 +43,7 @@ jobs:
               systems = builtins.attrNames flake.packages;
             in
               builtins.concatLists (map (system:
-                let targets = import ./ci/targets.nix { inherit flake system; };
+                let targets = import ./.github/ci/targets.nix { inherit flake system; };
                 in [ targets.opendeck ] ++ targets.plugins
               ) systems)
           ' > "$RUNNER_TEMP/targets.json"

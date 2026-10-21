@@ -45,7 +45,7 @@ jobs:
             in
               builtins.concatLists (map (system:
                 let
-                  targets = import ./ci/targets.nix { inherit flake system; };
+                  targets = import ./.github/ci/targets.nix { inherit flake system; };
                   core = flake.packages.${system}.opendeck-core;
                 in
                   [ targets.opendeck ] ++ targets.plugins ++ [ {
@@ -58,7 +58,7 @@ jobs:
                   } ]
               ) systems)
           ' > "$RUNNER_TEMP/discovery/targets.json"
-          python3 ci/package_updates.py discover \
+          python3 .github/ci/package_updates.py discover \
             --targets "$RUNNER_TEMP/discovery/targets.json" \
             --output "$RUNNER_TEMP/discovery"
           echo "updaters=$(jq -c '.updaters' "$RUNNER_TEMP/discovery/plan.json")" >> "$GITHUB_OUTPUT"
@@ -112,7 +112,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 ci/package_updates.py update \
+          python3 .github/ci/package_updates.py update \
             --plan "$RUNNER_TEMP/discovery/plan.json" \
             --system "$UPDATE_SYSTEM" \
             --output "$RUNNER_TEMP/updates"
@@ -152,7 +152,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 ci/package_updates.py prepare \
+          python3 .github/ci/package_updates.py prepare \
             --plan "$RUNNER_TEMP/discovery/plan.json" \
             --targets "$RUNNER_TEMP/discovery/targets.json" \
             --updates "$RUNNER_TEMP/updates" \
@@ -199,7 +199,7 @@ jobs:
         env:
           TARGET: ${{ toJSON(matrix) }}
         run: |
-          python3 ci/package_updates.py build \
+          python3 .github/ci/package_updates.py build \
             --updates "$RUNNER_TEMP/updates" \
             --output "$RUNNER_TEMP/result.json"
       - name: Upload native build result
@@ -244,7 +244,7 @@ jobs:
         env:
           TARGET: ${{ toJSON(matrix) }}
         run: |
-          python3 ci/package_updates.py build \
+          python3 .github/ci/package_updates.py build \
             --updates "$RUNNER_TEMP/updates" \
             --output "$RUNNER_TEMP/result.json"
       - name: Upload native build result
@@ -311,7 +311,7 @@ jobs:
           else
             base_unchanged=false
           fi
-          python3 ci/package_updates.py finalize \
+          python3 .github/ci/package_updates.py finalize \
             --plan "$RUNNER_TEMP/discovery/plan.json" \
             --prepared "$RUNNER_TEMP/build-plan/prepared.json" \
             --updates "$RUNNER_TEMP/updates" \
