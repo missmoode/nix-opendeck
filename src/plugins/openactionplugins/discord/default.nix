@@ -25,11 +25,13 @@ mkRustOpenDeckPlugin (
         deno
       ];
 
-      outputHash = {
-        x86_64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
-        aarch64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
-        aarch64-darwin = "sha256-ATV6Nq8gLgji7SD+muFXYVJS4IFB0dDdMEDpca1hiYs=";
-      }.${stdenv.hostPlatform.system};
+      outputHash =
+        {
+          x86_64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
+          aarch64-linux = "sha256-AtQsrRF+tDZNnCHGozVZ4IS+USNBoquFs6+noRT9M74=";
+          aarch64-darwin = "sha256-ATV6Nq8gLgji7SD+muFXYVJS4IFB0dDdMEDpca1hiYs=";
+        }
+        .${stdenv.hostPlatform.system};
       outputHashMode = "recursive";
 
       buildPhase = ''
