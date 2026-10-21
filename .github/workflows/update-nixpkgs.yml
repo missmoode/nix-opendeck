@@ -10,7 +10,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: nixpkgs-updates
+  group: nixpkgs-updates-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - uses: cachix/install-nix-action@v31
@@ -79,7 +79,8 @@ jobs:
         if: steps.update.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          branch: automated/nixpkgs-update
+          base: ${{ github.ref_name }}
+          branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/nixpkgs-update' || format('automated/nixpkgs-update-{0}', github.ref_name) }}
           delete-branch: true
           title: 'chore: update nixpkgs (unstable)'
           commit-message: 'chore: update nixpkgs'
@@ -235,7 +236,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Confirm the proposed base has not moved
@@ -287,6 +288,7 @@ jobs:
       - name: Merge validated update
         id: merge
         if: >-
+          github.ref_name == github.event.repository.default_branch &&
           needs.prepare.outputs.pr_number != '' &&
           needs.discover.result == 'success' &&
           needs.plugins.result == 'success' &&
@@ -326,5 +328,7 @@ jobs:
           needs.plugins.result != 'success' ||
           needs.opendeck.result != 'success' ||
           steps.base.outputs.unchanged != 'true' ||
-          needs.prepare.outputs.pr_number == ''
+          needs.prepare.outputs.pr_number == '' ||
+          (github.ref_name == github.event.repository.default_branch &&
+          steps.merge.outcome != 'success')
         run: exit 1
