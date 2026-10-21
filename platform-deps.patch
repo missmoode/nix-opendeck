@@ -1,0 +1,181 @@
+--- a/src/plugins/openactionplugins/discord/default.nix
++++ b/src/plugins/openactionplugins/discord/default.nix
+@@ -5,4 +5,6 @@
+   deno,
+   pkg-config,
+   openssl,
++  python3,
++  writeShellScript,
+   nix-update-script,
+@@ -26,2 +28,6 @@
+-      outputHash = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
++      outputHash = {
++        x86_64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
++        aarch64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
++        aarch64-darwin = "sha256-ATV6Nq8gLgji7SD+muFXYVJS4IFB0dDdMEDpca1hiYs=";
++      }.${stdenv.hostPlatform.system};
+       outputHashMode = "recursive";
+@@ -90,6 +96,15 @@
+     passthru = {
+       inherit denoDeps;
+ 
++      updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
++        exec ${python3}/bin/python3 ${../../../lib/updateDenoDeps.py} \
++          --attr "$1" \
++          --package "${denoDeps.pname}" \
++          --file src/plugins/openactionplugins/discord/default.nix \
++          --system "${stdenv.hostPlatform.system}" \
++          --output "$2"
++      '';
++
+       updateScript = nix-update-script {
+         extraArgs = [
+           "--flake"
+diff --git a/src/plugins/openactionplugins/desktopentry/default.nix b/src/plugins/openactionplugins/desktopentry/default.nix
+--- a/src/plugins/openactionplugins/desktopentry/default.nix
++++ b/src/plugins/openactionplugins/desktopentry/default.nix
+@@ -6,4 +6,6 @@
+   deno,
+   glib,
+   makeWrapper,
++  python3,
++  writeShellScript,
+   nix-update-script,
+@@ -26,2 +28,5 @@
+-      outputHash = "sha256-gk0lz/CXwyc0o9Txggu3qSk/WTN3KlQDiOXEgCaKC2U=";
++      outputHash = {
++        x86_64-linux = "sha256-gk0lz/CXwyc0o9Txggu3qSk/WTN3KlQDiOXEgCaKC2U=";
++        aarch64-linux = "sha256-nEZR6+3VDlDEvlUwfOi+qqROGRfgCDTOfhYPsTJOHSw=";
++      }.${stdenv.hostPlatform.system};
+       outputHashMode = "recursive";
+@@ -99,6 +105,15 @@
+     passthru = {
+       inherit denoDeps;
+ 
++      updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
++        exec ${python3}/bin/python3 ${../../../lib/updateDenoDeps.py} \
++          --attr "$1" \
++          --package "${denoDeps.pname}" \
++          --file src/plugins/openactionplugins/desktopentry/default.nix \
++          --system "${stdenv.hostPlatform.system}" \
++          --output "$2"
++      '';
++
+       updateScript = nix-update-script {
+         extraArgs = [
+           "--flake"
+diff --git a/ci/package_updates.py b/ci/package_updates.py
+--- a/ci/package_updates.py
++++ b/ci/package_updates.py
+@@ -219,11 +219,38 @@
+ def apply_patch(pkg, root):
+     patch_path = Path(root) / f"updates-{pkg['system']}" / "patches" / f"{pkg['id']}.patch"
+     patch = patch_path.read_bytes()
+     report_sha = pkg.get("sha256")
+     if report_sha and hashlib.sha256(patch).hexdigest() != report_sha:
+         raise RuntimeError(f"patch checksum mismatch for {pkg['label']}")
+     run("git", "apply", "--check", "--index", str(patch_path))
+     run("git", "apply", "--index", str(patch_path))
+ 
+ 
++def update_platform_deps(target, output):
++    """Run an optional package-owned native dependency updater."""
++    attr = target["attr"]
++    if not re.fullmatch(r"[A-Za-z0-9_.-]+", attr):
++        raise ValueError("unsafe flake attribute")
++    # Use Nix attribute selection, not an environment-specific package list.
++    pkg = f"(builtins.getFlake (toString ./.)).{attr}"
++    has_hook = run("nix", "eval", "--impure", "--json", "--expr",
++                   f"let pkg = {pkg}; in pkg ? updatePlatformDeps",
++                   capture_output=True, text=True).stdout.strip()
++    if has_hook == "false":
++        return []
++    if has_hook != "true":
++        raise ValueError(f"invalid platform updater probe: {has_hook}")
++    script = run("nix", "build", "--impure", "--no-link", "--print-out-paths",
++                 "--expr", f"{pkg}.updatePlatformDeps",
++                 capture_output=True, text=True).stdout.strip()
++    if not script.startswith("/nix/store/") or "\n" in script:
++        raise ValueError("platform updater did not produce a single store path")
++    edits_file = output.with_suffix(".edits.json")
++    run(script, attr, str(edits_file))
++    edits = load(edits_file)
++    if not isinstance(edits, list):
++        raise ValueError("platform updater must return a JSON list of source edits")
++    return edits
++
++
+ def build(args):
+@@ -231,7 +264,8 @@
+     try:
+         for pkg in target["patches"]:
+             apply_patch(pkg, args.updates)
++        result["sourceEdits"] = update_platform_deps(target, output)
+         proc = run("nix", "build", "--no-link", "-L", ".#" + target["attr"], check=False)
+         result["status"] = "success" if proc.returncode == 0 else "failed"
+         if proc.returncode:
+             result["error"] = f"nix build exited with {proc.returncode}"
+@@ -273,4 +308,44 @@
+     return successful, failures
+ 
+ 
++def apply_source_edits(accepted, prepared, build_root):
++    """Combine independent, successful native updates without merging patches."""
++    accepted_ids = {pkg["id"] for pkg in accepted}
++    app_accepted = any(pkg["label"] in ("opendeck-core", "nekename/starterpack")
++                       for pkg in accepted)
++    edits = {}
++    for target in prepared["plugins"] + prepared["opendeck"]:
++        if target["id"] not in accepted_ids and not (target["id"] == "opendeck" and app_accepted):
++            continue
++        path = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
++        report = load(path)
++        if report.get("status") != "success":
++            raise ValueError(f"unvalidated platform edits for {target['label']}")
++        for edit in report.get("sourceEdits", []):
++            if set(edit) != {"path", "before", "after"}:
++                raise ValueError("invalid source edit")
++            relative = Path(edit["path"])
++            if (relative.is_absolute() or ".." in relative.parts or
++                    not relative.parts or relative.parts[0] != "src" or
++                    relative.suffix != ".nix" or
++                    not all(isinstance(edit[k], str) for k in edit) or
++                    not edit["before"] or "\n" in edit["before"] or
++                    "\n" in edit["after"]):
++                raise ValueError("unsafe source edit")
++            key = (edit["path"], edit["before"])
++            if key in edits and edits[key] != edit["after"]:
++                raise ValueError(f"conflicting source edits in {edit['path']}")
++            edits[key] = edit["after"]
++    touched = set()
++    for (path, before), after in sorted(edits.items()):
++        source = Path(path)
++        content = source.read_text()
++        if content.count(before) != 1:
++            raise ValueError(f"cannot uniquely apply validated source edit in {path}")
++        source.write_text(content.replace(before, after, 1))
++        touched.add(path)
++    if touched:
++        run("git", "add", "--", *sorted(touched))
++
++
+ def finalize(args):
+@@ -310,16 +383,17 @@
+     errors.extend(rejected)
+     base_ok = args.base_unchanged == "true"
+     if not base_ok:
+-        errors.append("main changed while this update was running; rerun against the latest base")
++        errors.append("base branch changed while this update was running; rerun against its latest revision")
+         # Validated against an old checkout is not the same as accepted for a PR.
+         accepted = []
+ 
+     final_check = "skipped"
+     # Do not propose anything if the base changed: those patches weren't
+     # validated against the new branch revision.
+     if base_ok and accepted:
+         try:
+             for pkg in accepted:
+                 record = updates[pkg["id"]]
+                 apply_patch(pkg | record, args.updates)
++            apply_source_edits(accepted, prepared, args.builds)
+             run("nix", "flake", "check", "--no-build", "--all-systems")

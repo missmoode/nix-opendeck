@@ -5,6 +5,8 @@
   deno,
   pkg-config,
   openssl,
+  python3,
+  writeShellScript,
   nix-update-script,
 
   mkRustOpenDeckPlugin,
@@ -23,7 +25,11 @@ mkRustOpenDeckPlugin (
         deno
       ];
 
-      outputHash = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
+      outputHash = {
+        x86_64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
+        aarch64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
+        aarch64-darwin = "sha256-ATV6Nq8gLgji7SD+muFXYVJS4IFB0dDdMEDpca1hiYs=";
+      }.${stdenv.hostPlatform.system};
       outputHashMode = "recursive";
 
       buildPhase = ''
@@ -114,6 +120,15 @@ mkRustOpenDeckPlugin (
 
     passthru = {
       inherit denoDeps;
+
+      updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
+        exec ${python3}/bin/python3 ${../../../lib/updateDenoDeps.py} \
+          --attr "$1" \
+          --package "${denoDeps.pname}" \
+          --file src/plugins/openactionplugins/discord/default.nix \
+          --system "${stdenv.hostPlatform.system}" \
+          --output "$2"
+      '';
 
       updateScript = nix-update-script {
         extraArgs = [

@@ -3,6 +3,8 @@
   stdenv,
   fetchFromGitHub,
   nix-update-script,
+  python3,
+  writeShellScript,
 
   rustPlatform,
   cargo-tauri,
@@ -69,7 +71,13 @@ rustPlatform.buildRustPackage (
         runHook postInstall
       '';
 
-      outputHash = "sha256-5iMi4aJMXQEeq8TF1kvxLrSTnC2y9m3G3FSb2PVeA9w=";
+      outputHash =
+        {
+          x86_64-linux = "sha256-5iMi4aJMXQEeq8TF1kvxLrSTnC2y9m3G3FSb2PVeA9w=";
+          aarch64-linux = "sha256-6SM1uH4aWYEUBPJ0NHOQy5Q48FtedoNnRm2eSZ1OjTw=";
+          aarch64-darwin = "sha256-NtGQvJv53Y0cShi6ZBg9lBKgiGMQZnbaHpBZlMmodFs=";
+        }
+        .${stdenv.hostPlatform.system};
       outputHashMode = "recursive";
     };
   in
@@ -240,12 +248,21 @@ rustPlatform.buildRustPackage (
 
       bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
 
+      # Native CI runs this optional hook before building the package. The
+      # hook updates only this host's hash if the Deno dependency FOD changed.
+      updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
+        exec ${python3}/bin/python3 ${./lib/updateDenoDeps.py} \
+          --attr "$1" \
+          --package "${denoDeps.pname}" \
+          --file src/opendeck.nix \
+          --system "${stdenv.hostPlatform.system}" \
+          --output "$2"
+      '';
+
       updateScript = nix-update-script {
         extraArgs = [
           "--flake"
           "--use-github-releases"
-          "--subpackage"
-          "denoDeps"
         ];
       };
     };

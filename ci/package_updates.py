@@ -228,6 +228,33 @@ def apply_patch(pkg, root):
     run("git", "apply", "--index", str(patch_path))
 
 
+def update_platform_deps(target, output):
+    """Run an optional package-owned native dependency updater."""
+    attr = target["attr"]
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", attr):
+        raise ValueError("unsafe flake attribute")
+    # Use Nix attribute selection, not an environment-specific package list.
+    pkg = f"(builtins.getFlake (toString ./.)).{attr}"
+    has_hook = run("nix", "eval", "--impure", "--json", "--expr",
+                   f"let pkg = {pkg}; in pkg ? updatePlatformDeps",
+                   capture_output=True, text=True).stdout.strip()
+    if has_hook == "false":
+        return []
+    if has_hook != "true":
+        raise ValueError(f"invalid platform updater probe: {has_hook}")
+    script = run("nix", "build", "--impure", "--no-link", "--print-out-paths",
+                 "--expr", f"{pkg}.updatePlatformDeps",
+                 capture_output=True, text=True).stdout.strip()
+    if not script.startswith("/nix/store/") or "\n" in script:
+        raise ValueError("platform updater did not produce a single store path")
+    edits_file = output.with_suffix(".edits.json")
+    run(script, attr, str(edits_file))
+    edits = load(edits_file)
+    if not isinstance(edits, list):
+        raise ValueError("platform updater must return a JSON list of source edits")
+    return edits
+
+
 def build(args):
     target = json.loads(os.environ["TARGET"])
     output = Path(args.output)
@@ -235,6 +262,7 @@ def build(args):
     try:
         for pkg in target["patches"]:
             apply_patch(pkg, args.updates)
+        result["sourceEdits"] = update_platform_deps(target, output)
         proc = run("nix", "build", "--no-link", "-L", ".#" + target["attr"], check=False)
         result["status"] = "success" if proc.returncode == 0 else "failed"
         if proc.returncode:
@@ -265,6 +293,46 @@ def check_builds(prepared, build_root):
         except (ValueError, OSError, json.JSONDecodeError) as exc:
             failures.append(f"{target['label']} ({target['system']}): {exc}")
     return successful, failures
+
+
+def apply_source_edits(accepted, prepared, build_root):
+    """Combine independent, successful native updates without merging patches."""
+    accepted_ids = {pkg["id"] for pkg in accepted}
+    app_accepted = any(pkg["label"] in ("opendeck-core", "nekename/starterpack")
+                       for pkg in accepted)
+    edits = {}
+    for target in prepared["plugins"] + prepared["opendeck"]:
+        if target["id"] not in accepted_ids and not (target["id"] == "opendeck" and app_accepted):
+            continue
+        path = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
+        report = load(path)
+        if report.get("status") != "success":
+            raise ValueError(f"unvalidated platform edits for {target['label']}")
+        for edit in report.get("sourceEdits", []):
+            if set(edit) != {"path", "before", "after"}:
+                raise ValueError("invalid source edit")
+            relative = Path(edit["path"])
+            if (relative.is_absolute() or ".." in relative.parts or
+                    not relative.parts or relative.parts[0] != "src" or
+                    relative.suffix != ".nix" or
+                    not all(isinstance(edit[k], str) for k in edit) or
+                    not edit["before"] or "\n" in edit["before"] or
+                    "\n" in edit["after"]):
+                raise ValueError("unsafe source edit")
+            key = (edit["path"], edit["before"])
+            if key in edits and edits[key] != edit["after"]:
+                raise ValueError(f"conflicting source edits in {edit['path']}")
+            edits[key] = edit["after"]
+    touched = set()
+    for (path, before), after in sorted(edits.items()):
+        source = Path(path)
+        content = source.read_text()
+        if content.count(before) != 1:
+            raise ValueError(f"cannot uniquely apply validated source edit in {path}")
+        source.write_text(content.replace(before, after, 1))
+        touched.add(path)
+    if touched:
+        run("git", "add", "--", *sorted(touched))
 
 
 def finalize(args):
@@ -309,7 +377,7 @@ def finalize(args):
     errors.extend(rejected)
     base_ok = args.base_unchanged == "true"
     if not base_ok:
-        errors.append("main changed while this update was running; rerun against the latest base")
+        errors.append("base branch changed while this update was running; rerun against its latest revision")
         # Validated against an old checkout is not the same as accepted for a PR.
         accepted = []
 
@@ -321,6 +389,7 @@ def finalize(args):
             for pkg in accepted:
                 record = updates[pkg["id"]]
                 apply_patch(pkg | record, args.updates)
+            apply_source_edits(accepted, prepared, args.builds)
             run("nix", "flake", "check", "--no-build", "--all-systems")
             final_check = "passed"
         except Exception as exc:
