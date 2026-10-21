@@ -12,14 +12,14 @@
 }:
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-nekename-starterpack";
-  version = "2.14.1";
+  version = "2.14.2";
 
   src = fetchFromGitHub {
     owner = "nekename";
     repo = "OpenDeck";
     tag = "v${finalAttrs.version}";
     rootDir = "plugins/com.amansprojects.starterpack.sdPlugin";
-    hash = "sha256-AU6Dzz6hueqZRWJwl6ORWedRQbyA2RLwSOki0/vu8ao=";
+    hash = "sha256-WRmkB/r8FFA5rWHDiGtYra5vtIJpgSSpcR6dqD+HV1o=";
   };
 
   pluginId = "com.amansprojects.starterpack.sdPlugin";
