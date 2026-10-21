@@ -7,13 +7,13 @@
 
 mkPrebuiltOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-gallowaylabs-tomato-timer";
-  version = "0.5.0";
+  version = "0.6.0";
 
   src = fetchFromGitHub {
     owner = "gallowaylabs";
     repo = "streamdeck-tomato-timer";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-KIAYR6/Yk0GBHbZ+Tp5W16n/TmQomuahwRZFA/Zjafs=";
+    hash = "sha256-zMSW/rNlR1nFkIF/YyL+k1hdAnJMP+baxJwcrdlmrYs=";
   };
 
   pluginId = "com.gallowaylabs.tomato.streamDeckPlugin";
