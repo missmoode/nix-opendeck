@@ -9,8 +9,6 @@
 > NixOS module will automatically install the udev rules.
 
 > [!NOTE]
-> A quick note:
-> 
 > I’m pretty sure that this is properly reproducible, but I’ve not verified this yet.
 > The main issues I could find were Deno’s lack of a viable helper, which I think
 > I’ve solved by pinning it, and SvelteKit, where I *think* replacing the version 
