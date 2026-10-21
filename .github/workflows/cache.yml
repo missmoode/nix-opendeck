@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # Merges made by the update workflows using GITHUB_TOKEN do not
-  # start ordinary push workflows.
+  # Bot-token merges from the updater do not start ordinary push workflows.
   workflow_run:
     workflows: ["Update nixpkgs"]
     types: [completed]
@@ -19,7 +18,6 @@ concurrency:
 
 jobs:
   prepare:
-    # Ignore failed or no-change updater runs.
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
@@ -28,67 +26,35 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       plugins: ${{ steps.discover.outputs.plugins }}
-      opendeck_missing: ${{ steps.discover.outputs.opendeck_missing }}
+      opendeck: ${{ steps.discover.outputs.opendeck }}
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
 
-      - name: Check licenses and find missing cache outputs
+      - name: Discover uncached redistributable targets
         id: discover
         shell: bash
         run: |
           set -euo pipefail
 
-          # Derivation output paths are known at evaluation time. No builds
-          # or downloads of plugin binaries are required for this step.
           nix eval --impure --json --expr '
             let
               flake = builtins.getFlake (toString ./.);
-              lib = flake.inputs.nixpkgs.lib;
-              packages = flake.packages.x86_64-linux;
-              plugins = flake.legacyPackages.x86_64-linux.opendeck-plugins;
-              names = attrs: builtins.filter
-                (name: name != "recurseForDerivations")
-                (builtins.attrNames attrs);
-              redistributable = drv:
-                let licenses = lib.toList (drv.meta.license or []);
-                in licenses != [] &&
-                  builtins.all (license: license.redistributable or false) licenses;
-            in {
-              # Avoid the special Nix `outPath` attribute name here: JSON
-              # serialization would coerce each object to a store-path string.
-              opendeck = {
-                storePath = packages.opendeck.outPath;
-                redistributable = redistributable packages.opendeck;
-              };
-              plugins = builtins.concatLists (map (owner:
-                map (name:
-                  let plugin = plugins.${owner}.${name};
-                  in {
-                    attr = "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${name}";
-                    label = "${owner}/${name}";
-                    storePath = plugin.outPath;
-                    redistributable = redistributable plugin;
-                  }
-                ) (names plugins.${owner})
-              ) (names plugins));
-            }
+              systems = builtins.attrNames flake.packages;
+            in
+              builtins.concatLists (map (system:
+                let targets = import ./ci/targets.nix { inherit flake system; };
+                in [ targets.opendeck ] ++ targets.plugins
+              ) systems)
           ' > "$RUNNER_TEMP/targets.json"
 
-          if ! jq -e '
-            .opendeck.redistributable and
-            all(.plugins[]; .redistributable)
-          ' "$RUNNER_TEMP/targets.json" > /dev/null; then
+          if ! jq -e 'all(.[]; .redistributable)' "$RUNNER_TEMP/targets.json" >/dev/null; then
             echo 'Missing or non-redistributable license metadata:' >&2
-            jq -r '
-              if (.opendeck.redistributable | not) then "opendeck" else empty end,
-              (.plugins[] | select(.redistributable | not) | .label)
-            ' "$RUNNER_TEMP/targets.json" >&2
+            jq -r '.[] | select(.redistributable | not) | "\(.system) / \(.label)"' \
+              "$RUNNER_TEMP/targets.json" >&2
             exit 1
           fi
 
-          # A narinfo file identifies an exact published store path.
-          # Treat unexpected responses as errors, not as cache misses.
           cache_has() {
             local path="$1" filename hash status
             filename="${path##*/}"
@@ -118,49 +84,49 @@ jobs:
           }
 
           : > "$RUNNER_TEMP/missing-plugins.jsonl"
-          while IFS= read -r plugin; do
-            path="$(jq -r '.storePath' <<< "$plugin")"
-            label="$(jq -r '.label' <<< "$plugin")"
+          : > "$RUNNER_TEMP/missing-opendeck.jsonl"
+          while IFS= read -r item; do
+            path="$(jq -r '.storePath' <<< "$item")"
+            label="$(jq -r '"\(.system) / \(.label)"' <<< "$item")"
             if cache_has "$path"; then
               echo "Cached: $label"
-            else
-              echo "Missing: $label"
-              jq -c '{attr, label}' <<< "$plugin" \
-                >> "$RUNNER_TEMP/missing-plugins.jsonl"
+              continue
             fi
-          done < <(jq -c '.plugins[]' "$RUNNER_TEMP/targets.json")
+
+            echo "Missing: $label"
+            kind="$(jq -r '.kind' <<< "$item")"
+            if [[ "$kind" == plugin ]]; then
+              jq -c '{system, runner, attr, label}' <<< "$item" \
+                >> "$RUNNER_TEMP/missing-plugins.jsonl"
+            else
+              jq -c '{system, runner, attr, label}' <<< "$item" \
+                >> "$RUNNER_TEMP/missing-opendeck.jsonl"
+            fi
+          done < <(jq -c '.[]' "$RUNNER_TEMP/targets.json")
 
           plugins="$(jq -sc '.' "$RUNNER_TEMP/missing-plugins.jsonl")"
+          opendeck="$(jq -sc '.' "$RUNNER_TEMP/missing-opendeck.jsonl")"
           echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
-
-          path="$(jq -r '.opendeck.storePath' "$RUNNER_TEMP/targets.json")"
-          if cache_has "$path"; then
-            echo "opendeck_missing=false" >> "$GITHUB_OUTPUT"
-            echo "Cached: opendeck"
-          else
-            echo "opendeck_missing=true" >> "$GITHUB_OUTPUT"
-            echo "Missing: opendeck"
-          fi
+          echo "opendeck=$opendeck" >> "$GITHUB_OUTPUT"
 
           {
             echo '## Cache status'
             echo
             echo "- Plugins requiring publication: $(jq 'length' <<< "$plugins")"
-            echo "- OpenDeck: $(grep '^opendeck_missing=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2) (missing)"
+            echo "- OpenDeck system builds requiring publication: $(jq 'length' <<< "$opendeck")"
           } >> "$GITHUB_STEP_SUMMARY"
 
   plugins:
-    name: 'Plugin: ${{ matrix.plugin.label }}'
+    name: 'Plugin: ${{ matrix.system }} / ${{ matrix.label }}'
     needs: prepare
-    # An empty dynamic matrix is not valid unless the job is skipped first.
-    if: needs.prepare.outputs.plugins != '[]'
-    runs-on: ubuntu-24.04
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.plugins != '[]'
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
-        plugin: ${{ fromJSON(needs.prepare.outputs.plugins) }}
+        include: ${{ fromJSON(needs.prepare.outputs.plugins) }}
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
@@ -173,17 +139,23 @@ jobs:
       - name: Build and publish plugin runtime closure
         shell: bash
         env:
-          PLUGIN_ATTR: ${{ matrix.plugin.attr }}
+          TARGET_ATTR: ${{ matrix.attr }}
         run: |
           set -euo pipefail
-          nix build --no-link --print-out-paths -L ".#${PLUGIN_ATTR}" \
+          nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
             | cachix push nix-opendeck
 
   opendeck:
+    name: 'OpenDeck: ${{ matrix.system }}'
     needs: prepare
-    if: needs.prepare.outputs.opendeck_missing == 'true'
-    runs-on: ubuntu-24.04
+    if: needs.prepare.result == 'success' && needs.prepare.outputs.opendeck != '[]'
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.opendeck) }}
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
@@ -195,7 +167,9 @@ jobs:
 
       - name: Build and publish OpenDeck runtime closure
         shell: bash
+        env:
+          TARGET_ATTR: ${{ matrix.attr }}
         run: |
           set -euo pipefail
-          nix build --no-link --print-out-paths -L .#opendeck \
+          nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
             | cachix push nix-opendeck

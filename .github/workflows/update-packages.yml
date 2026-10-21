@@ -2,227 +2,367 @@ name: Update packages
 
 on:
   schedule:
-    - cron: "17 4 * * *"
+    - cron: '17 4 * * *'
   workflow_dispatch:
 
+# Updaters and builders only require read access. The final PR job alone
+# receives write access, so update scripts cannot push to the repository.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: package-updates
   cancel-in-progress: false
 
 jobs:
-  update:
-    runs-on: ubuntu-latest
-    timeout-minutes: 300
-
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      base_sha: ${{ steps.base.outputs.sha }}
+      updaters: ${{ steps.targets.outputs.updaters }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 0
-
+          persist-credentials: false
+      - name: Record source revision
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ github.token }}
-
-      - name: Configure read-only binary cache
-        uses: cachix/cachix-action@v17
-        with:
-          name: nix-opendeck
-          skipPush: true
-
-      - name: Install updater
-        run: |
-          nix profile add nixpkgs#nix-update
-          echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
-
-          # Use the flake's pinned nixpkgs for update scripts.
-          nixpkgs_path=$(nix eval --impure --raw --expr \
-            '(builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath')
-          echo "NIX_PATH=nixpkgs=$nixpkgs_path" >> "$GITHUB_ENV"
-
-      - name: Configure Git
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-
-      - name: Update and verify packages
-        id: updates
+      - name: Discover every supported updater
+        id: targets
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
-          # Discover plugins from the flake, excluding packages
-          # whose updateScript is explicitly null.
+          mkdir -p "$RUNNER_TEMP/discovery"
           nix eval --impure --json --expr '
             let
               flake = builtins.getFlake (toString ./.);
-              plugins = flake.legacyPackages.x86_64-linux.opendeck-plugins;
-
-              names = attrs: builtins.filter
-                (name: name != "recurseForDerivations")
-                (builtins.attrNames attrs);
-
-              updatable = owner: plugin:
-                plugins.${owner}.${plugin}.updateScript != null;
+              systems = builtins.attrNames flake.packages;
             in
-              builtins.concatLists (map (owner:
-                map (plugin:
-                  "legacyPackages.x86_64-linux.opendeck-plugins.${owner}.${plugin}"
-                ) (builtins.filter
-                  (plugin: updatable owner plugin)
-                  (names plugins.${owner}))
-              ) (names plugins))
-          ' > "$RUNNER_TEMP/plugins.json"
+              builtins.concatLists (map (system:
+                let
+                  targets = import ./ci/targets.nix { inherit flake system; };
+                  core = flake.packages.${system}.opendeck-core;
+                in
+                  [ targets.opendeck ] ++ targets.plugins ++ [ {
+                    inherit system;
+                    inherit (targets.opendeck) runner;
+                    kind = "core";
+                    label = "opendeck-core";
+                    attr = "packages.${system}.opendeck-core";
+                    updatable = (core.updateScript or null) != null;
+                  } ]
+              ) systems)
+          ' > "$RUNNER_TEMP/discovery/targets.json"
+          python3 ci/package_updates.py discover \
+            --targets "$RUNNER_TEMP/discovery/targets.json" \
+            --output "$RUNNER_TEMP/discovery"
+          echo "updaters=$(jq -c '.updaters' "$RUNNER_TEMP/discovery/plan.json")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-update-discovery
+          path: ${{ runner.temp }}/discovery/
+          if-no-files-found: error
+          retention-days: 7
 
-          mapfile -t plugins < <(jq -r '.[]' "$RUNNER_TEMP/plugins.json")
+  update:
+    name: 'Update: ${{ matrix.system }}'
+    needs: discover
+    if: needs.discover.result == 'success' && needs.discover.outputs.updaters != '[]'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include: ${{ fromJSON(needs.discover.outputs.updaters) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.discover.outputs.base_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-update-discovery
+          path: ${{ runner.temp }}/discovery
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ github.token }}
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          skipPush: true
+      - name: Install nix-update
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix profile add nixpkgs#nix-update
+          echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
+          nixpkgs_path=$(nix eval --impure --raw --expr \
+            '(builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath')
+          echo "NIX_PATH=nixpkgs=$nixpkgs_path" >> "$GITHUB_ENV"
+      - name: Update each source once (no builds here)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPDATE_SYSTEM: ${{ matrix.system }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/package_updates.py update \
+            --plan "$RUNNER_TEMP/discovery/plan.json" \
+            --system "$UPDATE_SYSTEM" \
+            --output "$RUNNER_TEMP/updates"
+      - name: Upload proposed patches and updater results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: updates-${{ matrix.system }}
+          path: ${{ runner.temp }}/updates/
+          if-no-files-found: warn
+          retention-days: 7
 
-          # Core is processed last, after individual plugin updates.
-          packages=("${plugins[@]}" opendeck-core)
+  prepare-builds:
+    needs: [discover, update]
+    if: always() && needs.discover.result == 'success'
+    runs-on: ubuntu-24.04
+    outputs:
+      plugins: ${{ steps.plan.outputs.plugins }}
+      opendeck: ${{ steps.plan.outputs.opendeck }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.discover.outputs.base_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-update-discovery
+          path: ${{ runner.temp }}/discovery
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: updates-*
+          path: ${{ runner.temp }}/updates
+          merge-multiple: false
+        continue-on-error: true
+      - name: Plan native builds for changed packages
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/package_updates.py prepare \
+            --plan "$RUNNER_TEMP/discovery/plan.json" \
+            --targets "$RUNNER_TEMP/discovery/targets.json" \
+            --updates "$RUNNER_TEMP/updates" \
+            --output "$RUNNER_TEMP/build-plan"
+          echo "plugins=$(jq -c '.' "$RUNNER_TEMP/build-plan/plugins.json")" >> "$GITHUB_OUTPUT"
+          echo "opendeck=$(jq -c '.' "$RUNNER_TEMP/build-plan/opendeck.json")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-update-build-plan
+          path: ${{ runner.temp }}/build-plan/
+          if-no-files-found: error
+          retention-days: 7
 
-          updated=()
-          failed=()
-          unchanged=()
+  plugins:
+    name: 'Plugin: ${{ matrix.label }} / ${{ matrix.system }}'
+    needs: [discover, prepare-builds]
+    if: needs.prepare-builds.result == 'success' && needs.prepare-builds.outputs.plugins != '[]'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.prepare-builds.outputs.plugins) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.discover.outputs.base_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: updates-*
+          path: ${{ runner.temp }}/updates
+          merge-multiple: false
+        continue-on-error: true
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ github.token }}
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          skipPush: true
+      - name: Build proposed plugin
+        env:
+          TARGET: ${{ toJSON(matrix) }}
+        run: |
+          python3 ci/package_updates.py build \
+            --updates "$RUNNER_TEMP/updates" \
+            --output "$RUNNER_TEMP/result.json"
+      - name: Upload native build result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.id }}-${{ matrix.system }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 7
 
-          rollback() {
-            git reset --hard HEAD
-            git clean -fd
-          }
+  opendeck:
+    name: 'OpenDeck: ${{ matrix.system }}'
+    needs: [discover, prepare-builds]
+    if: needs.prepare-builds.result == 'success' && needs.prepare-builds.outputs.opendeck != '[]'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include: ${{ fromJSON(needs.prepare-builds.outputs.opendeck) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.discover.outputs.base_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: updates-*
+          path: ${{ runner.temp }}/updates
+          merge-multiple: false
+        continue-on-error: true
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ github.token }}
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          skipPush: true
+      - name: Build proposed default OpenDeck bundle
+        env:
+          TARGET: ${{ toJSON(matrix) }}
+        run: |
+          python3 ci/package_updates.py build \
+            --updates "$RUNNER_TEMP/updates" \
+            --output "$RUNNER_TEMP/result.json"
+      - name: Upload native build result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-opendeck-${{ matrix.system }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 7
 
-          for package in "${packages[@]}"; do
-            # Use friendly names for logs, commits, and reports.
-            # Keep the original attribute path for Nix commands.
-            if [[ "$package" == opendeck-core ]]; then
-              display_name="OpenDeck Core"
-              commit_name="opendeck-core"
-            else
-              plugin_name="${package#*.opendeck-plugins.}"
-              plugin_name="${plugin_name//./\/}"
-              display_name="Plugin: $plugin_name"
-              commit_name="$plugin_name"
-            fi
-
-            echo "::group::$display_name"
-
-            # Run the package's existing passthru.updateScript.
-            if ! nix-update "$package" \
-                --flake --use-update-script; then
-              failed+=("$display_name (update)")
-              echo "::warning::Update failed: $display_name"
-              rollback
-              echo "::endgroup::"
-              continue
-            fi
-
-            # Stage changes, including newly generated files,
-            # so Nix flakes can evaluate them.
-            git add -A
-
-            if git diff --cached --quiet; then
-              unchanged+=("$display_name")
-              echo "No changes"
-              echo "::endgroup::"
-              continue
-            fi
-
-            # Flake input updates are outside this workflow's scope.
-            if git diff --cached --name-only | grep -Fxq 'flake.lock'; then
-              failed+=("$display_name (unexpected flake.lock change)")
-              echo "::warning::Updater modified flake.lock: $display_name"
-              rollback
-              echo "::endgroup::"
-              continue
-            fi
-
-            # Build each plugin independently.
-            # When core changes, validate the default OpenDeck
-            # package, including Starterpack.
-            build_attr="$package"
-
-            if [[ "$package" == opendeck-core ]]; then
-              build_attr=opendeck
-            fi
-
-            if ! nix build ".#${build_attr}" \
-                --no-link --print-build-logs; then
-              failed+=("$display_name (build)")
-              echo "::warning::Build failed: $display_name"
-              rollback
-              echo "::endgroup::"
-              continue
-            fi
-
-            # Commit only successfully built updates.
-            git commit -m "chore: update $commit_name"
-            updated+=("$display_name")
-
-            echo "::endgroup::"
-          done
-
-          # Generate the Actions summary and PR report.
-          report() {
-            local heading="$1"
-            shift
-
-            echo "### $heading"
-
-            if (( $# == 0 )); then
-              echo "- None"
-            else
-              printf -- '- `%s`\n' "$@"
-            fi
-
-            echo
-          }
-
+  finalize:
+    needs: [discover, update, prepare-builds, plugins, opendeck]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        if: needs.discover.result == 'success'
+        with:
+          name: package-update-discovery
+          path: ${{ runner.temp }}/discovery
+      - uses: actions/download-artifact@v4
+        if: needs.prepare-builds.result == 'success'
+        with:
+          name: package-update-build-plan
+          path: ${{ runner.temp }}/build-plan
+      - uses: actions/download-artifact@v4
+        if: needs.prepare-builds.result == 'success'
+        with:
+          pattern: updates-*
+          path: ${{ runner.temp }}/updates
+          merge-multiple: false
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        if: needs.prepare-builds.result == 'success' && (needs.plugins.result != 'skipped' || needs.opendeck.result != 'skipped')
+        with:
+          pattern: build-*
+          path: ${{ runner.temp }}/builds
+          merge-multiple: false
+        continue-on-error: true
+      - uses: cachix/install-nix-action@v31
+        if: needs.prepare-builds.result == 'success'
+        with:
+          github_access_token: ${{ github.token }}
+      - name: Verify base revision and assemble passing updates
+        id: finish
+        if: needs.prepare-builds.result == 'success'
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.discover.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.event.repository.default_branch }}"
+          if [[ "$(git rev-parse HEAD)" == "$BASE_SHA" &&
+                "$(git rev-parse "origin/${{ github.event.repository.default_branch }}")" == "$BASE_SHA" ]]; then
+            base_unchanged=true
+          else
+            base_unchanged=false
+          fi
+          python3 ci/package_updates.py finalize \
+            --plan "$RUNNER_TEMP/discovery/plan.json" \
+            --prepared "$RUNNER_TEMP/build-plan/prepared.json" \
+            --updates "$RUNNER_TEMP/updates" \
+            --builds "$RUNNER_TEMP/builds" \
+            --base-unchanged "$base_unchanged" \
+            --report "$RUNNER_TEMP/package-update-report.md" \
+            --state "$RUNNER_TEMP/package-update-state.json"
+          cat "$RUNNER_TEMP/package-update-report.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "ready=$(jq -r '.ready' "$RUNNER_TEMP/package-update-state.json")" >> "$GITHUB_OUTPUT"
+          echo "failed=$(jq -r '.failed' "$RUNNER_TEMP/package-update-state.json")" >> "$GITHUB_OUTPUT"
+      - name: Report infrastructure failure
+        if: always() && (needs.prepare-builds.result != 'success' || steps.finish.outcome != 'success')
+        shell: bash
+        env:
+          DISCOVER: ${{ needs.discover.result }}
+          UPDATE: ${{ needs.update.result }}
+          PREPARE: ${{ needs.prepare-builds.result }}
+          PLUGINS: ${{ needs.plugins.result }}
+          OPENDECK: ${{ needs.opendeck.result }}
+        run: |
           {
-            echo "## Package update results"
+            echo '## Package update infrastructure failure'
             echo
-            report "Updated and built (${#updated[@]})" "${updated[@]}"
-            report "Failed (${#failed[@]})" "${failed[@]}"
-            report "Unchanged (${#unchanged[@]})" "${unchanged[@]}"
-          } > "$RUNNER_TEMP/package-update-report.md"
-
-          cat "$RUNNER_TEMP/package-update-report.md" \
-            >> "$GITHUB_STEP_SUMMARY"
-
-          {
-            echo "Automated package updates."
-            echo
-            echo "Each committed package passed its individual build."
-            echo
-            echo "Failed updates were skipped. Locally maintained"
-            echo "lockfiles are not regenerated automatically."
+            echo "- Discovery: $DISCOVER"
+            echo "- Updaters: $UPDATE"
+            echo "- Build preparation: $PREPARE"
+            echo "- Plugin builds: $PLUGINS"
+            echo "- OpenDeck builds: $OPENDECK"
             echo
             echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
-            echo
-            cat "$RUNNER_TEMP/package-update-report.md"
-          } > "$RUNNER_TEMP/package-update-pr.md"
-
-          # Report failures after PR creation.
-          if (( ${#failed[@]} > 0 )); then
-            echo "failed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "failed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create or update pull request
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Create or update PR containing validated sources
+        id: pr
+        if: steps.finish.outputs.ready == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
           branch: automated/package-updates
           delete-branch: true
-          title: "chore: update OpenDeck packages"
-          body-path: ${{ runner.temp }}/package-update-pr.md
-          assignees: ${{ vars.UPDATE_MAINTAINERS }}
+          title: 'chore: update OpenDeck packages'
+          commit-message: 'chore: update OpenDeck packages'
+          body-path: ${{ runner.temp }}/package-update-report.md
           labels: |
             updates
             upstream
-
-      - name: Fail on update or build errors
-        if: steps.updates.outputs.failed == 'true'
+          assignees: ${{ vars.UPDATE_MAINTAINERS }}
+      - name: Fail after reporting all errors
+        if: >-
+          needs.discover.result != 'success' ||
+          needs.update.result != 'success' ||
+          needs.prepare-builds.result != 'success' ||
+          steps.finish.outcome != 'success' ||
+          steps.finish.outputs.failed != 'false' ||
+          steps.pr.outcome == 'failure'
         run: exit 1
