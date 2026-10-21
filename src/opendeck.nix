@@ -76,13 +76,13 @@ rustPlatform.buildRustPackage (
   {
     pname = pname;
 
-    version = "2.14.1";
+    version = "2.14.2";
 
     src = fetchFromGitHub {
       owner = "nekename";
       repo = "OpenDeck";
       tag = "v${finalAttrs.version}";
-      hash = "sha256-pI2duQ1xc72Bp0DMqBeUtrNeywL81UhSUooy5Op1qRc=";
+      hash = "sha256-DNgOH5d7c4Y6y8Wz8Bcc8/I3S9IAyLav4OfKgwT/i/c=";
     };
 
     patches = [
@@ -159,7 +159,7 @@ rustPlatform.buildRustPackage (
         '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
     '';
 
-    cargoHash = "sha256-4cKyjYHNQ/2tw8QGGINehtcj23Ey22S7ZKJpvLs7IBI=";
+    cargoHash = "sha256-IVkeIHrQvZxZ0bPuCItCs5a0yxWrz0dcWmjIg5BFoi8=";
 
     cargoRoot = "src-tauri";
     buildAndTestSubdir = finalAttrs.cargoRoot;
