@@ -32,7 +32,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
     pkg-config
   ];
 
-  buildInputs = [
+  buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
     libei
     libxkbcommon
     wayland
@@ -42,6 +42,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
     description = "OpenDeck Starter Pack plugin";
     homepage = "https://github.com/nekename/OpenDeck";
     license = lib.licenses.gpl3Plus;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "nekename"

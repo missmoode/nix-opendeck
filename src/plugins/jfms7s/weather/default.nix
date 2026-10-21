@@ -40,7 +40,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
     description = "Current weather, daily forecast and air quality for OpenDeck";
     homepage = "https://github.com/jfms7s/opendeck-weather";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
     authors = [ "jfms7s" ];
   };
 

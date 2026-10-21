@@ -52,7 +52,7 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     description = "Send HTTP requests and WebSocket messages from OpenDeck";
     homepage = "https://github.com/data-enabler/streamdeck-web-requests";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "data-enabler"

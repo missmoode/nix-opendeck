@@ -5,6 +5,8 @@
   deno,
   glib,
   makeWrapper,
+  python3,
+  writeShellScript,
   nix-update-script,
 
   mkRustOpenDeckPlugin,
@@ -23,7 +25,10 @@ mkRustOpenDeckPlugin (
         deno
       ];
 
-      outputHash = "sha256-gk0lz/CXwyc0o9Txggu3qSk/WTN3KlQDiOXEgCaKC2U=";
+      outputHash = {
+        x86_64-linux = "sha256-gk0lz/CXwyc0o9Txggu3qSk/WTN3KlQDiOXEgCaKC2U=";
+        aarch64-linux = "sha256-nEZR6+3VDlDEvlUwfOi+qqROGRfgCDTOfhYPsTJOHSw=";
+      }.${stdenv.hostPlatform.system};
       outputHashMode = "recursive";
 
       buildPhase = ''
@@ -116,6 +121,15 @@ mkRustOpenDeckPlugin (
 
     passthru = {
       inherit denoDeps;
+
+      updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
+        exec ${python3}/bin/python3 ${../../../lib/updateDenoDeps.py} \
+          --attr "$1" \
+          --package "${denoDeps.pname}" \
+          --file src/plugins/openactionplugins/desktopentry/default.nix \
+          --system "${stdenv.hostPlatform.system}" \
+          --output "$2"
+      '';
 
       updateScript = nix-update-script {
         extraArgs = [

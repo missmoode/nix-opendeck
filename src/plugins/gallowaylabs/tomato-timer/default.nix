@@ -27,7 +27,7 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     description = "A configurable timer for balancing work and break times on OpenDeck";
     homepage = "https://github.com/gallowaylabs/streamdeck-tomato-timer";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "Matthew Galloway"

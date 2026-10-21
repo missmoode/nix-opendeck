@@ -1,8 +1,11 @@
 {
   lib,
   stdenv,
+  rcodesign,
   fetchFromGitHub,
   nix-update-script,
+  python3,
+  writeShellScript,
 
   rustPlatform,
   cargo-tauri,
@@ -69,7 +72,13 @@ rustPlatform.buildRustPackage (
         runHook postInstall
       '';
 
-      outputHash = "sha256-5iMi4aJMXQEeq8TF1kvxLrSTnC2y9m3G3FSb2PVeA9w=";
+      outputHash =
+        {
+          x86_64-linux = "sha256-5iMi4aJMXQEeq8TF1kvxLrSTnC2y9m3G3FSb2PVeA9w=";
+          aarch64-linux = "sha256-6SM1uH4aWYEUBPJ0NHOQy5Q48FtedoNnRm2eSZ1OjTw=";
+          aarch64-darwin = "sha256-NtGQvJv53Y0cShi6ZBg9lBKgiGMQZnbaHpBZlMmodFs=";
+        }
+        .${stdenv.hostPlatform.system};
       outputHashMode = "recursive";
     };
   in
@@ -152,17 +161,23 @@ rustPlatform.buildRustPackage (
         'built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("commit hash unknown"),' \
         '"built via nix-opendeck",'
 
-      # Use nix-patched libatatana
-      substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
-        --replace-fail \
-        'libayatana-appindicator3.so.1' \
-        '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
+      # Use nix-patched libayatana
+      ${lib.optionalString stdenv.hostPlatform.isLinux ''
+        substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
+          --replace-fail \
+          'libayatana-appindicator3.so.1' \
+          '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
+      ''}
     '';
 
     cargoHash = "sha256-IVkeIHrQvZxZ0bPuCItCs5a0yxWrz0dcWmjIg5BFoi8=";
 
     cargoRoot = "src-tauri";
     buildAndTestSubdir = finalAttrs.cargoRoot;
+    # Sign the completed macOS bundle after Nix's fixup phase instead.
+    tauriBuildFlags = lib.optionals stdenv.hostPlatform.isDarwin [
+      "--no-sign"
+    ];
 
     nativeBuildInputs = [
       cargo-tauri.hook
@@ -171,6 +186,9 @@ rustPlatform.buildRustPackage (
     ]
     ++ lib.optionals stdenv.hostPlatform.isLinux [
       wrapGAppsHook4
+    ]
+    ++ lib.optionals stdenv.hostPlatform.isDarwin [
+      rcodesign
     ];
 
     preBuild = ''
@@ -181,7 +199,7 @@ rustPlatform.buildRustPackage (
       mkdir -p "${finalAttrs.cargoRoot}/target/plugins"
 
       ${lib.concatMapStringsSep "\n" (plugin: ''
-        cp -a --no-preserve=mode \
+        cp -R \
           "${plugin}/." \
           "${finalAttrs.cargoRoot}/target/plugins/"
       '') bundledPlugins}
@@ -189,15 +207,17 @@ rustPlatform.buildRustPackage (
       chmod -R u+rwX "${finalAttrs.cargoRoot}/target/plugins"
     '';
 
-    postInstall = ''
-      install -Dm644 \
-        ${finalAttrs.cargoRoot}/bundle/40-streamdeck.rules \
-        "$out/lib/udev/rules.d/40-streamdeck.rules"
-
-      install -Dm644 \
-        "${finalAttrs.src}/LICENSE.md" \
-        "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
-    '';
+    postInstall =
+      lib.optionalString stdenv.hostPlatform.isLinux ''
+        install -Dm644 \
+          ${finalAttrs.cargoRoot}/bundle/40-streamdeck.rules \
+          "$out/lib/udev/rules.d/40-streamdeck.rules"
+      ''
+      + ''
+        install -Dm644 \
+          "${finalAttrs.src}/LICENSE.md" \
+          "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
+      '';
 
     buildInputs = lib.optionals stdenv.hostPlatform.isLinux (
       gstPlugins
@@ -218,19 +238,23 @@ rustPlatform.buildRustPackage (
       )
     '';
 
-    tauriBundleType = "deb";
+    postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
+      rcodesign sign \
+        --code-signature-flags runtime \
+        "$out/Applications/OpenDeck.app"
+    '';
 
     meta = {
-      description = "Linux software for your Elgato Stream Deck";
+      description = "Open-source software for Elgato Stream Deck devices (and similar)";
       homepage = "https://github.com/nekename/OpenDeck";
       license = lib.licenses.gpl3Plus;
+      platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
       authors = [
         "nekename"
       ];
 
       mainProgram = "opendeck";
-      platforms = lib.platforms.linux;
     };
 
     passthru = {
@@ -238,12 +262,21 @@ rustPlatform.buildRustPackage (
 
       bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
 
+      # Native CI runs this optional hook before building the package. The
+      # hook updates only this host's hash if the Deno dependency FOD changed.
+      updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
+        exec ${python3}/bin/python3 ${./lib/updateDenoDeps.py} \
+          --attr "$1" \
+          --package "${denoDeps.pname}" \
+          --file src/opendeck.nix \
+          --system "${stdenv.hostPlatform.system}" \
+          --output "$2"
+      '';
+
       updateScript = nix-update-script {
         extraArgs = [
           "--flake"
           "--use-github-releases"
-          "--subpackage"
-          "denoDeps"
         ];
       };
     };

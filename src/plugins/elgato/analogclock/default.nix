@@ -29,7 +29,7 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     description = "Analog clock plugin for OpenDeck";
     homepage = "https://github.com/elgatosf/streamdeck-analogclock";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "Elgato"
