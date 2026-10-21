@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: package-updates
+  group: package-updates-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.ref_name }}
           persist-credentials: false
       - name: Record source revision
         id: base
@@ -266,7 +266,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         if: needs.discover.result == 'success'
@@ -304,9 +304,9 @@ jobs:
           BASE_SHA: ${{ needs.discover.outputs.base_sha }}
         run: |
           set -euo pipefail
-          git fetch origin "${{ github.event.repository.default_branch }}"
+          git fetch origin "${{ github.ref_name }}"
           if [[ "$(git rev-parse HEAD)" == "$BASE_SHA" &&
-                "$(git rev-parse "origin/${{ github.event.repository.default_branch }}")" == "$BASE_SHA" ]]; then
+                "$(git rev-parse "origin/${{ github.ref_name }}")" == "$BASE_SHA" ]]; then
             base_unchanged=true
           else
             base_unchanged=false
@@ -348,7 +348,8 @@ jobs:
         if: steps.finish.outputs.ready == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          branch: automated/package-updates
+          base: ${{ github.ref_name }}
+          branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/package-updates' || format('automated/package-updates-{0}', github.ref_name) }}
           delete-branch: true
           title: 'chore: update OpenDeck packages'
           commit-message: 'chore: update OpenDeck packages'
