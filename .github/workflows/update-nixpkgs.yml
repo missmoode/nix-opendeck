@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "43 5 * * 1"
   workflow_dispatch:
+    inputs:
+      validate_only:
+        description: 'Build and validate all systems without updating nixpkgs'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -22,6 +28,7 @@ jobs:
       base_sha: ${{ steps.update.outputs.base_sha }}
       pr_number: ${{ steps.pr.outputs.pull-request-number }}
       pr_head_sha: ${{ steps.pr.outputs.pull-request-head-sha }}
+      validate: ${{ steps.update.outputs.validate }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -38,6 +45,12 @@ jobs:
         run: |
           set -euo pipefail
           echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [[ "${{ inputs.validate_only }}" == "true" ]]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'validate=true' >> "$GITHUB_OUTPUT"
+            echo 'Validation-only: testing the existing flake.lock.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           # Do not update the separately pinned deno-nixpkgs input.
           nix flake update nixpkgs
@@ -45,11 +58,13 @@ jobs:
 
           if git diff --cached --quiet -- flake.lock; then
             echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'validate=false' >> "$GITHUB_OUTPUT"
             echo 'nixpkgs is already up to date.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
           echo 'changed=true' >> "$GITHUB_OUTPUT"
+          echo 'validate=true' >> "$GITHUB_OUTPUT"
 
           old_rev=$(git show HEAD:flake.lock | jq -r '.nodes.nixpkgs.locked.rev')
           new_rev=$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)
@@ -66,7 +81,7 @@ jobs:
           } > "$RUNNER_TEMP/nixpkgs-report.md"
 
       - name: Save candidate lock file for native builders
-        if: steps.update.outputs.changed == 'true'
+        if: steps.update.outputs.validate == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: proposed-flake-lock
@@ -92,7 +107,7 @@ jobs:
 
   discover:
     needs: prepare
-    if: needs.prepare.outputs.changed == 'true'
+    if: needs.prepare.outputs.validate == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
@@ -231,7 +246,7 @@ jobs:
 
   finalize:
     needs: [prepare, discover, plugins, opendeck]
-    if: always() && needs.prepare.outputs.changed == 'true'
+    if: always() && needs.prepare.outputs.validate == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -246,7 +261,7 @@ jobs:
           BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
         run: |
           set -euo pipefail
-          branch="${{ github.event.repository.default_branch }}"
+          branch="${{ github.ref_name }}"
           git fetch origin "$branch"
           if [[ "$(git rev-parse "origin/$branch")" == "$BASE_SHA" ]]; then
             echo 'unchanged=true' >> "$GITHUB_OUTPUT"
@@ -328,7 +343,9 @@ jobs:
           needs.plugins.result != 'success' ||
           needs.opendeck.result != 'success' ||
           steps.base.outputs.unchanged != 'true' ||
-          needs.prepare.outputs.pr_number == '' ||
-          (github.ref_name == github.event.repository.default_branch &&
-          steps.merge.outcome != 'success')
+          (needs.prepare.outputs.changed == 'true' &&
+           needs.prepare.outputs.pr_number == '') ||
+          (needs.prepare.outputs.changed == 'true' &&
+           github.ref_name == github.event.repository.default_branch &&
+           steps.merge.outcome != 'success')
         run: exit 1
