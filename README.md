@@ -12,8 +12,9 @@
 > A quick note:
 > 
 > I’m pretty sure that this is properly reproducible, but I’ve not verified this yet.
-> PiThe main issues were Deno’s lack of a viable helper, which I think I’ve solved by pinning it, and Svelte,
-> where I *think* replacing the version string allowed it to act deterministically.
+> The main issues I could find were Deno’s lack of a viable helper, which I think
+> I’ve solved by pinning it, and SvelteKit, where I *think* replacing the version 
+> string allowed it to act deterministically.
 
 <div align="center">
 
@@ -240,6 +241,10 @@ You could also use the `opendeck-with-plugins` package, which bundles every plug
   not recommended, as any changes to OpenDeck or its plugins will require recompiling the whole thing.
 
 ### Overlay
+
+Overlays are optional. The NixOS and Home Manager modules, work without them,
+but an overlay lets you access OpenDeck and its plugins through your existing
+`pkgs` argument.
 
 The flake provides two overlays which expose OpenDeck and its plugins through your existing `pkgs` argument:
 - **`inputs.opendeck.overlays.pinned` (recommended):** Uses the same pinned
