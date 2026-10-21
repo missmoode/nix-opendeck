@@ -3,6 +3,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
 
@@ -22,11 +23,13 @@ let
 
   desiredState = lib.concatMapStrings (plugin: "${plugin.pluginId}\n") externalPlugins;
 
-  # These correspond to OpenDeck's Tauri application config directory on Linux.
-  #
-  # Keeping them defined here makes the platform-specific path easy to replace
-  # if the Home Manager module later gains Darwin support.
-  configDir = "${config.xdg.configHome}/opendeck";
+  # OpenDeck uses Tauri's application config directory on each platform.
+  configDir =
+    if pkgs.stdenv.hostPlatform.isDarwin then
+      "${config.home.homeDirectory}/Library/Application Support/opendeck"
+    else
+      "${config.xdg.configHome}/opendeck";
+
   pluginDir = "${configDir}/plugins";
   externallyManagedPluginsFile = "${configDir}/externally-managed-plugins";
 
