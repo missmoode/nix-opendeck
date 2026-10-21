@@ -29,7 +29,6 @@ jobs:
     outputs:
       plugins: ${{ steps.discover.outputs.plugins }}
       opendeck_missing: ${{ steps.discover.outputs.opendeck_missing }}
-      bundled_missing: ${{ steps.discover.outputs.bundled_missing }}
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
@@ -62,10 +61,6 @@ jobs:
                 storePath = packages.opendeck.outPath;
                 redistributable = redistributable packages.opendeck;
               };
-              bundled = {
-                storePath = packages.opendeck-with-plugins.outPath;
-                redistributable = redistributable packages.opendeck-with-plugins;
-              };
               plugins = builtins.concatLists (map (owner:
                 map (name:
                   let plugin = plugins.${owner}.${name};
@@ -82,13 +77,11 @@ jobs:
 
           if ! jq -e '
             .opendeck.redistributable and
-            .bundled.redistributable and
             all(.plugins[]; .redistributable)
           ' "$RUNNER_TEMP/targets.json" > /dev/null; then
             echo 'Missing or non-redistributable license metadata:' >&2
             jq -r '
               if (.opendeck.redistributable | not) then "opendeck" else empty end,
-              if (.bundled.redistributable | not) then "opendeck-with-plugins" else empty end,
               (.plugins[] | select(.redistributable | not) | .label)
             ' "$RUNNER_TEMP/targets.json" >&2
             exit 1
@@ -140,23 +133,20 @@ jobs:
           plugins="$(jq -sc '.' "$RUNNER_TEMP/missing-plugins.jsonl")"
           echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
 
-          for package in opendeck bundled; do
-            path="$(jq -r ".$package.storePath" "$RUNNER_TEMP/targets.json")"
-            if cache_has "$path"; then
-              echo "${package}_missing=false" >> "$GITHUB_OUTPUT"
-              echo "Cached: $package"
-            else
-              echo "${package}_missing=true" >> "$GITHUB_OUTPUT"
-              echo "Missing: $package"
-            fi
-          done
+          path="$(jq -r '.opendeck.storePath' "$RUNNER_TEMP/targets.json")"
+          if cache_has "$path"; then
+            echo "opendeck_missing=false" >> "$GITHUB_OUTPUT"
+            echo "Cached: opendeck"
+          else
+            echo "opendeck_missing=true" >> "$GITHUB_OUTPUT"
+            echo "Missing: opendeck"
+          fi
 
           {
             echo '## Cache status'
             echo
             echo "- Plugins requiring publication: $(jq 'length' <<< "$plugins")"
             echo "- OpenDeck: $(grep '^opendeck_missing=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2) (missing)"
-            echo "- Bundled OpenDeck: $(grep '^bundled_missing=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2) (missing)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   plugins:
