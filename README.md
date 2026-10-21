@@ -5,14 +5,14 @@
 >
 > I *think* the shape of the module configuration should stay the same from this point on,
 > however I **may still make some changes to the NixOS module**: I'd like to make it so that
-> you can just bundle in support plugins for non-elgato devices to the package, and the
+> you can just bundle in support plugins for non-Elgato devices to the package, and the
 > NixOS module will automatically install the udev rules.
 
 > [!NOTE]
 > A quick note:
 > 
-> I’m pretty sure that this is properly reproducible, but I’ve not gotten around to testing it on another system
-> yet. The main issues were Deno’s lack of a viable helper, which I think I’ve solved by pinning it, and Svelte,
+> I’m pretty sure that this is properly reproducible, but I’ve not verified this yet.
+> PiThe main issues were Deno’s lack of a viable helper, which I think I’ve solved by pinning it, and Svelte,
 > where I *think* replacing the version string allowed it to act deterministically.
 
 <div align="center">
@@ -27,7 +27,7 @@ nix-opendeck lets you install [OpenDeck](https://github.com/nekename/OpenDeck) a
 This is useful on NixOS because many OpenDeck plugins expect a conventional system
   environment and so don’t work correctly when installed through OpenDeck’s GUI.
 
-This is my first attempt at packing software for Nix, made out of a personal need
+This is my first attempt at packaging software for Nix, made out of a personal need
   for my Stream Deck to just work on NixOS. I make no promises to maintain this
   long-term, but in the spirit of Nix, I'm making it public and doing what I can
   to make it useful for everyone.
@@ -188,7 +188,7 @@ in
 
       # You can change this option to use a different
       # OpenDeck package from the default.
-      # package = opendeckpkgs.opendeck;
+      # package = opendeckpkgs.opendeck-core;
       
       # You can also avoid having the module install the
       # package for you, if you want to do it yourself.
@@ -210,11 +210,12 @@ If `programs.opendeck.installPackage` is `false`, `programs.opendeck.package` sh
   bundled and prevent accidental double-declarations of installed plugins.
 
 > [!IMPORTANT]  
-> Plugins managed by the Home Manager module are marked as externally managed. This derivation patches
-> OpenDeck to prevent updates or removal of externally managed plugins through its plugin manager.
+> Plugins managed by the Home Manager module are marked as externally managed. The 
+> OpenDeck package includes patches that prevent its plugin manager from updating
+> or removing externally managed plugins.
 > 
-> Plugins installed through the GUI are unaffected. The Home Manager module will refuse to overwrite 
-> plugins unless they're marked as externally managed.
+> Plugins installed through the GUI are unaffected. The Home Manager module will
+> refuse to overwrite plugins unless they're marked as externally managed.
 
 ### Usage without the NixOS or Home Manager modules
 
@@ -239,10 +240,39 @@ You could also use the `opendeck-with-plugins` package, which bundles every plug
   not recommended, as any changes to OpenDeck or its plugins will require recompiling the whole thing.
 
 ### Overlay
-The flake emits an overlay to add the flake's packages to your local nixpkgs at 
-  `inputs.opendeck.overlays.default`.
 
-Once you've applied it, your configuration can be simplified to just use your existing `pkgs` argument:
+The flake provides two overlays which expose OpenDeck and its plugins through your existing `pkgs` argument:
+- **`inputs.opendeck.overlays.pinned` (recommended):** Uses the same pinned
+dependencies as nix-opendeck's CI builds, allowing packages to be substituted from
+the [binary cache](#binary-cache) when available.
+- **`inputs.opendeck.overlays.default`:** Builds packages against your own Nixpkgs,
+allowing them to share dependencies with your system. This may result in cache
+misses and local compilation.
+
+> [!IMPORTANT]
+> To benefit from the binary cache when using `overlays.pinned`, do not set
+> `opendeck.inputs.nixpkgs.follows = "nixpkgs"` in your flake inputs. Doing
+> so overrides nix-opendeck's locked Nixpkgs revision, potentially producing
+> different derivations from those published by CI.
+>
+> If you prefer to use your system's Nixpkgs, `overlays.default` is recommended
+> instead.
+
+Add your chosen overlay to your NixOS configuration:
+```nix
+{
+  inputs,
+  ...
+}:
+{
+  nixpkgs.overlays = [
+    inputs.opendeck.overlays.pinned
+  ];
+}
+```
+
+Once applied, you can reference OpenDeck packages directly through `pkgs` in
+your Home Manager configuration:
 ```nix
 {
   inputs,
@@ -258,9 +288,13 @@ Once you've applied it, your configuration can be simplified to just use your ex
 
   programs.opendeck = {
     enable = true;
-    plugins = with pkgs; [
-      opendeck-plugins.openactionplugins.desktopentry
-      opendeck-plugins.sjourdois.pipewire
+
+    # Use the OpenDeck package provided by the overlay.
+    package = pkgs.opendeck;
+
+    plugins = with pkgs.opendeck-plugins; [
+      openactionplugins.desktopentry
+      sjourdois.pipewire
       # ...
     ];
   };
@@ -268,6 +302,19 @@ Once you've applied it, your configuration can be simplified to just use your ex
   # ...
 }
 ```
+
+> [!NOTE]
+> If Home Manager uses a separate Nixpkgs instance, the overlay must also be applied
+> to that instance. When `home-manager.useGlobalPkgs = true`, the system-level
+> overlay is shared automatically.
+> 
+> The Home Manager module uses nix-opendeck's own `opendeck` package by default,
+> independently of the chosen overlay.
+> Setting `programs.opendeck.package = pkgs.opendeck` ensures that it uses the
+> overlay-provided package.
+>
+> Custom package overrides may also produce different store paths and require local
+> compilation.
 
 ## Information
 ### Bundled Plugins
@@ -293,8 +340,8 @@ environment.systemPackages = [
   # Using opendeck-core, which has an empty bundle list by default
   (pkgs.opendeck-core.override {
     bundledPlugins = with pkgs; [
-      # This plugin is only in the bundledPlugins of pkgs.opendeck, so we'll need to re-add it
-      # or override pkgs.opendeck instead.
+      # This plugin is only in the bundledPlugins of pkgs.opendeck, so we'll
+      # need to re-add it or override pkgs.opendeck instead.
       opendeck-plugins.nekename.starterpack
 
       # Other bundled plugins...
@@ -358,5 +405,5 @@ Below is a list of the plugins where a derivation is included in this repo. You 
 | [Tomato Timer](https://github.com/gallowaylabs/streamdeck-tomato-timer) | `opendeck-plugins.gallowaylabs.tomato-timer` | - | - |
 | [OpenDeck Weather](https://github.com/jfms7s/opendeck-weather) | `opendeck-plugins.jfms7s.weather` | - | - |
 | [Volume Controller](https://github.com/mdvictor/opendeck-volume-controller) | `opendeck-plugins.mdvictor.volume-controller` | PulseAudio / PipeWire (via pipewire-pulse) | - |
-[ Web Requests](https://github.com/data-enabler/streamdeck-web-requests) | `opendeck-plugins.data-enabler.web-requests` | - | - |
+| [ Web Requests](https://github.com/data-enabler/streamdeck-web-requests) | `opendeck-plugins.data-enabler.web-requests` | - | - |
 | [XIVDeck](https://github.com/KazWolfe/XIVDeck) | `opendeck-plugins.kazwolfe.xivdeck` | FFXIV / Dalamud | - |

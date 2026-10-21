@@ -197,6 +197,22 @@
             defaultPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
           })
             moduleArgs;
+
+        overlays.pinned =
+          final: prev:
+          let
+            system = prev.stdenv.hostPlatform.system;
+          in
+          {
+            inherit (self.packages.${system})
+              opendeck
+              opendeck-core
+              opendeck-with-plugins
+              opendeck-udev-rules
+              ;
+
+            opendeck-plugins = self.legacyPackages.${system}.opendeck-plugins;
+          };
       };
     };
 }
