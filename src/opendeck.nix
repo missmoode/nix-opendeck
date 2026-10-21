@@ -1,7 +1,7 @@
 {
   lib,
   stdenv,
-  darwin,
+  rcodesign,
   fetchFromGitHub,
   nix-update-script,
   python3,
@@ -174,6 +174,10 @@ rustPlatform.buildRustPackage (
 
     cargoRoot = "src-tauri";
     buildAndTestSubdir = finalAttrs.cargoRoot;
+    # Sign the completed macOS bundle after Nix's fixup phase instead.
+    tauriBuildFlags = lib.optionals stdenv.hostPlatform.isDarwin [
+      "--no-sign"
+    ];
 
     nativeBuildInputs = [
       cargo-tauri.hook
@@ -184,7 +188,7 @@ rustPlatform.buildRustPackage (
       wrapGAppsHook4
     ]
     ++ lib.optionals stdenv.hostPlatform.isDarwin [
-      darwin.xattr
+      rcodesign
     ];
 
     preBuild = ''
@@ -232,6 +236,12 @@ rustPlatform.buildRustPackage (
         --set GST_PLUGIN_PATH_1_0 "${gstPluginPath}"
         --prefix PATH : "${lib.makeBinPath [ nodejs ]}"
       )
+    '';
+
+    postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
+      rcodesign sign \
+        --code-signature-flags runtime \
+        "$out/Applications/OpenDeck.app"
     '';
 
     meta = {
