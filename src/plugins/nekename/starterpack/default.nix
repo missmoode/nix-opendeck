@@ -42,6 +42,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
     description = "OpenDeck Starter Pack plugin";
     homepage = "https://github.com/nekename/OpenDeck";
     license = lib.licenses.gpl3Plus;
+    platforms = lib.platforms.linux;
 
     authors = [
       "nekename"
