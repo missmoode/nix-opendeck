@@ -152,11 +152,13 @@ rustPlatform.buildRustPackage (
         'built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("commit hash unknown"),' \
         '"built via nix-opendeck",'
 
-      # Use nix-patched libatatana
-      substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
-        --replace-fail \
-        'libayatana-appindicator3.so.1' \
-        '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
+      # Use nix-patched libayatana
+      ${lib.optionalString stdenv.hostPlatform.isLinux ''
+        substituteInPlace "$cargoDepsCopy"/*/libappindicator-sys-*/src/lib.rs \
+          --replace-fail \
+          'libayatana-appindicator3.so.1' \
+          '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
+      ''}
     '';
 
     cargoHash = "sha256-IVkeIHrQvZxZ0bPuCItCs5a0yxWrz0dcWmjIg5BFoi8=";
@@ -181,7 +183,7 @@ rustPlatform.buildRustPackage (
       mkdir -p "${finalAttrs.cargoRoot}/target/plugins"
 
       ${lib.concatMapStringsSep "\n" (plugin: ''
-        cp -a --no-preserve=mode \
+        cp -R \
           "${plugin}/." \
           "${finalAttrs.cargoRoot}/target/plugins/"
       '') bundledPlugins}
@@ -189,15 +191,17 @@ rustPlatform.buildRustPackage (
       chmod -R u+rwX "${finalAttrs.cargoRoot}/target/plugins"
     '';
 
-    postInstall = ''
-      install -Dm644 \
-        ${finalAttrs.cargoRoot}/bundle/40-streamdeck.rules \
-        "$out/lib/udev/rules.d/40-streamdeck.rules"
-
-      install -Dm644 \
-        "${finalAttrs.src}/LICENSE.md" \
-        "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
-    '';
+    postInstall =
+      lib.optionalString stdenv.hostPlatform.isLinux ''
+        install -Dm644 \
+          ${finalAttrs.cargoRoot}/bundle/40-streamdeck.rules \
+          "$out/lib/udev/rules.d/40-streamdeck.rules"
+      ''
+      + ''
+        install -Dm644 \
+          "${finalAttrs.src}/LICENSE.md" \
+          "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
+      '';
 
     buildInputs = lib.optionals stdenv.hostPlatform.isLinux (
       gstPlugins
@@ -218,19 +222,17 @@ rustPlatform.buildRustPackage (
       )
     '';
 
-    tauriBundleType = "deb";
-
     meta = {
-      description = "Linux software for your Elgato Stream Deck";
+      description = "Open-source software for Elgato Stream Deck devices (and similar)";
       homepage = "https://github.com/nekename/OpenDeck";
       license = lib.licenses.gpl3Plus;
+      platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
       authors = [
         "nekename"
       ];
 
       mainProgram = "opendeck";
-      platforms = lib.platforms.linux;
     };
 
     passthru = {
