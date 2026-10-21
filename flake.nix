@@ -1,5 +1,5 @@
 {
-  description = "OpenDeck - Linux software for your Elgato Stream Deck";
+  description = "Declarative OpenDeck and plugin packaging for Nix";
 
   nixConfig = {
     extra-substituters = [
