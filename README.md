@@ -83,7 +83,7 @@ nix-opendeck currently targets Linux (`x86_64-linux` and `aarch64-linux`) and ma
 Silicon (`aarch64-darwin`). It's tested working on NixOS, and should also work on nix-darwin or
 standalone Nix installations on supported systems.
 
-> {!WARNING}
+> [!WARNING]
 > I've only tested it on NixOS on x86_64. While everything seems to compile for the others,
 > I don't have the hardware to check. If you're on Linux aarch64 or Apple Silicon and trying this
 > out, you're welcome to open an issue and let me know if it works!
