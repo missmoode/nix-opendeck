@@ -35,10 +35,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
     description = "Advanced OBS Studio controls for OpenDeck";
     homepage = "https://github.com/FeloDeck/obs-tools";
     license = lib.licenses.gpl3Plus;
-    platforms = [
-      "x86_64-linux"
-      "aarch64-linux"
-    ];
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
     authors = [ "Felitendo" ];
   };
 

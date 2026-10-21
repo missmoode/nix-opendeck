@@ -37,7 +37,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
     description = "Digital clock plugin for OpenDeck";
     homepage = "https://github.com/GDWhisper/opendeck-tikclock";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
     authors = [
       "GDWhisper"
     ];

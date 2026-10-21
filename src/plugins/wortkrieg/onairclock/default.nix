@@ -27,7 +27,7 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     description = "A versatile and configurable broadcast-inspired on air clock for OpenDeck.";
     homepage = "https://marc.fail/onairclock/";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "wortkrieg"

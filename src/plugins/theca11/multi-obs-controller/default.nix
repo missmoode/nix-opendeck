@@ -39,7 +39,7 @@ mkNpmOpenDeckPlugin (finalAttrs: {
     description = "Control one or multiple OBS Studio instances from OpenDeck";
     homepage = "https://github.com/theca11/multi-obs-controller";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "theca11"

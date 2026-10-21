@@ -40,7 +40,7 @@ mkNpmOpenDeckPlugin (finalAttrs: {
     description = "Home Assistant plugin for Elgato Stream Deck";
     homepage = "https://github.com/cgiesche/streamdeck-homeassistant";
     license = lib.licenses.mit;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "Christoph Giesche"

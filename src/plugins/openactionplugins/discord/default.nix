@@ -105,7 +105,7 @@ mkRustOpenDeckPlugin (
       description = "OpenAction plugin for controlling the Discord desktop client";
       homepage = "https://github.com/OpenActionPlugins/discord";
       license = lib.licenses.gpl3Only;
-      platforms = lib.platforms.linux;
+      platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
       authors = [
         "nekename"

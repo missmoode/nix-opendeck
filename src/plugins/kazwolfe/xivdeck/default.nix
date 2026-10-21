@@ -29,7 +29,7 @@ mkYarnOpenDeckPlugin (finalAttrs: {
     description = "XIVDeck Stream Deck plugin";
     homepage = "https://github.com/KazWolfe/XIVDeck";
     license = lib.licenses.mpl20;
-    platforms = lib.platforms.linux;
+    platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
     authors = [
       "KazWolfe"
