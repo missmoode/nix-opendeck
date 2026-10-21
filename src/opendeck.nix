@@ -1,6 +1,7 @@
 {
   lib,
   stdenv,
+  darwin,
   fetchFromGitHub,
   nix-update-script,
   python3,
@@ -181,6 +182,9 @@ rustPlatform.buildRustPackage (
     ]
     ++ lib.optionals stdenv.hostPlatform.isLinux [
       wrapGAppsHook4
+    ]
+    ++ lib.optionals stdenv.hostPlatform.isDarwin [
+      darwin.xattr
     ];
 
     preBuild = ''
