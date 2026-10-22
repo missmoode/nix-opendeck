@@ -252,10 +252,10 @@ bundled and prevent accidental double-declarations of installed plugins.
 ### Usage without the modules
 
 #### Udev Rules (Linux)
-If you're on Linux, but not using the NixOS module, you'll need to install the required udev
+If you're on Linux but not using the NixOS module, you'll need to install the required udev subsystem
 rules in order for OpenDeck to detect your Stream Deck.
 
-They are available in the upstream repository [here](https://raw.githubusercontent.com/OpenActionAPI/rust-elgato-streamdeck/main/40-streamdeck.rules).
+See the relevant step of OpenDeck’s [Linux installation instructions](https://github.com/nekename/OpenDeck#linux) for instructions to install them.
 
 #### Using the plugin derivations
 
