@@ -192,7 +192,7 @@ in
 ### Home Manager Module
 
 The Home Manager module lets you declare plugins you’d like to use, and installs them to OpenDeck by
-  making them available in OpenDeck's plugin directory via symlinks from the Nix store.
+making them available in OpenDeck's plugin directory via symlinks from the Nix store.
 
 It can be used with standalone Home Manager, or as part of a NixOS or nix-darwin configuration.
 
@@ -359,17 +359,32 @@ your Home Manager configuration:
 > compilation.
 
 ## Information
+### OpenDeck Compatibility Patches
+
+nix-opendeck applies a small collection of downstream patches to OpenDeck to improve compatibility
+with Nix installations.
+
+These patches:
+- Support plugins symlinked from the immutable Nix store, including their assets and executable
+permissions.
+- Prevent OpenDeck from modifying or removing plugins marked as externally managed.
+- Preserve runtime paths provided by Nix wrappers for use in application-based profile switching.
+- Modify OpenDeck's "start at launch" setting behaviour to preserve functionality between package upgrades.
+
+The Nix build also includes minor changes to identify itself and direct users to the relevant
+plugin compatibility documentation.
+
 ### Bundled Plugins
 
 OpenDeck can be built with plugins bundled directly into its binary as mandatory defaults.
 
 When the program starts up, OpenDeck will check its bundled plugins against the plugins installed by the user.
-  If any are missing or outdated compared to the plugin in its bundle, it will copy the bundled version into 
-  the user's `plugins` directory.
+If any are missing or outdated compared to the plugin in its bundle, it will copy the bundled version into 
+the user's `plugins` directory.
 
 Modifying or updating bundled plugins necessitates recompiling the entire binary. Bundled plugins are mainly useful
-  if you want to use the Nix-built plugins, but can't use nix-opendeck's Home Manager module, and don't want
-  to symlink them from the store.
+if you want to use the Nix-built plugins, but can't use nix-opendeck's Home Manager module, and don't want
+to symlink them from the store.
 
 Upstream OpenDeck comes with the "Starter Pack" plugin bundled by default, so the `opendeck` package does
   as well.
@@ -400,16 +415,16 @@ The resulting package can then be installed through a mechanism of your choosing
 The package used by the Home Manager module can be changed by modifying `programs.opendeck.package`.
 
 By default, this is set to `opendeck`. However, you can change it if you want to use a different version of
-  the package, for example `opendeck-core`, in which case you will need to manually declare
-  `opendeck-plugins.nekename.starterpack` as a plugin in your Home Manager configuration.
+the package, for example `opendeck-core`, in which case you will need to manually declare
+`opendeck-plugins.nekename.starterpack` as a plugin in your Home Manager configuration.
 
 ### Required runtime commands
 Some plugins invoke external commands at runtime. When nix-opendeck does not provide such a command as
-  part of the plugin package, it is listed as a required runtime command and must be available in your `PATH`.
+part of the plugin package, it is listed as a required runtime command and must be available in your `PATH`.
 
 Plugins may also integrate with external services, such as PipeWire, D-Bus services, or another running
-  application. These integrations are documented in the plugin listing, but are not checked or provided
-  by nix-opendeck.
+application. These integrations are documented in the plugin listing, but are not checked or provided
+by nix-opendeck.
   
 ### Source Code and Licenses
 nix-opendeck, via the binary cache, distributes builds of third-party open-source software under their
