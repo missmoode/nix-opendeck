@@ -1,4 +1,4 @@
-# nix-opendeck
+# OpenDeck on Nix
 
 > [!WARNING]
 > Breaking changes may still happen for a little while. This README will remain up-to-date.
