@@ -255,7 +255,7 @@ bundled and prevent accidental double-declarations of installed plugins.
 If you're on Linux but not using the NixOS module, you'll need to install the required udev subsystem
 rules in order for OpenDeck to detect your Stream Deck.
 
-See the relevant step of OpenDeck’s [Linux installation guide](https://github.com/nekename/OpenDeck#linux) for instructions to install them.
+See the relevant step of OpenDeck’s [Linux installation instructions](https://github.com/nekename/OpenDeck#linux) for the rules and how to install them.
 
 #### Using the plugin derivations
 
