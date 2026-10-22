@@ -137,6 +137,10 @@ rustPlatform.buildRustPackage (
       # Direct users of the Nix build to nix-opendeck's plugin
       # compatibility documentation before reporting upstream issues.
       ./patches/opendeck/0006-nix-plugin-store-warning.patch
+
+      # Explain the PATH requirement for OpenDeck's built-in Linux autostart.
+      # The autostart toggle and settings behaviour remain unchanged.
+      ./patches/opendeck/0007-document-nix-autostart-path.patch
     ];
 
     postPatch = ''
@@ -167,6 +171,22 @@ rustPlatform.buildRustPackage (
           --replace-fail \
           'libayatana-appindicator3.so.1' \
           '${libayatana-appindicator}/lib/libayatana-appindicator3.so.1'
+      ''}
+
+      # Prevent Linux autostart entries from referencing generation-specific
+      # Nix store paths. Resolve the installed launcher through PATH instead.
+      ${lib.optionalString stdenv.hostPlatform.isLinux ''
+        patch -p1 \
+          -d "$cargoDepsCopy"/*/tauri-plugin-autostart-2.5.1 \
+          < ${./patches/tauri-plugin-autostart/0001-use-path-for-linux-autostart.patch}
+      ''}
+
+      # On macOS, prefer a stable Nix profile path when it points to the
+      # running OpenDeck executable. Otherwise retain upstream behaviour.
+      ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+        patch -p1 \
+          -d "$cargoDepsCopy"/*/tauri-plugin-autostart-2.5.1 \
+          < ${./patches/tauri-plugin-autostart/0002-use-profile-path-for-macos-autostart.patch}
       ''}
     '';
 

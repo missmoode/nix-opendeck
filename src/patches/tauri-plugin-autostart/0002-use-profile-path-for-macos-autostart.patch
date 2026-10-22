@@ -1,0 +1,31 @@
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -198,9 +198,26 @@
+                     // but this results in seeing a Unix Executable in macOS login items
+                     // It must be: /Applications/Example.app
+                     // If it didn't find exactly a single occurance of .app, it will default to
+                     // exe path to not break it.
+-                    let exe_path = current_exe.canonicalize()?.display().to_string();
++                    let canonical_exe = current_exe.canonicalize()?;
++                    // A Nix profile is a stable symlink across upgrades. Prefer its
++                    // executable only when it resolves to this running OpenDeck build.
++                    let profile_exe = std::env::var_os("HOME")
++                        .map(std::path::PathBuf::from)
++                        .and_then(|home| {
++                            let state_home = std::env::var_os("XDG_STATE_HOME")
++                                .map(std::path::PathBuf::from)
++                                .filter(|path| path.is_absolute())
++                                .unwrap_or_else(|| home.join(".local/state"));
++                            [home.join(".nix-profile"), state_home.join("nix/profile")]
++                                .into_iter()
++                                .map(|profile| profile.join("Applications/OpenDeck.app/Contents/MacOS/opendeck"))
++                                .find(|candidate| {
++                                    candidate.canonicalize().is_ok_and(|path| path == canonical_exe)
++                                })
++                        });
++                    let exe_path = profile_exe.unwrap_or(canonical_exe).display().to_string();
+                     let parts: Vec<&str> = exe_path.split(".app/").collect();
+                     let app_path = if parts.len() == 2
+                         && matches!(self.macos_launcher, MacosLauncher::AppleScript)
+                     {

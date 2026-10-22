@@ -1,0 +1,23 @@
+diff --git a/src/components/SettingsView.svelte b/src/components/SettingsView.svelte
+--- a/src/components/SettingsView.svelte
++++ b/src/components/SettingsView.svelte
+@@ -133,7 +133,7 @@
+ 				{$t("settings.autolaunch.tooltip.1", { PRODUCT_NAME })}
+ 				{#if buildInfo?.split("</summary>")[0]?.includes("linux")}
+ 					<br />
+-					{$t("settings.autolaunch.tooltip.2", { PRODUCT_NAME })}
++					{$t("settings.autolaunch.tooltip.nix")}
+ 				{/if}
+ 			</Tooltip>
+ 		</div>
+diff --git a/translations/en.json b/translations/en.json
+--- a/translations/en.json
++++ b/translations/en.json
+@@ -115,6 +115,7 @@
+ 	"settings.autolaunch": "Start at login:",
+ 	"settings.autolaunch.tooltip.1": "If this option is enabled, {{PRODUCT_NAME}} will automatically start at login.",
+ 	"settings.autolaunch.tooltip.2": "If you used Flatpak to install {{PRODUCT_NAME}}, this option may not function as intended.",
++	"settings.autolaunch.tooltip.nix": "For Nix installations, the opendeck command must be available in your desktop session's PATH for this setting to work.",
+ 	"settings.background": "Run in background:",
+ 	"settings.background.tooltip": "If this option is enabled, {{PRODUCT_NAME}} will minimise to the tray and run in the background.",
+	"settings.backup_config.button": "Back up config",
