@@ -141,6 +141,10 @@ rustPlatform.buildRustPackage (
       # Explain the PATH requirement for OpenDeck's built-in Linux autostart.
       # The autostart toggle and settings behaviour remain unchanged.
       ./patches/opendeck/0007-document-nix-autostart-path.patch
+
+      # Sync explicitly identified externally managed plugins after activation.
+      # No directory watching or user-settings deletion.
+      ./patches/opendeck/0008-sync-external-plugins.patch
     ];
 
     postPatch = ''

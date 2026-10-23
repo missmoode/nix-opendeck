@@ -58,16 +58,20 @@ let
     target="$pluginDir/$pluginId"
     temp="$pluginDir/.$pluginId.hm-tmp"
 
-    rm -f "$temp"
+    # Repeated activations must not restart plugins whose store path is unchanged.
+    if [[ ! -L "$target" || "$(readlink "$target")" != "$source" ]]; then
+      rm -f "$temp"
 
-    # Declarative plugins live in the Nix store; only a symlink is placed
-    # in OpenDeck's mutable plugin directory.
-    ln -s "$source" "$temp"
+      # Declarative plugins live in the Nix store; only a symlink is placed
+      # in OpenDeck's mutable plugin directory.
+      ln -s "$source" "$temp"
 
-    # Preflight validation guarantees that an existing target is a
-    # Home Manager-managed symlink.
-    rm -f "$target"
-    mv "$temp" "$target"
+      # Preflight validation guarantees that an existing target is a
+      # Home Manager-managed symlink.
+      rm -f "$target"
+      mv "$temp" "$target"
+      changedPlugins+=("$pluginId")
+    fi
   '') externalPlugins;
 in
 {
@@ -174,6 +178,7 @@ in
         stateTemp="$externallyManagedPluginsFile.hm-tmp"
         rm -f "$stateTemp"
         printf '%s' "$desiredState" > "$stateTemp"
+        changedPlugins=()
 
         # Remove plugins which were managed by the previous Home Manager
         # generation but are no longer declared.
@@ -189,6 +194,7 @@ in
 
             if isManagedPluginTarget "$pluginId"; then
               rm -f "$pluginDir/$pluginId"
+              changedPlugins+=("$pluginId")
             fi
           done <<<"$previousState"
         fi
@@ -196,6 +202,30 @@ in
         ${installPlugins}
 
         mv "$stateTemp" "$externallyManagedPluginsFile"
+
+        # The patched OpenDeck syncs only these explicitly changed plugin IDs.
+        # This is best-effort: activation must succeed if the GUI is not running.
+        if (( ''${#changedPlugins[@]} )); then
+          notify=true
+          ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+            # Avoid launching even a secondary Tauri process when no session
+            # instance owns OpenDeck's single-instance D-Bus name.
+            notify=false
+            if ${pkgs.glib}/bin/gdbus call --session \
+              --dest org.freedesktop.DBus \
+              --object-path /org/freedesktop/DBus \
+              --method org.freedesktop.DBus.NameHasOwner \
+              me.amankhanna.opendeck.SingleInstance 2>/dev/null | grep -Fq '(true,)'; then
+              notify=true
+            fi
+          ''}
+          if [[ "$notify" == true ]]; then
+            for pluginId in "''${changedPlugins[@]}"; do
+              ${cfg.package}/bin/opendeck --sync-plugin "$pluginId" >/dev/null 2>&1 \
+                || verboseEcho "Could not notify running OpenDeck about $pluginId; restart it to apply the change"
+            done
+          fi
+        fi
       fi
     '';
   };
