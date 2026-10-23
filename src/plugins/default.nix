@@ -6,6 +6,11 @@
 
 let
   plugins = {
+    "4ndv" = {
+      akp03 = pkgs.callPackage ./4ndv/akp03 {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
 
     babs = {
       rotary-command = pkgs.callPackage ./babs/rotary-command {

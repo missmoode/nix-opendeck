@@ -484,6 +484,8 @@ open an issue so that the corresponding source can be provided.
 Below is a list of the plugins where a derivation is included in this repo. You can check their 
 upstream sources for more information.
 
+### Action & Integration Plugins
+
 Not every plugin is available on every platform. The flake filters the available plugins based
 on their supported systems, so for example plugins focused on Linux-specific integrations like
 PipeWire are not available on macOS.
@@ -511,3 +513,15 @@ PipeWire are not available on macOS.
 | [Volume Controller](https://github.com/mdvictor/opendeck-volume-controller) | `opendeck-plugins.mdvictor.volume-controller` | PulseAudio / PipeWire (via pipewire-pulse) | - |
 | [Web Requests](https://github.com/data-enabler/streamdeck-web-requests) | `opendeck-plugins.data-enabler.web-requests` | - | - |
 | [XIVDeck](https://github.com/KazWolfe/XIVDeck) | `opendeck-plugins.kazwolfe.xivdeck` | FFXIV / Dalamud | - |
+
+### Device Support Plugins
+
+These plugins extend OpenDeck's support to additional devices, including third-party Stream Deck alternatives.
+
+Some devices require additional permissions on Linux. Where a plugin provides udev rules, its package exposes a `.udev` attribute that can be added to NixOS's `services.udev.packages`. Rules from bundled plugins are also included in the corresponding OpenDeck package's `.udev` attribute.
+
+See [Device Access on NixOS](#device-access-on-nixos) for configuration instructions.
+
+| Upstream plugin | Package name | Supported devices | Additional setup |
+| --- | --- | --- | --- |
+| [Ajazz AKP03 / Mirabox N3](https://github.com/4ndv/opendeck-akp03) | `opendeck-plugins."4ndv".akp03` | AKP03, Mirabox N3 and compatible devices | Udev rules (Linux) |
