@@ -12,8 +12,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: nix-opendeck-reproducibility
+  group: nix-opendeck-maintenance-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   opendeck:

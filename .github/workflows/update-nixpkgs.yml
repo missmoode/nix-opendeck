@@ -15,8 +15,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: nixpkgs-updates-${{ github.ref_name }}
+  group: nix-opendeck-maintenance-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   prepare:

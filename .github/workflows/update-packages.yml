@@ -2,7 +2,7 @@ name: Update packages
 
 on:
   schedule:
-    - cron: '17 4 * * *'
+    - cron: '17 12 * * *'
   workflow_dispatch:
 
 # Updaters and builders only require read access. The final PR job alone
@@ -11,8 +11,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: package-updates-${{ github.ref_name }}
+  group: nix-opendeck-maintenance-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   discover:
