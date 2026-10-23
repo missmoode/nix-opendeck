@@ -529,9 +529,10 @@ distributed under GPL-3.0-or-later.
 ## Reproducibility
 
 I’m pretty sure that this is properly reproducible, but I’ve not verified it. 
-I pinned Deno separately, and I replaced an unpredictable string in SvelteKit,
-which should make the build deterministic. This absolutely isn't a substitute for
-confident verification, though.
+I pinned Deno separately, replaced an unpredictable string in SvelteKit, and
+cleaned up some embedded build paths in Rust compilations, which should make the
+build deterministic. This absolutely isn't a substitute for confident verification,
+though.
 
 I do run weekly spot-checks on the main `opendeck` package:
 
