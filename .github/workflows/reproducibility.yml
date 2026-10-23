@@ -24,7 +24,7 @@ jobs:
 
   opendeck:
     needs: prepare-reference
-    name: 'Reproducibility: ${{ matrix.system }}'
+    name: 'Check: ${{ matrix.system }}'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
 
