@@ -272,6 +272,13 @@ OpenDeck. Only plugins whose installed paths are changed are affected.
 If OpenDeck isn't running (or the notification fails), the changes will
 take effect when OpenDeck next starts as normal.
 
+### Changing the package used by the Home Manager module
+The package used by the Home Manager module can be changed by modifying `programs.opendeck.package`.
+
+By default, this is set to `opendeck`. However, you can change it if you want to use a different version of
+the package, for example `opendeck-core`, in which case you will need to manually declare
+`opendeck-plugins.nekename.starterpack` as a plugin in your Home Manager configuration.
+
 ### Usage without the Home Manager module
 
 #### Using the plugin derivations
@@ -449,13 +456,6 @@ Plugins installed separately through Home Manager do not contribute rules to the
 package's `.udev` attribute.
 
 The resulting package can then be installed through a mechanism of your choosing.
-
-### Changing the package used by the Home Manager module
-The package used by the Home Manager module can be changed by modifying `programs.opendeck.package`.
-
-By default, this is set to `opendeck`. However, you can change it if you want to use a different version of
-the package, for example `opendeck-core`, in which case you will need to manually declare
-`opendeck-plugins.nekename.starterpack` as a plugin in your Home Manager configuration.
 
 ### Required runtime commands
 Some plugins invoke external commands at runtime. When nix-opendeck does not provide such a command as
