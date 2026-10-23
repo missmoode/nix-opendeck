@@ -464,23 +464,6 @@ part of the plugin package, it is listed as a required runtime command and must 
 Plugins may also integrate with external services, such as PipeWire, D-Bus services, or another running
 application. These integrations are documented in the plugin listing, but are not checked or provided
 by nix-opendeck.
-  
-### Source Code and Licenses
-nix-opendeck, via the binary cache, distributes builds of third-party open-source software under their
-respective licenses. Additionally, the derivations ensure that upstream license files are added to the
-build output.
-
-The Nix derivations in this repository identify the upstream source revisions, dependencies, and build
-instructions used to produce these packages. Any downstream patches are also included in this repository.
-
-The source code for each package can be obtained through the upstream repositories referenced in its
-derivation, using the specified version or commit.
-
-For packages requiring corresponding source availability under licenses such as GPLv3 or MPL 2.0, please
-consult the relevant derivation and its upstream source. If any referenced source is unavailable, please
-open an issue so that the corresponding source can be provided.
-
-The LICENSE file in the root of this repository applies to nix-opendeck's original packaging and integration code. Downstream patches to third-party projects are distributed in accordance with the applicable upstream licences. In particular, the modified OpenDeck application is distributed under GPL-3.0-or-later.
 
 ## Plugin Listing
 Below is a list of the plugins where a derivation is included in this repo. You can check their 
@@ -529,3 +512,23 @@ See [Device Access on NixOS](#device-access-on-nixos) for configuration instruct
 | --- | --- | --- | --- |
 | [Ajazz AKP03 / Mirabox N3](https://github.com/4ndv/opendeck-akp03) | `opendeck-plugins."4ndv".akp03` | AKP03, Mirabox N3 and compatible devices | Udev rules (Linux) |
 | [Ajazz AKP153 / Mirabox HSV293S](https://github.com/4ndv/opendeck-akp153) | `opendeck-plugins."4ndv".akp153` | AKP153, Mirabox HSV293S and compatible devices | Udev rules (Linux) |
+
+## Source Code and Licenses
+nix-opendeck, via the binary cache, distributes builds of third-party open-source software
+under their respective licenses. Additionally, the derivations ensure that upstream license
+files are added to the build output.
+
+The Nix derivations in this repository identify the upstream source revisions, dependencies,
+and build instructions used to produce these packages. Any downstream patches are also
+included in this repository.
+
+The source code for each package can be obtained through the upstream repositories referenced 
+in its derivation, using the specified version or commit.
+
+For packages requiring corresponding source availability under licenses such as GPLv3 or 
+MPL 2.0, please consult the relevant derivation and its upstream source. If any referenced source is unavailable, please open an issue so that the corresponding source can be provided.
+
+The LICENSE file in the root of this repository applies to nix-opendeck's original packaging 
+and integration code. Downstream patches to third-party projects are distributed in accordance 
+with the applicable upstream licences. In particular, the modified OpenDeck application is 
+distributed under GPL-3.0-or-later.
