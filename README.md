@@ -480,6 +480,8 @@ For packages requiring corresponding source availability under licenses such as 
 consult the relevant derivation and its upstream source. If any referenced source is unavailable, please
 open an issue so that the corresponding source can be provided.
 
+The LICENSE file in the root of this repository applies to nix-opendeck's original packaging and integration code. Downstream patches to third-party projects are distributed in accordance with the applicable upstream licences. In particular, the modified OpenDeck application is distributed under GPL-3.0-or-later.
+
 ## Plugin Listing
 Below is a list of the plugins where a derivation is included in this repo. You can check their 
 upstream sources for more information.
