@@ -64,7 +64,7 @@ jobs:
             --targets "$RUNNER_TEMP/discovery/targets.json" \
             --output "$RUNNER_TEMP/discovery"
           echo "updaters=$(jq -c '.updaters' "$RUNNER_TEMP/discovery/plan.json")" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-update-discovery
           path: ${{ runner.temp }}/discovery/
@@ -87,7 +87,7 @@ jobs:
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: package-update-discovery
           path: ${{ runner.temp }}/discovery
@@ -121,7 +121,7 @@ jobs:
             --output "$RUNNER_TEMP/updates"
       - name: Upload proposed patches and updater results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: updates-${{ matrix.system }}
           path: ${{ runner.temp }}/updates/
@@ -140,11 +140,11 @@ jobs:
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: package-update-discovery
           path: ${{ runner.temp }}/discovery
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
@@ -162,7 +162,7 @@ jobs:
             --output "$RUNNER_TEMP/build-plan"
           echo "plugins=$(jq -c '.' "$RUNNER_TEMP/build-plan/plugins.json")" >> "$GITHUB_OUTPUT"
           echo "opendeck=$(jq -c '.' "$RUNNER_TEMP/build-plan/opendeck.json")" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-update-build-plan
           path: ${{ runner.temp }}/build-plan/
@@ -185,7 +185,7 @@ jobs:
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
@@ -207,7 +207,7 @@ jobs:
             --output "$RUNNER_TEMP/result.json"
       - name: Upload native build result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-${{ matrix.id }}-${{ matrix.system }}
           path: ${{ runner.temp }}/result.json
@@ -230,7 +230,7 @@ jobs:
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
@@ -252,7 +252,7 @@ jobs:
             --output "$RUNNER_TEMP/result.json"
       - name: Upload native build result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-opendeck-${{ matrix.system }}
           path: ${{ runner.temp }}/result.json
@@ -274,24 +274,24 @@ jobs:
           # This job evaluates proposed source changes. Only the PR action
           # needs write credentials; checkout must not persist them.
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: needs.discover.result == 'success'
         with:
           name: package-update-discovery
           path: ${{ runner.temp }}/discovery
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: needs.prepare-builds.result == 'success'
         with:
           name: package-update-build-plan
           path: ${{ runner.temp }}/build-plan
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: needs.prepare-builds.result == 'success'
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
           merge-multiple: false
         continue-on-error: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: needs.prepare-builds.result == 'success' && (needs.plugins.result != 'skipped' || needs.opendeck.result != 'skipped')
         with:
           pattern: build-*

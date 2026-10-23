@@ -85,7 +85,7 @@ jobs:
 
       - name: Save candidate lock file for native builders
         if: steps.update.outputs.validate == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: proposed-flake-lock
           path: flake.lock
@@ -122,7 +122,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: proposed-flake-lock
 
@@ -198,7 +198,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: proposed-flake-lock
 
@@ -257,7 +257,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: proposed-flake-lock
 
