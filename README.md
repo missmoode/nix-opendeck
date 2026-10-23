@@ -535,4 +535,4 @@ confident verification, though.
 
 I do run weekly spot-checks on the main `opendeck` package:
 
-[![Reproducibility (x86_64-linux)](https://github.com/missmoode/nix-opendeck/actions/workflows/reproducibility.yml/badge.svg?branch=main)](https://github.com/missmoode/nix-opendeck/actions/workflows/reproducibility.yml)
+[![Reproducibility (all systems)](https://github.com/missmoode/nix-opendeck/actions/workflows/reproducibility.yml/badge.svg?branch=main)](https://github.com/missmoode/nix-opendeck/actions/workflows/reproducibility.yml)

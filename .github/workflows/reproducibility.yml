@@ -1,6 +1,6 @@
 # Spot-check the default OpenDeck package against the independently built
 # artifact published by the binary-cache workflow.
-name: Reproducibility (x86_64-linux)
+name: Reproducibility
 
 on:
   schedule:
@@ -18,9 +18,22 @@ concurrency:
 
 jobs:
   opendeck:
-    name: Compare OpenDeck with Cachix
-    runs-on: ubuntu-24.04
+    name: 'Reproducibility: ${{ matrix.system }}'
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: aarch64-darwin
+            runner: macos-15
+    env:
+      TARGET_SYSTEM: ${{ matrix.system }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -38,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          attr='.#packages.x86_64-linux.opendeck'
+          attr=".#packages.${TARGET_SYSTEM}.opendeck"
           output="$(nix eval --raw "${attr}.outPath")"
           [[ "$output" == /nix/store/* ]] || {
             echo "Unexpected output path: $output" >&2
@@ -59,7 +72,7 @@ jobs:
           {
             echo '## Reference artifact'
             echo
-            echo "- Flake output: \`packages.x86_64-linux.opendeck\`"
+            echo "- Flake output: \`packages.${TARGET_SYSTEM}.opendeck\`"
             echo "- Store path: \`$output\`"
             echo '- Source: nix-opendeck Cachix cache'
           } >> "$GITHUB_STEP_SUMMARY"
@@ -68,12 +81,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          attr=".#packages.${TARGET_SYSTEM}.opendeck"
 
           # --rebuild runs the top-level derivation again and compares it with
           # the cached output. Its dependencies may still be substituted.
           # Do NOT disable substitution: rebuilding the entire closure is not
           # necessary for this spot-check.
-          nix build .#packages.x86_64-linux.opendeck \
+          nix build "$attr" \
             --rebuild \
             --no-link \
             --keep-failed \
@@ -85,6 +99,6 @@ jobs:
             echo
             echo 'OpenDeck reproduced the published output bit-for-bit.'
             echo
-            echo 'This checks the top-level x86_64-linux OpenDeck output only;'
+            echo 'This checks the top-level OpenDeck output only;'
             echo 'it does not independently rebuild every dependency or plugin.'
           } >> "$GITHUB_STEP_SUMMARY"
