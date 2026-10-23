@@ -26,6 +26,10 @@ let
     };
 
     openactionplugins = {
+      counter = pkgs.callPackage ./openactionplugins/counter {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+
       desktopentry = pkgs.callPackage ./openactionplugins/desktopentry {
         deno = buildTools.deno;
         inherit (pluginLib) mkRustOpenDeckPlugin;
@@ -37,6 +41,10 @@ let
       };
 
       mpris = pkgs.callPackage ./openactionplugins/mpris {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+
+      system = pkgs.callPackage ./openactionplugins/system {
         inherit (pluginLib) mkRustOpenDeckPlugin;
       };
     };
