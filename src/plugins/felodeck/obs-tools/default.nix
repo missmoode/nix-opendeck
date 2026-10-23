@@ -24,6 +24,12 @@ mkRustOpenDeckPlugin (finalAttrs: {
     "obs-tools"
   ];
 
+  postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
+	  # Remove linker-generated debug-map entries containing temporary
+	  # build paths from ring's native object files.
+	  strip -S "$out/${finalAttrs.pluginId}/${finalAttrs.binaryInstallPath}"
+	'';
+
   pluginId = "de.felitendo.obs-tools.sdPlugin";
   assetsDir = finalAttrs.pluginId;
   binaryName = "obs-tools";
