@@ -129,7 +129,7 @@
 
             pname = "opendeck-with-plugins";
 
-            bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ]) allPlugins;
+            bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ] && !(plugin ? udev)) allPlugins;
           };
 
           opendeck = final.callPackage ./src/opendeck.nix {

@@ -69,7 +69,7 @@ It emits three packages for OpenDeck:
   - `default` is an alias of `opendeck`.
 - `opendeck-with-plugins`, a convenience package which bundles all plugins available on
 the selected
-platform that do not declare [required runtime commands](#required-runtime-commands).
+platform that do not declare [required runtime commands](#required-runtime-commands) or additional udev rules.
 
 More information on the difference between a bundled plugin and a regular plugin [can be found here](#bundled-plugins).
 
@@ -300,9 +300,9 @@ Alternatively, you could override the `opendeck` or `opendeck-core` packages to
 [bundle](#bundled-plugins) plugins into them.
 
 You could also use the `opendeck-with-plugins` package, which bundles every plugin in the 
-  [Plugin Listing](#plugin-listing) available on the selected platform which does not declare
-  required commands. This is not recommended, as any changes to OpenDeck or its plugins will
-  require recompiling the whole thing.
+[Plugin Listing](#plugin-listing) available on the selected platform which does not
+declare required commands or udev rules. This is not recommended, as any changes to
+OpenDeck or its plugins will require recompiling the whole thing.
 
 ### Overlay
 
