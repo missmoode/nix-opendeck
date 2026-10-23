@@ -272,7 +272,7 @@ OpenDeck. Only plugins whose installed paths are changed are affected.
 If OpenDeck isn't running (or the notification fails), the changes will
 take effect when OpenDeck next starts as normal.
 
-### Changing the package used by the Home Manager module
+#### Changing the package used by the Home Manager module
 The package used by the Home Manager module can be changed by modifying `programs.opendeck.package`.
 
 By default, this is set to `opendeck`. However, you can change it if you want to use a different version of
