@@ -56,6 +56,8 @@ rustPlatform.buildRustPackage (
       # Explicitly retain Nixpkgs' frame-pointer flag because RUSTFLAGS
       # overrides Cargo's target-specific rustflags.
       export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-Cforce-frame-pointers=yes --remap-path-prefix=$NIX_BUILD_TOP=/build"
+
+      export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:+$NIX_CFLAGS_COMPILE }-ffile-prefix-map=$NIX_BUILD_TOP=/build"
     '';
   }
 
