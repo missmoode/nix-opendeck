@@ -1,0 +1,84 @@
+# Spot-check the default OpenDeck package against the independently built
+# artifact published by the binary-cache workflow.
+name: Reproducibility (x86_64-linux)
+
+on:
+  schedule:
+    # Away from the top of the hour, when GitHub schedules are often delayed.
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-opendeck-reproducibility
+  cancel-in-progress: false
+
+jobs:
+  opendeck:
+    name: Compare OpenDeck with Cachix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v31
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          skipPush: true
+
+      - name: Fetch existing reference build from Cachix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          attr='.#packages.x86_64-linux.opendeck'
+          output="$(nix eval --raw "${attr}.outPath")"
+          [[ "$output" == /nix/store/* ]] || {
+            echo "Unexpected output path: $output" >&2
+            exit 1
+          }
+
+          # Fail if the *exact* current derivation is not already published.
+          # Unlike `nix build`, `nix copy --from` cannot fall back to compiling it.
+          echo "Fetching reference: $output"
+          nix copy --from https://nix-opendeck.cachix.org "$output"
+          nix path-info "$output"
+
+          {
+            echo '## Reference artifact'
+            echo
+            echo "- Flake output: \`packages.x86_64-linux.opendeck\`"
+            echo "- Store path: \`$output\`"
+            echo '- Source: nix-opendeck Cachix cache'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rebuild OpenDeck and compare outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # --rebuild runs the top-level derivation again and compares it with
+          # the cached output. Its dependencies may still be substituted.
+          # Do NOT disable substitution: rebuilding the entire closure is not
+          # necessary for this spot-check.
+          nix build .#packages.x86_64-linux.opendeck \
+            --rebuild \
+            --no-link \
+            --keep-failed \
+            -L
+
+          {
+            echo
+            echo '## Result'
+            echo
+            echo 'OpenDeck reproduced the published output bit-for-bit.'
+            echo
+            echo 'This checks the top-level x86_64-linux OpenDeck output only;'
+            echo 'it does not independently rebuild every dependency or plugin.'
+          } >> "$GITHUB_STEP_SUMMARY"
