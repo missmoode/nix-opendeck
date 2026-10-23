@@ -59,9 +59,9 @@ patches where necessary to address compatibility issues or make the experience o
 OpenDeck with Nix smoother. Some changes fix functionality that would otherwise break,
 while others improve integration with tools like Home Manager.
 
-I'm considering these changes on a case-by-case basis, with a preference for the existing
-upstream functionality where I can, and using small, maintainable patches where I feel
-it's warranted. My intention isn't to develop a separate fork of OpenDeck or maintain features unrelated to Nix compatibility.
+I'm considering these changes on a case-by-case basis, with a preference for using the
+existing upstream functionality where I can, and using small, maintainable patches where
+I feel it's warranted.
 
 ### Core
 This flake includes a patched version of OpenDeck to support plugins symlinked from the
