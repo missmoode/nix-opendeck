@@ -1,6 +1,6 @@
 # Spot-check the default OpenDeck package against its independently built
 # artifact published to Cachix.
-name: Reproducibility
+name: Reproducibility Spot-check
 
 on:
   schedule:
