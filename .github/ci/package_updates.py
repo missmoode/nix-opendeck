@@ -108,8 +108,14 @@ def update(args):
                 raise RuntimeError("git diff could not inspect the updated files")
             else:
                 changed_files = run("git", "diff", "--cached", "--name-only", capture_output=True, text=True).stdout.splitlines()
-                if "flake.lock" in changed_files:
-                    raise RuntimeError("updater unexpectedly modified flake.lock")
+                # Automated package updates may change derivations and their
+                # checked-in dependency locks, but must not edit CI, the flake
+                # inputs, or other repository infrastructure.
+                unexpected = [path for path in changed_files if not path.startswith("src/")]
+                if unexpected:
+                    raise RuntimeError(
+                        "updater modified files outside src/: " + ", ".join(unexpected)
+                    )
                 patch = run("git", "diff", "--cached", "--binary", capture_output=True).stdout
                 if not patch:
                     raise RuntimeError("changed files produced an empty Git patch")

@@ -29,6 +29,8 @@ jobs:
       - name: Record source revision
         id: base
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Test package update orchestrator
+        run: python3 -m unittest discover -s .github/ci -p 'test_package_updates.py'
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ github.token }}
@@ -100,7 +102,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          nix profile add nixpkgs#nix-update
+          # Resolve nixpkgs from this repository's flake.lock, not the runner's registry.
+          nix profile add --inputs-from . nixpkgs#nix-update
           echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
           nixpkgs_path=$(nix eval --impure --raw --expr \
             '(builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath')
@@ -268,6 +271,9 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
+          # This job evaluates proposed source changes. Only the PR action
+          # needs write credentials; checkout must not persist them.
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         if: needs.discover.result == 'success'
         with:
@@ -302,11 +308,12 @@ jobs:
         shell: bash
         env:
           BASE_SHA: ${{ needs.discover.outputs.base_sha }}
+          BASE_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          git fetch origin "${{ github.ref_name }}"
+          git fetch origin "$BASE_BRANCH"
           if [[ "$(git rev-parse HEAD)" == "$BASE_SHA" &&
-                "$(git rev-parse "origin/${{ github.ref_name }}")" == "$BASE_SHA" ]]; then
+                "$(git rev-parse "origin/$BASE_BRANCH")" == "$BASE_SHA" ]]; then
             base_unchanged=true
           else
             base_unchanged=false

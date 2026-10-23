@@ -4,11 +4,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # Bot-token merges from the updater do not start ordinary push workflows.
-  workflow_run:
-    workflows: ["Update nixpkgs"]
-    types: [completed]
 
+# nixpkgs updates now publish on their native validation runners before
+# auto-merging. A workflow_run trigger would redundantly rebuild/recheck them.
+# This workflow still handles direct pushes and manual cache repair.
 permissions:
   contents: read
 
@@ -18,17 +17,15 @@ concurrency:
 
 jobs:
   prepare:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.sha != github.event.workflow_run.head_sha)
     runs-on: ubuntu-24.04
     outputs:
       plugins: ${{ steps.discover.outputs.plugins }}
       opendeck: ${{ steps.discover.outputs.opendeck }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - uses: cachix/install-nix-action@v31
 
       - name: Discover uncached redistributable targets
@@ -48,6 +45,8 @@ jobs:
               ) systems)
           ' > "$RUNNER_TEMP/targets.json"
 
+          # Deliberately fail closed if a selected package cannot be published.
+          # Never add opendeck-core or opendeck-with-plugins to this target list.
           if ! jq -e 'all(.[]; .redistributable)' "$RUNNER_TEMP/targets.json" >/dev/null; then
             echo 'Missing or non-redistributable license metadata:' >&2
             jq -r '.[] | select(.redistributable | not) | "\(.system) / \(.label)"' \
@@ -129,21 +128,35 @@ jobs:
         include: ${{ fromJSON(needs.prepare.outputs.plugins) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: cachix/install-nix-action@v31
       - uses: cachix/cachix-action@v17
         with:
           name: nix-opendeck
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           skipPush: true
 
-      - name: Build and publish plugin runtime closure
+      - name: Build plugin
         shell: bash
         env:
           TARGET_ATTR: ${{ matrix.attr }}
         run: |
           set -euo pipefail
           nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
-            | cachix push nix-opendeck
+            > "$RUNNER_TEMP/built-paths"
+          test -s "$RUNNER_TEMP/built-paths"
+
+      - name: Publish plugin runtime closure
+        shell: bash
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CACHIX_AUTH_TOKEN:-}" ]]; then
+            echo '::error::CACHIX_AUTH_TOKEN is missing'
+            exit 1
+          fi
+          cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
 
   opendeck:
     name: 'OpenDeck: ${{ matrix.system }}'
@@ -158,18 +171,32 @@ jobs:
         include: ${{ fromJSON(needs.prepare.outputs.opendeck) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: cachix/install-nix-action@v31
       - uses: cachix/cachix-action@v17
         with:
           name: nix-opendeck
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
           skipPush: true
 
-      - name: Build and publish OpenDeck runtime closure
+      - name: Build default OpenDeck
         shell: bash
         env:
           TARGET_ATTR: ${{ matrix.attr }}
         run: |
           set -euo pipefail
           nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
-            | cachix push nix-opendeck
+            > "$RUNNER_TEMP/built-paths"
+          test -s "$RUNNER_TEMP/built-paths"
+
+      - name: Publish default OpenDeck runtime closure
+        shell: bash
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CACHIX_AUTH_TOKEN:-}" ]]; then
+            echo '::error::CACHIX_AUTH_TOKEN is missing'
+            exit 1
+          fi
+          cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
