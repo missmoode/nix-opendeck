@@ -1,5 +1,6 @@
-# Spot-check the default OpenDeck package against its independently built
-# artifact published to Cachix.
+# Spot-check OpenDeck and its plugins for reproducibility.
+# Compare against independently published outputs where available, or build
+# a local reference for plugins that cannot be obtained from the cache.
 name: Reproducibility Spot-check
 
 on:
@@ -22,27 +23,84 @@ jobs:
     uses: ./.github/workflows/cache.yml
     secrets: inherit
 
-  opendeck:
+  discover:
+    name: Discover reproducibility targets
     needs: prepare-reference
-    name: 'Check: ${{ matrix.system }}'
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Discover available packages
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Reuse the platform-filtered catalogue from the cache workflow.
+          # Reproducibility testing includes non-redistributable plugins.
+          nix eval --impure --json --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              systems = builtins.attrNames flake.packages;
+            in
+              builtins.concatLists (map (system:
+                let
+                  targets = import ./.github/ci/targets.nix {
+                    inherit flake system;
+                  };
+                in
+                  [ targets.opendeck ] ++ targets.plugins
+              ) systems)
+          ' | jq -c '{
+            include: [
+              .[] | {
+                kind,
+                system,
+                runner,
+                attr,
+                label,
+                redistributable
+              }
+            ]
+          }' > "$RUNNER_TEMP/repro-matrix.json"
+
+          echo "matrix=$(cat "$RUNNER_TEMP/repro-matrix.json")" \
+            >> "$GITHUB_OUTPUT"
+
+          {
+            echo '## Reproducibility targets'
+            echo
+            echo "Total targets: $(jq '.include | length' "$RUNNER_TEMP/repro-matrix.json")"
+            echo
+            echo 'Non-redistributable packages are tested without publishing binary artifacts.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  check:
+    name: 'Check: ${{ matrix.system }} / ${{ matrix.label }}'
+    needs: discover
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
 
     strategy:
-      max-parallel: 3
+      max-parallel: 6
       fail-fast: false
-      matrix:
-        include:
-          - system: x86_64-linux
-            runner: ubuntu-24.04
-          - system: aarch64-linux
-            runner: ubuntu-24.04-arm
-          - system: aarch64-darwin
-            runner: macos-15
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+
     env:
       TARGET_SYSTEM: ${{ matrix.system }}
+      TARGET_KIND: ${{ matrix.kind }}
+      TARGET_ATTR: ${{ matrix.attr }}
+      TARGET_LABEL: ${{ matrix.label }}
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -53,47 +111,60 @@ jobs:
           name: nix-opendeck
           skipPush: true
 
-      - name: Fetch published OpenDeck reference
+      - name: Fetch or build reference
         shell: bash
         run: |
           set -euo pipefail
 
-          attr=".#packages.${TARGET_SYSTEM}.opendeck"
+          attr=".#${TARGET_ATTR}"
           output="$(nix eval --raw "${attr}.outPath")"
+
           [[ "$output" == /nix/store/* ]] || {
             echo "Unexpected output path: $output" >&2
             exit 1
           }
 
-          # Require the exact output to be published in Cachix.
-          # Query only the top-level path: its dependencies may live in other caches.
-          echo "Checking reference in Cachix: $output"
-          nix path-info --store https://nix-opendeck.cachix.org "$output"
+          if [[ "$TARGET_KIND" == opendeck ]]; then
+            # OpenDeck must have an independently published Cachix reference.
+            # Never silently replace it with a local build.
+            echo "Checking published reference in Cachix: $output"
 
-          # Download via the configured substituters (Cachix and cache.nixos.org).
-          # Never build a missing reference locally, or the comparison would
-          # silently become a same-run double build instead of a cache comparison.
-          nix build "$attr" --max-jobs 0 --no-link -L
+            nix path-info \
+              --store https://nix-opendeck.cachix.org \
+              "$output"
+
+            # Substitution only; never build a missing reference locally.
+            nix build "$attr" --max-jobs 0 --no-link -L
+          else
+            # Plugins may be absent from Cachix, including for licensing
+            # reasons. Substitute where possible; otherwise build locally.
+            nix build "$attr" --no-link -L
+          fi
+
           nix path-info "$output"
 
           {
-            echo '## Reference artifact'
+            echo '## Reference'
             echo
-            echo "- Flake output: \`packages.${TARGET_SYSTEM}.opendeck\`"
+            echo "- Target: \`${TARGET_ATTR}\`"
             echo "- Store path: \`$output\`"
-            echo '- Source: nix-opendeck Cachix cache'
+
+            if [[ "$TARGET_KIND" == opendeck ]]; then
+              echo '- Source: nix-opendeck Cachix cache'
+            else
+              echo '- Source: configured substituter or local build'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Rebuild OpenDeck and compare outputs
+      - name: Rebuild and compare outputs
         shell: bash
         run: |
           set -euo pipefail
-          attr=".#packages.${TARGET_SYSTEM}.opendeck"
 
-          # --rebuild runs the top-level derivation again and compares it with
-          # the cached output. Its dependencies may still be substituted.
-          # Do NOT disable substitution: rebuilding the entire closure is not
-          # necessary for this spot-check.
+          attr=".#${TARGET_ATTR}"
+
+          # Rebuild the selected derivation and compare against its reference.
+          # Dependencies may still be substituted; they are not rebuilt here.
           nix build "$attr" \
             --rebuild \
             --no-link \
@@ -104,10 +175,9 @@ jobs:
             echo
             echo '## Result'
             echo
-            echo 'OpenDeck reproduced the published output bit-for-bit.'
+            echo "${TARGET_LABEL} reproduced the reference output bit-for-bit."
             echo
-            echo 'This checks the top-level OpenDeck output only;'
-            echo 'it does not independently rebuild every dependency or plugin.'
+            echo 'This checks the selected derivation, not every dependency.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Diagnose reproducibility failure
@@ -116,12 +186,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          output="$(nix eval --raw \
-            ".#packages.${TARGET_SYSTEM}.opendeck.outPath")"
+          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
           rebuilt="${output}.check"
 
-          if [[ ! -d "$rebuilt" ]]; then
-            echo "Rebuilt output was not preserved"
+          if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
+            echo "Both outputs are not available for comparison."
             exit 0
           fi
 
@@ -136,7 +205,9 @@ jobs:
               || true
           fi
 
-          if [[ "$TARGET_SYSTEM" == *-darwin ]]; then
+          # Only the OpenDeck macOS application has this bundle layout.
+          # Plugin outputs must not be assumed to contain an .app bundle.
+          if [[ "$TARGET_KIND" == opendeck && "$TARGET_SYSTEM" == *-darwin ]]; then
             echo "=== Code signatures ==="
             for path in "$output" "$rebuilt"; do
               echo "--- $path ---"
@@ -148,13 +219,12 @@ jobs:
           fi
 
       - name: Archive non-reproducible outputs
-        if: ${{ failure() }}
+        if: ${{ failure() && matrix.redistributable }}
         shell: bash
         run: |
           set -euo pipefail
 
-          output="$(nix eval --raw \
-            ".#packages.${TARGET_SYSTEM}.opendeck.outPath")"
+          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
           rebuilt="${output}.check"
 
           if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
@@ -169,15 +239,15 @@ jobs:
           tar -C "$output" -cf "$archive_dir/reference.tar" .
           tar -C "$rebuilt" -cf "$archive_dir/rebuilt.tar" .
 
-          printf 'System: %s\nReference: %s\nRebuilt: %s\n' \
-            "$TARGET_SYSTEM" "$output" "$rebuilt" \
+          printf 'Target: %s\nSystem: %s\nReference: %s\nRebuilt: %s\n' \
+            "$TARGET_ATTR" "$TARGET_SYSTEM" "$output" "$rebuilt" \
             > "$archive_dir/paths.txt"
 
       - name: Upload reproducibility artifacts
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        if: ${{ failure() && matrix.redistributable }}
+        uses: actions/upload-artifact@v7
         with:
-          name: opendeck-repro-${{ matrix.system }}-${{ github.run_attempt }}
+          name: repro-${{ matrix.system }}-${{ matrix.attr }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/opendeck-repro/
           if-no-files-found: ignore
           retention-days: 7
