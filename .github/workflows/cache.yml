@@ -123,7 +123,7 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 6
       matrix:
         include: ${{ fromJSON(needs.prepare.outputs.plugins) }}
     steps:
@@ -166,7 +166,7 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 3
       matrix:
         include: ${{ fromJSON(needs.prepare.outputs.opendeck) }}
     steps:
