@@ -17,7 +17,13 @@ concurrency:
   queue: max
 
 jobs:
+  prepare-reference:
+    name: Ensure cached references exist
+    uses: ./.github/workflows/cache.yml
+    secrets: inherit
+
   opendeck:
+    needs: prepare-reference
     name: 'Reproducibility: ${{ matrix.system }}'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180

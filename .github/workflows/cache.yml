@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 # nixpkgs updates now publish on their native validation runners before
 # auto-merging. A workflow_run trigger would redundantly rebuild/recheck them.
@@ -12,8 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: nix-opendeck-cache-main
-  cancel-in-progress: true
+  group: nix-opendeck-cache-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   prepare:
