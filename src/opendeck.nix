@@ -218,6 +218,15 @@ rustPlatform.buildRustPackage (
     ];
 
     preBuild = ''
+      # Rust embeds absolute paths to vendored dependencies in the macOS
+      # executable. Remap Nix's variable build directory to a stable path.
+      #
+      # Setting RUSTFLAGS overrides Cargo's target rustflags, so explicitly
+      # retain the frame-pointer setting supplied by Nixpkgs.
+      ${lib.optionalString stdenv.hostPlatform.isDarwin ''
+        export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-Cforce-frame-pointers=yes --remap-path-prefix=$NIX_BUILD_TOP=/build"
+      ''}
+
       export DENO_DIR="$TMPDIR/deno-cache"
 
       cp -a ${denoDeps}/. node_modules/

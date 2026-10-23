@@ -46,5 +46,17 @@ rustPlatform.buildRustPackage (
       udevRules = attrs.udevRules or { };
     };
   in
-  (removeAttrs attrs [ "udevRules" ]) // pluginAttrs
+  (removeAttrs attrs [ "udevRules" ])
+  // pluginAttrs
+  // lib.optionalAttrs stdenv.hostPlatform.isDarwin {
+    preBuild = ''
+      ${attrs.preBuild or ""}
+
+      # Avoid embedding Nix's variable Darwin build directory in Rust binaries.
+      # Explicitly retain Nixpkgs' frame-pointer flag because RUSTFLAGS
+      # overrides Cargo's target-specific rustflags.
+      export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-Cforce-frame-pointers=yes --remap-path-prefix=$NIX_BUILD_TOP=/build"
+    '';
+  }
+
 )
