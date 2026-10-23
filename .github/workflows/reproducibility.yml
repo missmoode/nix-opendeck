@@ -109,3 +109,40 @@ jobs:
             echo 'This checks the top-level OpenDeck output only;'
             echo 'it does not independently rebuild every dependency or plugin.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnose reproducibility failure
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          output="$(nix eval --raw \
+            ".#packages.${TARGET_SYSTEM}.opendeck.outPath")"
+          rebuilt="${output}.check"
+
+          if [[ ! -d "$rebuilt" ]]; then
+            echo "Rebuilt output was not preserved"
+            exit 0
+          fi
+
+          echo "=== Differing files ==="
+          diff -qr "$output" "$rebuilt" || true
+
+          if [[ "$TARGET_SYSTEM" == *-linux ]]; then
+            echo "=== Permissions and symlink differences ==="
+            diff -u \
+              <(cd "$output" && find . -printf '%P\t%m\t%l\n' | sort) \
+              <(cd "$rebuilt" && find . -printf '%P\t%m\t%l\n' | sort) \
+              || true
+          fi
+
+          if [[ "$TARGET_SYSTEM" == *-darwin ]]; then
+            echo "=== Code signatures ==="
+            for path in "$output" "$rebuilt"; do
+              echo "--- $path ---"
+              codesign -dv --verbose=4 \
+                "$path/Applications/OpenDeck.app" 2>&1 \
+                | grep -E 'Signature|CodeDirectory|CDHash|flags' \
+                || true
+            done
+          fi
