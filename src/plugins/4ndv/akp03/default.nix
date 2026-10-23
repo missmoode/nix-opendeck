@@ -27,8 +27,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
   binaryInstallPath =
     if stdenv.hostPlatform.isDarwin then "opendeck-akp03-mac" else "opendeck-akp03-linux";
 
-  # The manifest lives at the repository root, and its icon path
-  # requires the assets/ directory to remain intact.
   assetsDir = null;
 
   postInstall = ''
@@ -38,7 +36,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     cp -a assets/. "$plugin/assets/"
   '';
 
-  # Device permissions are packaged separately from the plugin binary.
   udevRules = {
     "40-opendeck-akp03.rules" = "${finalAttrs.src}/40-opendeck-akp03.rules";
   };

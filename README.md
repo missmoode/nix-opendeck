@@ -525,3 +525,4 @@ See [Device Access on NixOS](#device-access-on-nixos) for configuration instruct
 | Upstream plugin | Package name | Supported devices | Additional setup |
 | --- | --- | --- | --- |
 | [Ajazz AKP03 / Mirabox N3](https://github.com/4ndv/opendeck-akp03) | `opendeck-plugins."4ndv".akp03` | AKP03, Mirabox N3 and compatible devices | Udev rules (Linux) |
+| [Ajazz AKP153 / Mirabox HSV293S](https://github.com/4ndv/opendeck-akp153) | `opendeck-plugins."4ndv".akp153` | AKP153, Mirabox HSV293S and compatible devices | Udev rules (Linux) |

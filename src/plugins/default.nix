@@ -10,6 +10,10 @@ let
       akp03 = pkgs.callPackage ./4ndv/akp03 {
         inherit (pluginLib) mkRustOpenDeckPlugin;
       };
+
+      akp153 = pkgs.callPackage ./4ndv/akp153 {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
     };
 
     babs = {
