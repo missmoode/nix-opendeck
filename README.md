@@ -2,11 +2,6 @@
 
 > [!WARNING]
 > Breaking changes may still happen for a little while. This README will remain up-to-date.
->
-> I *think* the shape of the module configuration should stay the same from this point on,
-> however I **may still make some changes to the NixOS module**: I'd like to make it so that
-> you can just bundle in support plugins for non-Elgato devices to the package, and the
-> NixOS module will automatically install the udev rules.
 
 > [!NOTE]
 > I’m pretty sure that this is properly reproducible, but I’ve not verified this yet.
@@ -45,9 +40,9 @@ nix-opendeck provides:
 the Nix store.
 - Declarative packaging of OpenDeck/OpenActions plugins.
 - A Home Manager module to declaratively manage plugins, and optionally install OpenDeck.
-- A NixOS hardware module for installing the udev rules required by OpenDeck.
+- Udev rules packages for OpenDeck and plugins requiring device access.
 - Protection against OpenDeck modifying externally managed plugins.
-- Optional bundling of plugins directly into the OpenDeck package.
+- Optional bundling of plugins (and Udev rules) directly into the OpenDeck package.
 
 ## Scope
 ### Philosophy
@@ -103,8 +98,8 @@ standalone Nix installations on supported systems.
 > out, you're welcome to open an issue and let me know if it works!
 
 The Home Manager module supports both Linux and macOS.
-The NixOS module is Linux-specific and manages device access
-through udev rules.
+
+On NixOS, device permissions are configured through the standard `services.udev.packages` option, using the udev rules packages provided by this flake.
 
 ### Standalone OpenDeck
 If you just want the package, and don't care about the modules or flake stuff:
@@ -112,6 +107,8 @@ If you just want the package, and don't care about the modules or flake stuff:
 ```bash
 nix profile add github:missmoode/nix-opendeck#opendeck
 ```
+
+This won't automatically configure device permissions: you'll need to [do that yourself](#device-access-on-other-linux-distributions).
 
 ### Flakes
 
@@ -166,13 +163,13 @@ extra-trusted-public-keys = nix-opendeck.cachix.org-1:twvVjvv6Xm9H/m9sD2YQfIDoeU
 
 ## Usage
 
-### NixOS Module
+### Device Access on NixOS
 
-This module automatically sets up udev rules. It **does not install OpenDeck**. If you're not using
-the Home Manager module, you'll have to install it yourself.
+OpenDeck requires udev rules to access supported USB devices. The OpenDeck packages expose
+a `.udev` attribute containing the core Stream Deck rules, along with any additional rules
+provided by bundled plugins.
 
-On Linux distributions other than NixOS, you'll need to configure the udev rules yourself. 
-See the section on [usage without the modules](#usage-without-the-modules).
+Install these rules through NixOS's standard `services.udev.packages` option:
 
 ```nix
 {
@@ -184,24 +181,28 @@ let
   opendeck = inputs.opendeck.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
 in
 {
-  imports = [
-    inputs.opendeck.nixosModules.default
+  services.udev.packages = [
+    opendeck.udev
+    # To include the rules from a non-bundled hardware plugin:
+    # opendeck-plugins."4ndv".akp03.udev
   ];
 
-  config = {
-    # ...
-    hardware.opendeck.enable = true;
-    # ...
-
-    # If you're not using the Home Manager module or
-    # want the installation available system-wide:
-    # 
-    # environment.systemPackages = [
-    #   opendeck
-    # ];
-  };
+  # This only installs the udev rules, not OpenDeck itself.
+  # If you're not using the Home Manager module, you can install it system-wide:
+  #
+  # environment.systemPackages = [ opendeck ];
 }
 ```
+
+Device support plugins installed separately, including through Home Manager, may expose
+their own `.udev` packages. If a plugin requires additional udev rules, add its `.udev`
+attribute to `services.udev.packages` as well.
+
+### Device access on other Linux distributions
+
+On Linux distributions other than NixOS, you'll need to install the required udev rules manually to allow OpenDeck to access your device.
+
+See the relevant step of OpenDeck's [Linux installation instructions](https://github.com/nekename/OpenDeck#linux).
 
 ### Home Manager Module
 
@@ -271,13 +272,7 @@ OpenDeck. Only plugins whose installed paths are changed are affected.
 If OpenDeck isn't running (or the notification fails), the changes will
 take effect when OpenDeck next starts as normal.
 
-### Usage without the modules
-
-#### Udev Rules (Linux)
-If you're on Linux but not using the NixOS module, you'll need to install the required udev subsystem
-rules in order for OpenDeck to detect your Stream Deck.
-
-See the relevant step of OpenDeck’s [Linux installation instructions](https://github.com/nekename/OpenDeck#linux) for the rules and how to install them.
+### Usage without the Home Manager module
 
 #### Using the plugin derivations
 
@@ -311,9 +306,9 @@ You could also use the `opendeck-with-plugins` package, which bundles every plug
 
 ### Overlay
 
-Overlays are optional. The Home Manager and NixOS modules work without them,
-but an overlay lets you access OpenDeck and its plugins through your existing
-`pkgs` argument.
+Overlays are optional. The Home Manager module and NixOS udev configuration work without
+them, but an overlay lets you access OpenDeck, its plugins, and their udev rules through
+your existing `pkgs` argument.
 
 The flake provides two overlays which expose OpenDeck and its plugins through your existing `pkgs` argument:
 - **`inputs.opendeck.overlays.pinned` (recommended):** Uses the same pinned
@@ -445,6 +440,13 @@ pkgs.opendeck-core.override {
   ];
 }
 ```
+
+If a bundled plugin provides udev rules, they are automatically included in the resulting
+OpenDeck package's `.udev` attribute. On NixOS, these rules still need to be explicitly
+installed through `services.udev.packages`.
+
+Plugins installed separately through Home Manager do not contribute rules to the OpenDeck
+package's `.udev` attribute.
 
 The resulting package can then be installed through a mechanism of your choosing.
 

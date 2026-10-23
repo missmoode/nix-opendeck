@@ -6,6 +6,8 @@
   nix-update-script,
   python3,
   writeShellScript,
+  runCommand,
+  symlinkJoin,
 
   rustPlatform,
   cargo-tauri,
@@ -231,17 +233,11 @@ rustPlatform.buildRustPackage (
       chmod -R u+rwX "${finalAttrs.cargoRoot}/target/plugins"
     '';
 
-    postInstall =
-      lib.optionalString stdenv.hostPlatform.isLinux ''
-        install -Dm644 \
-          ${finalAttrs.cargoRoot}/bundle/40-streamdeck.rules \
-          "$out/lib/udev/rules.d/40-streamdeck.rules"
-      ''
-      + ''
-        install -Dm644 \
-          "${finalAttrs.src}/LICENSE.md" \
-          "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
-      '';
+    postInstall = ''
+      install -Dm644 \
+        "${finalAttrs.src}/LICENSE.md" \
+        "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
+    '';
 
     buildInputs = lib.optionals stdenv.hostPlatform.isLinux (
       gstPlugins
@@ -303,6 +299,22 @@ rustPlatform.buildRustPackage (
           "--use-github-releases"
         ];
       };
+    }
+    // lib.optionalAttrs stdenv.hostPlatform.isLinux {
+      udev =
+        let
+          coreRules = runCommand "opendeck-core-udev-rules-${finalAttrs.version}" { } ''
+            install -Dm644 \
+              "${finalAttrs.src}/src-tauri/bundle/40-streamdeck.rules" \
+              "$out/lib/udev/rules.d/40-streamdeck.rules"
+          '';
+
+          pluginRules = map (plugin: plugin.udev) (lib.filter (plugin: plugin ? udev) bundledPlugins);
+        in
+        symlinkJoin {
+          name = "${finalAttrs.pname}-udev-rules-${finalAttrs.version}";
+          paths = [ coreRules ] ++ pluginRules;
+        };
     };
   }
 )

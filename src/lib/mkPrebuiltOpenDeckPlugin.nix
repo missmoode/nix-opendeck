@@ -23,9 +23,10 @@ stdenv.mkDerivation (
       passthru = attrs.passthru or { };
       licenseFiles = attrs.licenseFiles or [ ];
       licenseSource = attrs.licenseSource or null;
+      udevRules = attrs.udevRules or { };
     };
   in
-  attrs
+  (removeAttrs attrs [ "udevRules" ])
   // {
     dontConfigure = true;
     dontBuild = true;

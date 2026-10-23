@@ -43,7 +43,8 @@ rustPlatform.buildRustPackage (
       passthru = attrs.passthru or { };
       licenseFiles = attrs.licenseFiles or [ ];
       licenseSource = attrs.licenseSource or null;
+      udevRules = attrs.udevRules or { };
     };
   in
-  attrs // pluginAttrs
+  (removeAttrs attrs [ "udevRules" ]) // pluginAttrs
 )

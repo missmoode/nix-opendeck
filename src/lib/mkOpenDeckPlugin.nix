@@ -1,6 +1,9 @@
 # For packaging: Where there are software dependencies, package them.
 # Declare system service requirements where needed - things that the plugin expects to exist.
 {
+  lib,
+  stdenv,
+  runCommand,
   nix-update-script,
   jq,
 }:
@@ -16,6 +19,10 @@
   requiredCommands ? [ ],
 
   licenseFiles ? [ ],
+
+  # For plugins which provide compatibility with non-elgato USB hardware.
+  # Optional udev rules: output filename -> source file.
+  udevRules ? { },
 
   # Useful for retrieving license files when the upstream repo hasn't
   # placed them in an expected place, or has ommitted them from the
@@ -58,12 +65,27 @@
 
   inherit meta;
 
-  passthru = passthru // {
-    inherit pluginId requiredCommands;
+  passthru =
+    passthru
+    // {
+      inherit pluginId requiredCommands;
 
-    updateScript =
-      passthru.updateScript or (nix-update-script {
-        extraArgs = [ "--flake" ];
-      });
-  };
+      updateScript =
+        passthru.updateScript or (nix-update-script {
+          extraArgs = [ "--flake" ];
+        });
+    }
+    // lib.optionalAttrs (stdenv.hostPlatform.isLinux && udevRules != { }) {
+      udev = runCommand "${pluginId}-udev-rules" { } ''
+        mkdir -p "$out/lib/udev/rules.d"
+
+        ${lib.concatStringsSep "\n" (
+          lib.mapAttrsToList (name: source: ''
+            install -Dm644 \
+              ${lib.escapeShellArg (toString source)} \
+              "$out/lib/udev/rules.d/"${lib.escapeShellArg name}
+          '') udevRules
+        )}
+      '';
+    };
 }

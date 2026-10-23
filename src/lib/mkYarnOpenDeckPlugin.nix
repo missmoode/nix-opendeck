@@ -28,9 +28,10 @@ stdenv.mkDerivation (
       passthru = attrs.passthru or { };
       licenseFiles = attrs.licenseFiles or [ ];
       licenseSource = attrs.licenseSource or null;
+      udevRules = attrs.udevRules or { };
     };
   in
-  attrs
+  (removeAttrs attrs [ "udevRules" ])
   // {
     yarnOfflineCache = fetchYarnDeps {
       yarnLock = finalAttrs.src + "/yarn.lock";

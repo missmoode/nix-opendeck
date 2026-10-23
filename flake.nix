@@ -30,7 +30,13 @@
         pkgs:
         let
           mkOpenDeckPlugin = import ./src/lib/mkOpenDeckPlugin.nix {
-            inherit (pkgs) nix-update-script jq;
+            inherit (pkgs)
+              lib
+              stdenv
+              runCommand
+              nix-update-script
+              jq
+              ;
           };
 
           mkRustOpenDeckPlugin = import ./src/lib/mkRustOpenDeckPlugin.nix {
@@ -136,11 +142,7 @@
             ];
           };
 
-          opendeck-udev-rules = final.runCommand "opendeck-udev-rules-${opendeck-core.version}" { } ''
-            install -Dm644 \
-              ${opendeck-core.src}/src-tauri/bundle/40-streamdeck.rules \
-              "$out/lib/udev/rules.d/40-streamdeck.rules"
-          '';
+          opendeck-udev-rules = opendeck-core.udev;
         in
         {
           packages = {
@@ -188,13 +190,6 @@
 
           mkPrebuiltOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkPrebuiltOpenDeckPlugin;
         };
-
-        nixosModules.default =
-          { pkgs, ... }@moduleArgs:
-          (import ./src/modules/nixos.nix {
-            defaultUdevPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck-udev-rules;
-          })
-            moduleArgs;
 
         homeManagerModules.default =
           { pkgs, ... }@moduleArgs:
