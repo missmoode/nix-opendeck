@@ -146,3 +146,38 @@ jobs:
                 || true
             done
           fi
+
+      - name: Archive non-reproducible outputs
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          output="$(nix eval --raw \
+            ".#packages.${TARGET_SYSTEM}.opendeck.outPath")"
+          rebuilt="${output}.check"
+
+          if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
+            echo "Both outputs are not available; skipping archival."
+            exit 0
+          fi
+
+          archive_dir="$RUNNER_TEMP/opendeck-repro"
+          mkdir -p "$archive_dir"
+
+          # Preserve permissions, symlinks and binary contents.
+          tar -C "$output" -cf "$archive_dir/reference.tar" .
+          tar -C "$rebuilt" -cf "$archive_dir/rebuilt.tar" .
+
+          printf 'System: %s\nReference: %s\nRebuilt: %s\n' \
+            "$TARGET_SYSTEM" "$output" "$rebuilt" \
+            > "$archive_dir/paths.txt"
+
+      - name: Upload reproducibility artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: opendeck-repro-${{ matrix.system }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/opendeck-repro/
+          if-no-files-found: ignore
+          retention-days: 7
