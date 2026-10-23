@@ -34,6 +34,12 @@ let
       };
     };
 
+    havner = {
+      uinput-simulation = pkgs.callPackage ./havner/uinput-simulation {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
     openactionplugins = {
       counter = pkgs.callPackage ./openactionplugins/counter {
         inherit (pluginLib) mkRustOpenDeckPlugin;
