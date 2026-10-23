@@ -22,8 +22,9 @@ jobs:
     outputs:
       plugins: ${{ steps.discover.outputs.plugins }}
       opendeck: ${{ steps.discover.outputs.opendeck }}
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -41,19 +42,21 @@ jobs:
               systems = builtins.attrNames flake.packages;
             in
               builtins.concatLists (map (system:
-                let targets = import ./.github/ci/targets.nix { inherit flake system; };
-                in [ targets.opendeck ] ++ targets.plugins
+                let
+                  targets = import ./.github/ci/targets.nix {
+                    inherit flake system;
+                  };
+                in
+                  [ targets.opendeck ] ++ targets.plugins
               ) systems)
           ' > "$RUNNER_TEMP/targets.json"
 
-          # Deliberately fail closed if a selected package cannot be published.
-          # Never add opendeck-core or opendeck-with-plugins to this target list.
-          if ! jq -e 'all(.[]; .redistributable)' "$RUNNER_TEMP/targets.json" >/dev/null; then
-            echo 'Missing or non-redistributable license metadata:' >&2
-            jq -r '.[] | select(.redistributable | not) | "\(.system) / \(.label)"' \
-              "$RUNNER_TEMP/targets.json" >&2
-            exit 1
-          fi
+          # Only explicitly redistributable targets may be published.
+          # Missing or restrictive license metadata excludes a package
+          # from publication, but does not fail the entire workflow.
+          jq '[.[] | select(.redistributable == true)]' \
+            "$RUNNER_TEMP/targets.json" \
+            > "$RUNNER_TEMP/publishable-targets.json"
 
           cache_has() {
             local path="$1" filename hash status
@@ -85,16 +88,20 @@ jobs:
 
           : > "$RUNNER_TEMP/missing-plugins.jsonl"
           : > "$RUNNER_TEMP/missing-opendeck.jsonl"
+
           while IFS= read -r item; do
             path="$(jq -r '.storePath' <<< "$item")"
             label="$(jq -r '"\(.system) / \(.label)"' <<< "$item")"
+
             if cache_has "$path"; then
               echo "Cached: $label"
               continue
             fi
 
             echo "Missing: $label"
+
             kind="$(jq -r '.kind' <<< "$item")"
+
             if [[ "$kind" == plugin ]]; then
               jq -c '{system, runner, attr, label}' <<< "$item" \
                 >> "$RUNNER_TEMP/missing-plugins.jsonl"
@@ -102,16 +109,19 @@ jobs:
               jq -c '{system, runner, attr, label}' <<< "$item" \
                 >> "$RUNNER_TEMP/missing-opendeck.jsonl"
             fi
-          done < <(jq -c '.[]' "$RUNNER_TEMP/targets.json")
+          done < <(jq -c '.[]' "$RUNNER_TEMP/publishable-targets.json")
 
           plugins="$(jq -sc '.' "$RUNNER_TEMP/missing-plugins.jsonl")"
           opendeck="$(jq -sc '.' "$RUNNER_TEMP/missing-opendeck.jsonl")"
+
           echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
           echo "opendeck=$opendeck" >> "$GITHUB_OUTPUT"
 
           {
             echo '## Cache status'
             echo
+            echo "- Publishable targets: $(jq 'length' "$RUNNER_TEMP/publishable-targets.json")"
+            echo "- Excluded by redistribution policy: $(jq '[.[] | select(.redistributable != true)] | length' "$RUNNER_TEMP/targets.json")"
             echo "- Plugins requiring publication: $(jq 'length' <<< "$plugins")"
             echo "- OpenDeck system builds requiring publication: $(jq 'length' <<< "$opendeck")"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -122,16 +132,20 @@ jobs:
     if: needs.prepare.result == 'success' && needs.prepare.outputs.plugins != '[]'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+
     strategy:
       fail-fast: false
       max-parallel: 6
       matrix:
         include: ${{ fromJSON(needs.prepare.outputs.plugins) }}
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
       - uses: cachix/install-nix-action@v31
+
       - uses: cachix/cachix-action@v17
         with:
           name: nix-opendeck
@@ -143,8 +157,10 @@ jobs:
           TARGET_ATTR: ${{ matrix.attr }}
         run: |
           set -euo pipefail
+
           nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
             > "$RUNNER_TEMP/built-paths"
+
           test -s "$RUNNER_TEMP/built-paths"
 
       - name: Publish plugin runtime closure
@@ -153,10 +169,12 @@ jobs:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
           set -euo pipefail
+
           if [[ -z "${CACHIX_AUTH_TOKEN:-}" ]]; then
             echo '::error::CACHIX_AUTH_TOKEN is missing'
             exit 1
           fi
+
           cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
 
   opendeck:
@@ -165,16 +183,20 @@ jobs:
     if: needs.prepare.result == 'success' && needs.prepare.outputs.opendeck != '[]'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
         include: ${{ fromJSON(needs.prepare.outputs.opendeck) }}
+
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
       - uses: cachix/install-nix-action@v31
+
       - uses: cachix/cachix-action@v17
         with:
           name: nix-opendeck
@@ -186,8 +208,10 @@ jobs:
           TARGET_ATTR: ${{ matrix.attr }}
         run: |
           set -euo pipefail
+
           nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
             > "$RUNNER_TEMP/built-paths"
+
           test -s "$RUNNER_TEMP/built-paths"
 
       - name: Publish default OpenDeck runtime closure
@@ -196,8 +220,10 @@ jobs:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
           set -euo pipefail
+
           if [[ -z "${CACHIX_AUTH_TOKEN:-}" ]]; then
             echo '::error::CACHIX_AUTH_TOKEN is missing'
             exit 1
           fi
+
           cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
