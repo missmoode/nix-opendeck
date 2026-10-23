@@ -6,6 +6,13 @@
 
 let
   plugins = {
+
+    babs = {
+      rotary-command = pkgs.callPackage ./babs/rotary-command {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
     cronusak = {
       pipewire-audio = pkgs.callPackage ./cronusak/pipewire-audio {
         inherit (pluginLib) mkNpmOpenDeckPlugin;
