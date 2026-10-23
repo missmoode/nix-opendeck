@@ -5,7 +5,7 @@ name: Reproducibility (x86_64-linux)
 on:
   schedule:
     # Away from the top of the hour, when GitHub schedules are often delayed.
-    - cron: '17 5 * * 1'
+    - cron: '17 5 * * 4'
   workflow_dispatch:
 
 permissions:
