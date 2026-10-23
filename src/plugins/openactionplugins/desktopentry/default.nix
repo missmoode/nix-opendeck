@@ -80,6 +80,11 @@ mkRustOpenDeckPlugin (
     postPatch = ''
       ln -s ${./Cargo.lock} Cargo.lock
       ln -s ${./deno.lock} pi/deno.lock
+
+			substituteInPlace pi/svelte.config.ts \
+			  --replace-fail \
+			  'adapter: adapter({ pages: "../assets/pi" }),' \
+			  'adapter: adapter({ pages: "../assets/pi" }), version: { name: "${finalAttrs.version}" },'
     '';
     nativeBuildInputs = [
       deno
