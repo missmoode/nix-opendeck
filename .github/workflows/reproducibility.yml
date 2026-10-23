@@ -1,5 +1,5 @@
-# Spot-check the default OpenDeck package against the independently built
-# artifact published by the binary-cache workflow.
+# Spot-check the default OpenDeck package against its independently built
+# artifact published to Cachix.
 name: Reproducibility
 
 on:
