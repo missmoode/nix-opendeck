@@ -32,7 +32,7 @@ jobs:
           name: nix-opendeck
           skipPush: true
 
-      - name: Fetch existing reference build from Cachix
+      - name: Fetch published OpenDeck reference
         shell: bash
         run: |
           set -euo pipefail
@@ -44,10 +44,15 @@ jobs:
             exit 1
           }
 
-          # Fail if the *exact* current derivation is not already published.
-          # Unlike `nix build`, `nix copy --from` cannot fall back to compiling it.
-          echo "Fetching reference: $output"
-          nix copy --from https://nix-opendeck.cachix.org "$output"
+          # Require the exact output to be published in Cachix.
+          # Query only the top-level path: its dependencies may live in other caches.
+          echo "Checking reference in Cachix: $output"
+          nix path-info --store https://nix-opendeck.cachix.org "$output"
+
+          # Download via the configured substituters (Cachix and cache.nixos.org).
+          # Never build a missing reference locally, or the comparison would
+          # silently become a same-run double build instead of a cache comparison.
+          nix build "$attr" --max-jobs 0 --no-link -L
           nix path-info "$output"
 
           {
