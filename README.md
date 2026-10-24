@@ -202,7 +202,7 @@ in
 }
 ```
 
-Device support plugins installed separately, including through Home Manager, may expose
+[Device support plugins](#device-support-plugins) installed separately, including through Home Manager, may expose
 their own `.udev` packages. If a plugin requires additional udev rules, add its `.udev`
 attribute to `services.udev.packages` as well.
 
@@ -211,6 +211,8 @@ attribute to `services.udev.packages` as well.
 On Linux distributions other than NixOS, you'll need to install the required udev rules manually to allow OpenDeck to access your device.
 
 See the relevant step of OpenDeck's [Linux installation instructions](https://github.com/nekename/OpenDeck#linux).
+
+The udev rules for [device support plugins](#device-support-plugins) can usually be found in their upstream repo.
 
 ### Home Manager Module
 
