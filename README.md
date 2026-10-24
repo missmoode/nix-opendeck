@@ -291,6 +291,27 @@ The `wrapOpenDeck` helper creates an OpenDeck package containing your chosen plu
 With either [overlay](#overlay) applied, you can use `pkgs.wrapOpenDeck`:
 
 ```nix
+{ pkgs, ... }:
+let
+  customOpenDeck = pkgs.wrapOpenDeck {
+    plugins = with pkgs.opendeck-plugins; [
+      nekename.starterpack
+      openactionplugins.mpris
+      gallowaylabs.tomato-timer
+    ];
+  };
+in
+{
+  environment.systemPackages = [ customOpenDeck ];
+
+  # NixOS only: install rules for supported devices.
+  services.udev.packages = [ customOpenDeck.udev ];
+}
+```
+
+**Using Home Manager:** You can also set `programs.opendeck.package` to a custom bundle, with or without an overlay. Additional plugins can still be managed separately through `programs.opendeck.plugins`.
+
+```nix
 { inputs, pkgs, ... }:
 let
   opendeck = inputs.opendeck.legacyPackages.${pkgs.stdenv.hostPlatform.system};
@@ -316,7 +337,7 @@ in
 }
 ```
 
-Alternatively, you can use the helper directly from the flake without an overlay:
+Alternatively, you can use the helper directly from the flake without an overlay or Home Manager:
 
 ```nix
 { inputs, pkgs, ... }:
@@ -339,7 +360,7 @@ in
 }
 ```
 
-Both examples use NixOS to install the resulting package, but the wrapper itself is not NixOS-specific.
+The examples using `environment.systemPackages` demonstrate NixOS installation, but `wrapOpenDeck` itself is also available on nix-darwin and standalone Nix installations.
 
 The wrapper retains OpenDeck's normal bundled-plugin behaviour, desktop integration, command-line arguments, and built-in autostart functionality. On Linux, bundled plugins are provided through a separate Nix store directory. On macOS, they are assembled into the application bundle without recompiling the application.
 
