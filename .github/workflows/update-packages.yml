@@ -5,8 +5,8 @@ on:
     - cron: '17 12 * * *'
   workflow_dispatch:
 
-# Updaters and builders only require read access. The final PR job alone
-# receives write access, so update scripts cannot push to the repository.
+# Updaters and native builders use only read access. A short-lived GitHub App
+# token is created in the final job, after the proposed changes are validated.
 permissions:
   contents: read
 
@@ -23,7 +23,7 @@ jobs:
       base_sha: ${{ steps.base.outputs.sha }}
       updaters: ${{ steps.targets.outputs.updaters }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           persist-credentials: false
@@ -84,7 +84,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.discover.outputs.updaters) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
@@ -137,7 +137,7 @@ jobs:
       plugins: ${{ steps.plan.outputs.plugins }}
       opendeck: ${{ steps.plan.outputs.opendeck }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
@@ -182,7 +182,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare-builds.outputs.plugins) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
@@ -227,7 +227,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare-builds.outputs.opendeck) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.discover.outputs.base_sha }}
           persist-credentials: false
@@ -265,15 +265,14 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
-          # This job evaluates proposed source changes. Only the PR action
-          # needs write credentials; checkout must not persist them.
+          # Proposed changes are evaluated here; only the PR action needs
+          # write access, via the short-lived GitHub App token.
           persist-credentials: false
       - uses: actions/download-artifact@v8
         if: needs.discover.result == 'success'
@@ -351,11 +350,25 @@ jobs:
             echo
             echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Generate the token as late as possible; it expires after one hour.
+      - name: Generate automation token
+        id: app-token
+        if: steps.finish.outputs.ready == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Create or update PR containing validated sources
         id: pr
         if: steps.finish.outputs.ready == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
           base: ${{ github.ref_name }}
           branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/package-updates' || format('automated/package-updates-{0}', github.ref_name) }}
           delete-branch: true
@@ -366,6 +379,28 @@ jobs:
             updates
             upstream
           assignees: ${{ vars.UPDATE_MAINTAINERS }}
+
+      # Partial successes still produce a PR, but never auto-merge it.
+      - name: Enable auto-merge for fully successful updates
+        id: merge
+        if: >-
+          github.ref_name == github.event.repository.default_branch &&
+          steps.finish.outputs.failed == 'false' &&
+          steps.pr.outputs.pull-request-number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.pull-request-number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.pull-request-head-sha }}
+        run: |
+          set -euo pipefail
+          gh pr merge "$PR_NUMBER" \
+            --auto \
+            --squash \
+            --match-head-commit "$PR_HEAD_SHA"
+          echo "Auto-merge requested for PR #$PR_NUMBER; required checks must pass." \
+            >> "$GITHUB_STEP_SUMMARY"
+
       - name: Fail after reporting all errors
         if: >-
           needs.discover.result != 'success' ||
@@ -373,5 +408,11 @@ jobs:
           needs.prepare-builds.result != 'success' ||
           steps.finish.outcome != 'success' ||
           steps.finish.outputs.failed != 'false' ||
-          steps.pr.outcome == 'failure'
+          steps.pr.outcome == 'failure' ||
+          (steps.finish.outputs.ready == 'true' &&
+           steps.pr.outputs.pull-request-number == '') ||
+          (github.ref_name == github.event.repository.default_branch &&
+           steps.finish.outputs.ready == 'true' &&
+           steps.finish.outputs.failed == 'false' &&
+           steps.merge.outcome != 'success')
         run: exit 1
