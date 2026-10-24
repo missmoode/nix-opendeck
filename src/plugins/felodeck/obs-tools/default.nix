@@ -24,11 +24,12 @@ mkRustOpenDeckPlugin (finalAttrs: {
     "obs-tools"
   ];
 
-  postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
-	  # Remove linker-generated debug-map entries containing temporary
-	  # build paths from ring's native object files.
-	  strip -S "$out/${finalAttrs.pluginId}/${finalAttrs.binaryInstallPath}"
-	'';
+  preBuild = lib.optionalString stdenv.hostPlatform.isDarwin ''
+    # ring's object-file paths vary between Nix builds.
+    # Exclude their debug-map entries during linking so they cannot
+    # affect the content-derived Mach-O UUID or code signature.
+    export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-Wl,-S"
+  '';
 
   pluginId = "de.felitendo.obs-tools.sdPlugin";
   assetsDir = finalAttrs.pluginId;
