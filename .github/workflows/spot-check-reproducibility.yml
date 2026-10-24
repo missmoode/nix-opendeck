@@ -4,9 +4,9 @@
 name: Reproducibility Spot-check
 
 on:
-  schedule:
-    # Away from the top of the hour, when GitHub schedules are often delayed.
-    - cron: '17 5 * * 4'
+  # schedule:
+  #   # Away from the top of the hour, when GitHub schedules are often delayed.
+  #   - cron: '17 5 * * 4'
   workflow_dispatch:
 
 permissions:
