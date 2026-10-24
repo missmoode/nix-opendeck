@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 45
     outputs:
       targets: ${{ steps.compare.outputs.targets }}
+      jobs: ${{ steps.compare.outputs.jobs }}
 
     steps:
       # The default PR checkout is GitHub's proposed merge commit.
@@ -62,7 +63,9 @@ jobs:
                         inherit flake system;
                       };
                     in
-                      [ targets.opendeck ] ++ targets.plugins
+                      [ targets.opendeck ]
+                      ++ (if targets ? core then [ targets.core ] else [ ])
+                      ++ targets.plugins
                   ) systems)
               '
             ) > "$output"
@@ -81,13 +84,31 @@ jobs:
               ]
           ' "$RUNNER_TEMP/pr-targets.json" > "$RUNNER_TEMP/changed-targets.json"
 
+          # Group changed core/wrapper targets by platform so they share a Nix
+          # store and run in dependency order. Keep plugins in separate jobs.
+          jq -c '
+            ([.[] | select(.kind == "core" or .kind == "opendeck")]
+              | group_by(.system)
+              | map(sort_by(if .kind == "core" then 0 else 1 end)
+                | {
+                    system: .[0].system,
+                    runner: .[0].runner,
+                    label: (map(.label) | join(" + ")),
+                    targets: .
+                  }))
+            + ([.[] | select(.kind == "plugin")]
+              | map({system, runner, label, targets: [.] }))
+          ' "$RUNNER_TEMP/changed-targets.json" > "$RUNNER_TEMP/check-jobs.json"
+
           echo "targets=$(cat "$RUNNER_TEMP/changed-targets.json")" >> "$GITHUB_OUTPUT"
+          echo "jobs=$(cat "$RUNNER_TEMP/check-jobs.json")" >> "$GITHUB_OUTPUT"
 
           {
             echo '## Changed package outputs'
             echo
             echo "- PR targets: $(jq 'length' "$RUNNER_TEMP/pr-targets.json")"
             echo "- Changed/new targets: $(jq 'length' "$RUNNER_TEMP/changed-targets.json")"
+            echo "- Native runner jobs: $(jq 'length' "$RUNNER_TEMP/check-jobs.json")"
             echo
             if [[ "$(jq 'length' "$RUNNER_TEMP/changed-targets.json")" -eq 0 ]]; then
               echo 'No changed package outputs require a reproducibility rebuild.'
@@ -101,7 +122,7 @@ jobs:
   check:
     name: 'Rebuild: ${{ matrix.system }} / ${{ matrix.label }}'
     needs: discover
-    if: ${{ needs.discover.outputs.targets != '[]' }}
+    if: ${{ needs.discover.result == 'success' && needs.discover.outputs.jobs != '[]' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
 
@@ -109,14 +130,11 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix:
-        include: ${{ fromJSON(needs.discover.outputs.targets) }}
+        include: ${{ fromJSON(needs.discover.outputs.jobs) }}
 
     env:
       TARGET_SYSTEM: ${{ matrix.system }}
-      TARGET_KIND: ${{ matrix.kind }}
-      TARGET_ATTR: ${{ matrix.attr }}
-      TARGET_LABEL: ${{ matrix.label }}
-      REDISTRIBUTABLE: ${{ matrix.redistributable }}
+      TARGETS_JSON: ${{ toJSON(matrix.targets) }}
 
     steps:
       - uses: actions/checkout@v7
@@ -130,151 +148,149 @@ jobs:
           name: nix-opendeck
           skipPush: true
 
-      - name: Fetch or build reference from PR
-        id: reference
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          attr=".#${TARGET_ATTR}"
-          output="$(nix eval --raw "${attr}.outPath")"
-          [[ "$output" == /nix/store/* ]] || {
-            echo "Unexpected output path: $output" >&2
-            exit 1
-          }
-
-          # The PR's proposed output is not expected to exist in Cachix.
-          # Build locally if no substitute is available; never publish it.
-          nix build "$attr" --no-link -L
-          nix path-info "$output"
-
-          {
-            echo '## Reference'
-            echo
-            echo "- Target: \`${TARGET_ATTR}\`"
-            echo "- Store path: \`$output\`"
-            echo '- Source: configured substituter or local build'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Verify macOS OpenDeck bundle
-        if: matrix.system == 'aarch64-darwin' && matrix.kind == 'opendeck'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
-          app="$output/Applications/OpenDeck.app"
-          plugins="$app/Contents/Resources/plugins"
-
-          echo "Checking native architecture"
-          uname -m
-          test "$(uname -m)" = arm64
-
-          echo "Checking application structure"
-          test -x "$app/Contents/MacOS/opendeck"
-          test -d "$plugins"
-          test -x "$output/bin/opendeck"
-
-          echo "Checking bundled plugins"
-          nix eval --json \
-            '.#packages.aarch64-darwin.opendeck.bundledPluginIds' \
-            | jq -e 'length > 0'
-
-          while IFS= read -r id; do
-            echo "Checking plugin: $id"
-            test -f "$plugins/$id/manifest.json"
-          done < <(
-            nix eval --json \
-              '.#packages.aarch64-darwin.opendeck.bundledPluginIds' \
-              | jq -r '.[]'
-          )
-
-          echo "Verifying application signature"
-          codesign --verify --deep --strict --verbose=2 "$app"
-
-          echo "Inspecting signature"
-          codesign --display --verbose=4 "$app"
-
-          echo "macOS OpenDeck bundle checks passed"
-
-      - name: Rebuild and compare outputs
+      - name: Build and independently rebuild changed targets
         id: rebuild
         shell: bash
         run: |
           set -euo pipefail
 
-          # Rebuild this derivation, reusing its dependencies as appropriate.
-          nix build ".#${TARGET_ATTR}" \
-            --rebuild \
-            --no-link \
-            --keep-failed \
-            -L
+          results="$RUNNER_TEMP/repro-results.jsonl"
+          archive_root="$RUNNER_TEMP/opendeck-repro"
+          : > "$results"
+          failed=false
 
-      - name: Diagnose reproducibility failure
-        if: ${{ failure() }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          verify_macos_bundle() {
+            local attr="$1" output="$2" app plugin_dir plugin_ids id
+            app="$output/Applications/OpenDeck.app"
+            plugin_dir="$app/Contents/Resources/plugins"
 
-          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
-          rebuilt="${output}.check"
-          if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
-            echo 'Both outputs are not available for comparison.'
-            exit 0
-          fi
+            echo 'Checking native architecture and application structure'
+            [[ "$(uname -m)" == arm64 ]] || return 1
+            test -x "$app/Contents/MacOS/opendeck" || return 1
+            test -d "$plugin_dir" || return 1
+            test -x "$output/bin/opendeck" || return 1
 
-          # Keep a bounded excerpt for the summary and full diagnostics in logs.
-          {
-            echo '=== Differing files ==='
-            diff -qr "$output" "$rebuilt" || true
+            echo 'Checking bundled plugin manifests'
+            plugin_ids="$(nix eval --json ".#${attr}.bundledPluginIds")" || return 1
+            jq -e 'type == "array" and length > 0' <<< "$plugin_ids" > /dev/null || return 1
+            while IFS= read -r id; do
+              echo "Checking plugin: $id"
+              test -f "$plugin_dir/$id/manifest.json" || return 1
+            done < <(jq -r '.[]' <<< "$plugin_ids")
 
-            if [[ "$TARGET_SYSTEM" == *-linux ]]; then
-              echo '=== Permissions and symlink differences ==='
-              diff -u \
-                <(cd "$output" && find . -printf '%P\t%m\t%l\n' | sort) \
-                <(cd "$rebuilt" && find . -printf '%P\t%m\t%l\n' | sort) \
-                || true
+            echo 'Verifying application signature'
+            codesign --verify --deep --strict --verbose=2 "$app" || return 1
+            codesign --display --verbose=4 "$app" || return 1
+          }
+
+          # Nix --rebuild rebuilds the selected derivation, not its dependencies.
+          # If core changed, its reference remains in this runner's Nix store
+          # when we subsequently build and check the wrapper.
+          while IFS= read -r target; do
+            kind="$(jq -r '.kind' <<< "$target")"
+            attr="$(jq -r '.attr' <<< "$target")"
+            label="$(jq -r '.label' <<< "$target")"
+            redistributable="$(jq -r '.redistributable' <<< "$target")"
+            reference=failed
+            bundle=skipped
+            rebuild=skipped
+            output=""
+
+            echo "::group::${TARGET_SYSTEM} / ${label}"
+            echo "Reference: .#${attr}"
+
+            # The PR's output may be substituted or built locally; never publish it.
+            if output="$(nix eval --raw ".#${attr}.outPath")" \
+              && [[ "$output" == /nix/store/* ]] \
+              && nix build ".#${attr}" --no-link -L \
+              && nix path-info "$output"; then
+              reference=success
             fi
 
-            if [[ "$TARGET_KIND" == opendeck && "$TARGET_SYSTEM" == *-darwin ]]; then
-              echo '=== Code signatures ==='
-              for path in "$output" "$rebuilt"; do
-                echo "--- $path ---"
-                codesign -dv --verbose=4 \
-                  "$path/Applications/OpenDeck.app" 2>&1 \
-                  | grep -E 'Signature|CodeDirectory|CDHash|flags' \
-                  || true
-              done
+            # Preserve the original macOS bundle check, after the reference
+            # is available and before the independent reproducibility rebuild.
+            if [[ "$reference" == success && "$kind" == opendeck && "$TARGET_SYSTEM" == *-darwin ]]; then
+              if verify_macos_bundle "$attr" "$output"; then
+                bundle=success
+              else
+                bundle=failed
+              fi
             fi
-          } | tee "$RUNNER_TEMP/repro-differences.txt"
 
-      - name: Archive non-reproducible outputs
-        if: ${{ failure() && matrix.redistributable }}
-        shell: bash
-        run: |
-          set -euo pipefail
+            if [[ "$reference" == success && "$bundle" != failed ]]; then
+              echo "Independently rebuilding: .#${attr}"
+              if nix build ".#${attr}" --rebuild --no-link --keep-failed -L; then
+                rebuild=success
+              else
+                rebuild=failed
+              fi
+            fi
 
-          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
-          rebuilt="${output}.check"
-          if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
-            echo 'Both outputs are not available; skipping archival.'
-            exit 0
-          fi
+            if [[ "$reference" != success || "$bundle" == failed || "$rebuild" != success ]]; then
+              failed=true
+              rebuilt="${output}.check"
 
-          archive_dir="$RUNNER_TEMP/opendeck-repro"
-          mkdir -p "$archive_dir"
-          tar -C "$output" -cf "$archive_dir/reference.tar" .
-          tar -C "$rebuilt" -cf "$archive_dir/rebuilt.tar" .
-          printf 'Target: %s\nSystem: %s\nReference: %s\nRebuilt: %s\n' \
-            "$TARGET_ATTR" "$TARGET_SYSTEM" "$output" "$rebuilt" \
-            > "$archive_dir/paths.txt"
+              if [[ -d "$output" && -d "$rebuilt" ]]; then
+                echo '=== Differing files ==='
+                diff -qr "$output" "$rebuilt" || true
+
+                if [[ "$TARGET_SYSTEM" == *-linux ]]; then
+                  echo '=== Permissions and symlink differences ==='
+                  diff -u \
+                    <(cd "$output" && find . -printf '%P\t%m\t%l\n' | sort) \
+                    <(cd "$rebuilt" && find . -printf '%P\t%m\t%l\n' | sort) \
+                    || true
+                fi
+
+                if [[ "$TARGET_SYSTEM" == *-darwin && ( "$kind" == core || "$kind" == opendeck ) ]]; then
+                  echo '=== Code signatures ==='
+                  for path in "$output" "$rebuilt"; do
+                    echo "--- $path ---"
+                    codesign -dv --verbose=4 \
+                      "$path/Applications/OpenDeck.app" 2>&1 \
+                      | grep -E 'Signature|CodeDirectory|CDHash|flags' \
+                      || true
+                  done
+                fi
+
+                if [[ "$redistributable" == true ]]; then
+                  archive_dir="$archive_root/$TARGET_SYSTEM/$kind"
+                  mkdir -p "$archive_dir"
+                  tar -C "$output" -cf "$archive_dir/reference.tar" .
+                  tar -C "$rebuilt" -cf "$archive_dir/rebuilt.tar" .
+                  printf 'Target: %s\nSystem: %s\nReference: %s\nRebuilt: %s\n' \
+                    "$attr" "$TARGET_SYSTEM" "$output" "$rebuilt" \
+                    > "$archive_dir/paths.txt"
+                fi
+              else
+                echo 'Both reference and rebuilt outputs are not available for comparison.'
+              fi
+            fi
+
+            jq -nc \
+              --arg label "$label" \
+              --arg reference "$reference" \
+              --arg bundle "$bundle" \
+              --arg rebuild "$rebuild" \
+              '{label: $label, reference: $reference, bundle: $bundle, rebuild: $rebuild}' \
+              >> "$results"
+            echo '::endgroup::'
+
+            # Avoid building a wrapper whose core has just failed; remaining
+            # targets are reported as skipped in the job summary.
+            if [[ "$failed" == true ]]; then
+              break
+            fi
+          done < <(jq -c '.[]' <<< "$TARGETS_JSON")
+
+          [[ "$failed" == false ]]
 
       - name: Upload reproducibility artifacts
         id: repro_artifact
-        if: ${{ failure() && matrix.redistributable }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@v7
         with:
-          name: pr-repro-${{ matrix.system }}-${{ matrix.attr }}-${{ github.run_attempt }}
+          name: pr-repro-${{ matrix.system }}-${{ github.run_attempt }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/opendeck-repro/
           if-no-files-found: ignore
           retention-days: 7
@@ -283,44 +299,42 @@ jobs:
         if: ${{ always() }}
         shell: bash
         env:
-          REFERENCE_RESULT: ${{ steps.reference.outcome }}
-          REBUILD_RESULT: ${{ steps.rebuild.outcome }}
           ARTIFACT_URL: ${{ steps.repro_artifact.outputs.artifact-url }}
+          CHECK_OUTCOME: ${{ steps.rebuild.outcome }}
         run: |
           set -euo pipefail
 
           {
             echo '## Reproducibility result'
             echo
-            echo "**${TARGET_SYSTEM} / ${TARGET_LABEL}**"
+            echo "**${TARGET_SYSTEM}**"
             echo
-
-            if [[ "$REFERENCE_RESULT" != success ]]; then
-              echo '**Failed — reference acquisition or build did not complete.**'
-            elif [[ "$REBUILD_RESULT" == success ]]; then
-              echo '**Passed — rebuilt output matches the reference bit-for-bit.**'
-            elif [[ -f "$RUNNER_TEMP/repro-differences.txt" ]]; then
-              echo '**Failed — rebuilt output differs from the reference.**'
-              echo
-              echo 'First 35 diagnostic lines (see job logs for the rest):'
-              echo '```text'
-              sed -n '1,35p' "$RUNNER_TEMP/repro-differences.txt"
-              echo '```'
+            if [[ -s "$RUNNER_TEMP/repro-results.jsonl" ]]; then
+              jq -r '
+                "- **\(.label)**: " +
+                (if .reference != "success" then "reference acquisition/build failed"
+                 elif .bundle == "failed" then "macOS bundle validation failed"
+                 elif .rebuild == "success" then "reproduced bit-for-bit"
+                 else "rebuild failed or differs from reference" end)
+              ' "$RUNNER_TEMP/repro-results.jsonl"
             else
-              echo '**Failed — rebuild or test did not complete.**'
-              echo 'See the rebuild step logs for the error.'
+              echo 'No checks completed. See the job logs.'
             fi
-
+            echo
+            if [[ -s "$RUNNER_TEMP/repro-results.jsonl" ]]; then
+              checked="$(wc -l < "$RUNNER_TEMP/repro-results.jsonl" | tr -d ' ')"
+              expected="$(jq 'length' <<< "$TARGETS_JSON")"
+              if (( checked < expected )); then
+                echo 'Remaining targets were skipped after an earlier failure.'
+                echo
+              fi
+            fi
+            if [[ "$CHECK_OUTCOME" != success ]]; then
+              echo 'See the build logs and diagnostics above for the failure.'
+            fi
             if [[ -n "$ARTIFACT_URL" ]]; then
               echo
-              echo "[Download reference and rebuilt archives]($ARTIFACT_URL) (retained for 7 days)."
-            elif [[ "$REBUILD_RESULT" != success ]]; then
-              echo
-              if [[ "$REDISTRIBUTABLE" != true ]]; then
-                echo 'Binary archives were not uploaded (redistribution restricted).'
-              else
-                echo 'No binary archives available (both outputs may not have been preserved).'
-              fi
+              echo "[Download differing outputs]($ARTIFACT_URL) (retained for 7 days)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
