@@ -273,6 +273,11 @@ rustPlatform.buildRustPackage (
     '';
 
     postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
+      # The linker can produce a different LC_UUID for otherwise identical
+      # executables. Normalize it after stripping but before signing.
+      ${python3}/bin/python3 ${./normalize-mach-o-uuid.py} \
+        "$out/Applications/OpenDeck.app/Contents/MacOS/opendeck"
+
       rcodesign sign \
         --code-signature-flags runtime \
         "$out/Applications/OpenDeck.app"
