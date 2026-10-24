@@ -98,6 +98,7 @@ jobs:
       TARGET_KIND: ${{ matrix.kind }}
       TARGET_ATTR: ${{ matrix.attr }}
       TARGET_LABEL: ${{ matrix.label }}
+      REDISTRIBUTABLE: ${{ matrix.redistributable }}
 
     steps:
       - uses: actions/checkout@v7
@@ -112,6 +113,7 @@ jobs:
           skipPush: true
 
       - name: Fetch or build reference
+        id: reference
         shell: bash
         run: |
           set -euo pipefail
@@ -157,6 +159,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Rebuild and compare outputs
+        id: rebuild
         shell: bash
         run: |
           set -euo pipefail
@@ -171,15 +174,6 @@ jobs:
             --keep-failed \
             -L
 
-          {
-            echo
-            echo '## Result'
-            echo
-            echo "${TARGET_LABEL} reproduced the reference output bit-for-bit."
-            echo
-            echo 'This checks the selected derivation, not every dependency.'
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Diagnose reproducibility failure
         if: ${{ failure() }}
         shell: bash
@@ -190,33 +184,35 @@ jobs:
           rebuilt="${output}.check"
 
           if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
-            echo "Both outputs are not available for comparison."
+            echo 'Both outputs are not available for comparison.'
             exit 0
           fi
 
-          echo "=== Differing files ==="
-          diff -qr "$output" "$rebuilt" || true
+          # Keep a bounded excerpt for the summary and full diagnostics in logs.
+          {
+            echo '=== Differing files ==='
+            diff -qr "$output" "$rebuilt" || true
 
-          if [[ "$TARGET_SYSTEM" == *-linux ]]; then
-            echo "=== Permissions and symlink differences ==="
-            diff -u \
-              <(cd "$output" && find . -printf '%P\t%m\t%l\n' | sort) \
-              <(cd "$rebuilt" && find . -printf '%P\t%m\t%l\n' | sort) \
-              || true
-          fi
-
-          # Only the OpenDeck macOS application has this bundle layout.
-          # Plugin outputs must not be assumed to contain an .app bundle.
-          if [[ "$TARGET_KIND" == opendeck && "$TARGET_SYSTEM" == *-darwin ]]; then
-            echo "=== Code signatures ==="
-            for path in "$output" "$rebuilt"; do
-              echo "--- $path ---"
-              codesign -dv --verbose=4 \
-                "$path/Applications/OpenDeck.app" 2>&1 \
-                | grep -E 'Signature|CodeDirectory|CDHash|flags' \
+            if [[ "$TARGET_SYSTEM" == *-linux ]]; then
+              echo '=== Permissions and symlink differences ==='
+              diff -u \
+                <(cd "$output" && find . -printf '%P\t%m\t%l\n' | sort) \
+                <(cd "$rebuilt" && find . -printf '%P\t%m\t%l\n' | sort) \
                 || true
-            done
-          fi
+            fi
+
+            # Only the OpenDeck macOS application has this bundle layout.
+            if [[ "$TARGET_KIND" == opendeck && "$TARGET_SYSTEM" == *-darwin ]]; then
+              echo '=== Code signatures ==='
+              for path in "$output" "$rebuilt"; do
+                echo "--- $path ---"
+                codesign -dv --verbose=4 \
+                  "$path/Applications/OpenDeck.app" 2>&1 \
+                  | grep -E 'Signature|CodeDirectory|CDHash|flags' \
+                  || true
+              done
+            fi
+          } | tee "$RUNNER_TEMP/repro-differences.txt"
 
       - name: Archive non-reproducible outputs
         if: ${{ failure() && matrix.redistributable }}
@@ -228,7 +224,7 @@ jobs:
           rebuilt="${output}.check"
 
           if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
-            echo "Both outputs are not available; skipping archival."
+            echo 'Both outputs are not available; skipping archival.'
             exit 0
           fi
 
@@ -244,6 +240,7 @@ jobs:
             > "$archive_dir/paths.txt"
 
       - name: Upload reproducibility artifacts
+        id: repro_artifact
         if: ${{ failure() && matrix.redistributable }}
         uses: actions/upload-artifact@v7
         with:
@@ -251,3 +248,48 @@ jobs:
           path: ${{ runner.temp }}/opendeck-repro/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Summarize result
+        if: ${{ always() }}
+        shell: bash
+        env:
+          REFERENCE_RESULT: ${{ steps.reference.outcome }}
+          REBUILD_RESULT: ${{ steps.rebuild.outcome }}
+          ARTIFACT_URL: ${{ steps.repro_artifact.outputs.artifact-url }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo '## Reproducibility result'
+            echo
+            echo "**${TARGET_SYSTEM} / ${TARGET_LABEL}**"
+            echo
+
+            if [[ "$REFERENCE_RESULT" != success ]]; then
+              echo '**Failed — reference acquisition or build did not complete.**'
+            elif [[ "$REBUILD_RESULT" == success ]]; then
+              echo '**Passed — rebuilt output matches the reference bit-for-bit.**'
+            elif [[ -f "$RUNNER_TEMP/repro-differences.txt" ]]; then
+              echo '**Failed — rebuilt output differs from the reference.**'
+              echo
+              echo 'First 35 diagnostic lines (see job logs for the rest):'
+              echo '```text'
+              sed -n '1,35p' "$RUNNER_TEMP/repro-differences.txt"
+              echo '```'
+            else
+              echo '**Failed — rebuild or test did not complete.**'
+              echo 'See the rebuild step logs for the error.'
+            fi
+
+            if [[ -n "$ARTIFACT_URL" ]]; then
+              echo
+              echo "[Download reference and rebuilt archives]($ARTIFACT_URL) (retained for 7 days)."
+            elif [[ "$REBUILD_RESULT" != success ]]; then
+              echo
+              if [[ "$REDISTRIBUTABLE" != true ]]; then
+                echo 'Binary archives were not uploaded (redistribution restricted).'
+              else
+                echo 'No binary archives available (both outputs may not have been preserved).'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
