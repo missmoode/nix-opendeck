@@ -47,7 +47,7 @@ jobs:
                     inherit flake system;
                   };
                 in
-                  [ targets.core targets.opendeck ] ++ targets.plugins
+                  [ targets.opendeck ] ++ targets.plugins
               ) systems)
           ' > "$RUNNER_TEMP/targets.json"
 
@@ -106,27 +106,13 @@ jobs:
               jq -c '{system, runner, attr, label}' <<< "$item" \
                 >> "$RUNNER_TEMP/missing-plugins.jsonl"
             else
-              jq -c '{system, runner, kind, attr, label}' <<< "$item" \
+              jq -c '{system, runner, attr, label}' <<< "$item" \
                 >> "$RUNNER_TEMP/missing-opendeck.jsonl"
             fi
           done < <(jq -c '.[]' "$RUNNER_TEMP/publishable-targets.json")
 
           plugins="$(jq -sc '.' "$RUNNER_TEMP/missing-plugins.jsonl")"
-
-          # One native runner per system for both missing OpenDeck targets.
-          # Build core first so the wrapper reuses its already-built output.
-          opendeck="$(jq -sc '
-            group_by(.system)
-            | map(
-                sort_by(.kind != "core")
-                | {
-                    system: .[0].system,
-                    runner: .[0].runner,
-                    label: (map(.label) | join(" + ")),
-                    targets: (map({attr, label}))
-                  }
-              )
-          ' "$RUNNER_TEMP/missing-opendeck.jsonl")"
+          opendeck="$(jq -sc '.' "$RUNNER_TEMP/missing-opendeck.jsonl")"
 
           echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
           echo "opendeck=$opendeck" >> "$GITHUB_OUTPUT"
@@ -137,8 +123,7 @@ jobs:
             echo "- Publishable targets: $(jq 'length' "$RUNNER_TEMP/publishable-targets.json")"
             echo "- Excluded by redistribution policy: $(jq '[.[] | select(.redistributable != true)] | length' "$RUNNER_TEMP/targets.json")"
             echo "- Plugins requiring publication: $(jq 'length' <<< "$plugins")"
-            echo "- OpenDeck targets requiring publication: $(jq '[.[] | .targets | length] | add // 0' <<< "$opendeck")"
-            echo "- Native OpenDeck jobs: $(jq 'length' <<< "$opendeck")"
+            echo "- OpenDeck system builds requiring publication: $(jq 'length' <<< "$opendeck")"
           } >> "$GITHUB_STEP_SUMMARY"
 
   plugins:
@@ -193,7 +178,7 @@ jobs:
           cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
 
   opendeck:
-    name: 'OpenDeck: ${{ matrix.system }} / ${{ matrix.label }}'
+    name: 'OpenDeck: ${{ matrix.system }}'
     needs: prepare
     if: needs.prepare.result == 'success' && needs.prepare.outputs.opendeck != '[]'
     runs-on: ${{ matrix.runner }}
@@ -217,10 +202,21 @@ jobs:
           name: nix-opendeck
           skipPush: true
 
-      - name: Build and publish OpenDeck targets
+      - name: Build default OpenDeck
         shell: bash
         env:
-          TARGETS_JSON: ${{ toJSON(matrix.targets) }}
+          TARGET_ATTR: ${{ matrix.attr }}
+        run: |
+          set -euo pipefail
+
+          nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
+            > "$RUNNER_TEMP/built-paths"
+
+          test -s "$RUNNER_TEMP/built-paths"
+
+      - name: Publish default OpenDeck runtime closure
+        shell: bash
+        env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
         run: |
           set -euo pipefail
@@ -230,20 +226,4 @@ jobs:
             exit 1
           fi
 
-          jq -c '.[]' <<< "$TARGETS_JSON" > "$RUNNER_TEMP/opendeck-targets.jsonl"
-          test -s "$RUNNER_TEMP/opendeck-targets.jsonl"
-
-          # Publish each output immediately. If the wrapper fails, the core
-          # has still been built and cached, avoiding another expensive build.
-          while IFS= read -r target; do
-            attr="$(jq -r '.attr' <<< "$target")"
-            label="$(jq -r '.label' <<< "$target")"
-
-            echo "::group::Build and publish $label"
-            nix build --no-link --print-out-paths -L ".#${attr}" \
-              > "$RUNNER_TEMP/built-paths"
-
-            test -s "$RUNNER_TEMP/built-paths"
-            cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
-            echo '::endgroup::'
-          done < "$RUNNER_TEMP/opendeck-targets.jsonl"
+          cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
