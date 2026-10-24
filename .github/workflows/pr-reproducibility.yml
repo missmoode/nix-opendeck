@@ -1,6 +1,6 @@
 # Rebuild only packages whose Nix output paths differ from the PR's base.
 # This tests the proposed merge result, not just the contributor's branch.
-name: PR Reproducibility
+name: Reproducibility
 
 on:
   pull_request:
@@ -284,7 +284,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   result:
-    name: Reproducibility Test
+    name: Overall result
     needs: [discover, check]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
