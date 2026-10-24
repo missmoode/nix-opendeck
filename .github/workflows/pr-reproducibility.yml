@@ -288,6 +288,9 @@ jobs:
     needs: [discover, check]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Report overall status
         shell: bash
@@ -321,3 +324,25 @@ jobs:
           [[ "$DISCOVER_RESULT" == success ]] || exit 1
           [[ "$TARGETS" == '[]' ]] && exit 0
           [[ -n "$TARGETS" && "$CHECK_RESULT" == success ]] || exit 1
+
+      - name: Assign maintainer on failed automated update
+        if: >-
+          failure() &&
+          needs.check.result == 'failure' &&
+          github.event.pull_request.user.login == vars.AUTOMATION_APP_BOT_LOGIN &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          (github.event.pull_request.head.ref == 'automated/package-updates' ||
+           github.event.pull_request.head.ref == 'automated/nixpkgs-update')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          UPDATE_MAINTAINERS: ${{ vars.UPDATE_MAINTAINERS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -n "$UPDATE_MAINTAINERS" ]]; then
+            gh pr edit "$PR_NUMBER" \
+              --add-assignee "$UPDATE_MAINTAINERS"
+          fi
