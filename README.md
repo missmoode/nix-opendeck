@@ -406,7 +406,7 @@ one of my patches, or OpenDeck's handling of them.
 
 Be certain before contacting the upstream devs!
 
-nix-opendeck is a personal packaging project maintained on a best-effort basis. I can't promise compatibility with every plugin and ongoing support.
+nix-opendeck is a personal packaging project maintained on a best-effort basis. I can't promise compatibility with every plugin, nor ongoing support.
 
 ### Bundled Plugins
 
