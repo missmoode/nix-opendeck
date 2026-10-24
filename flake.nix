@@ -77,14 +77,7 @@
 
             opendeck-plugins = self.legacyPackages.${system}.opendeck-plugins;
 
-            wrapOpenDeck =
-              args:
-              (self.lib.wrapOpenDeck prev) (
-                {
-                  package = self.packages.${system}.opendeck-core;
-                }
-                // args
-              );
+            wrapOpenDeck = self.legacyPackages.${system}.wrapOpenDeck;
 
           }
           // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isLinux {

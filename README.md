@@ -455,9 +455,7 @@ let
   opendeck = inputs.opendeck;
   plugins = opendeck.legacyPackages.${system}.opendeck-plugins;
 
-  customOpenDeck = (opendeck.lib.wrapOpenDeck pkgs) {
-    package = opendeck.packages.${system}.opendeck-core;
-
+  customOpenDeck = opendeck.legacyPackages.${system}.wrapOpenDeck {
     plugins = with plugins; [
       nekename.starterpack
       openactionplugins.mpris

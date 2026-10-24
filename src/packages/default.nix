@@ -70,6 +70,8 @@ in
   };
 
   legacyPackages = {
+    inherit wrapOpenDeck;
+
     opendeck-plugins = lib.recurseIntoAttrs (
       lib.mapAttrs (_: ownerPlugins: lib.recurseIntoAttrs ownerPlugins) plugins
     );
