@@ -7,7 +7,6 @@
   python3,
   writeShellScript,
   runCommand,
-  symlinkJoin,
 
   rustPlatform,
   cargo-tauri,
@@ -25,18 +24,8 @@
   libayatana-appindicator,
 
   gst_all_1,
-
-  bundledPlugins ? [ ],
-  pname ? "opendeck-core",
 }:
-# Make sure we're not bundling the same plugin multiple times
 let
-  bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
-
-  duplicateBundledPluginIds = lib.filter (
-    pluginId: lib.count (id: id == pluginId) bundledPluginIds > 1
-  ) (lib.unique bundledPluginIds);
-
   gstPlugins = with gst_all_1; [
     gstreamer
     gst-plugins-base
@@ -47,7 +36,6 @@ let
 
   gstPluginPath = lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" gstPlugins;
 in
-assert duplicateBundledPluginIds == [ ];
 rustPlatform.buildRustPackage (
   finalAttrs:
   let
@@ -85,7 +73,7 @@ rustPlatform.buildRustPackage (
     };
   in
   {
-    pname = pname;
+    pname = "opendeck-core";
 
     version = "2.14.2";
 
@@ -147,6 +135,11 @@ rustPlatform.buildRustPackage (
       # Sync explicitly identified externally managed plugins after activation.
       # No directory watching or user-settings deletion.
       ./patches/0008-sync-external-plugins.patch
+
+      # Allow a package wrapper to supply bundled plugins from a separate
+      # Nix store path, without rebuilding the OpenDeck executable.
+      # When unset, retain the normal Tauri resource lookup.
+      ./patches/0009-configurable-bundled-plugins.patch
     ];
 
     postPatch = ''
@@ -236,15 +229,8 @@ rustPlatform.buildRustPackage (
 
       cp -a ${denoDeps}/. node_modules/
 
+      # Tauri expects this resource directory, even when it is empty.
       mkdir -p "${finalAttrs.cargoRoot}/target/plugins"
-
-      ${lib.concatMapStringsSep "\n" (plugin: ''
-        cp -R \
-          "${plugin}/." \
-          "${finalAttrs.cargoRoot}/target/plugins/"
-      '') bundledPlugins}
-
-      chmod -R u+rwX "${finalAttrs.cargoRoot}/target/plugins"
     '';
 
     postInstall = ''
@@ -294,7 +280,7 @@ rustPlatform.buildRustPackage (
     passthru = {
       inherit denoDeps;
 
-      bundledPluginIds = map (plugin: plugin.pluginId) bundledPlugins;
+      bundledPluginIds = [ ];
 
       # Native CI runs this optional hook before building the package. The
       # hook updates only this host's hash if the Deno dependency FOD changed.
@@ -315,20 +301,11 @@ rustPlatform.buildRustPackage (
       };
     }
     // lib.optionalAttrs stdenv.hostPlatform.isLinux {
-      udev =
-        let
-          coreRules = runCommand "opendeck-core-udev-rules-${finalAttrs.version}" { } ''
-            install -Dm644 \
-              "${finalAttrs.src}/src-tauri/bundle/40-streamdeck.rules" \
-              "$out/lib/udev/rules.d/40-streamdeck.rules"
-          '';
-
-          pluginRules = map (plugin: plugin.udev) (lib.filter (plugin: plugin ? udev) bundledPlugins);
-        in
-        symlinkJoin {
-          name = "${finalAttrs.pname}-udev-rules-${finalAttrs.version}";
-          paths = [ coreRules ] ++ pluginRules;
-        };
+      udev = runCommand "opendeck-core-udev-rules-${finalAttrs.version}" { } ''
+        install -Dm644 \
+          "${finalAttrs.src}/src-tauri/bundle/40-streamdeck.rules" \
+          "$out/lib/udev/rules.d/40-streamdeck.rules"
+      '';
     };
   }
 )

@@ -37,9 +37,19 @@
       ];
 
       perSystem =
-        { final, lib, pkgs, ... }:
+        {
+          final,
+          lib,
+          pkgs,
+          ...
+        }:
         import ./src/packages {
-          inherit inputs final lib pkgs;
+          inherit
+            inputs
+            final
+            lib
+            pkgs
+            ;
           pluginLib = (import ./src/lib/plugins) final;
         };
 
@@ -66,6 +76,9 @@
               ;
 
             opendeck-plugins = self.legacyPackages.${system}.opendeck-plugins;
+
+            wrapOpenDeck = self.legacyPackages.${system}.wrapOpenDeck;
+
           }
           // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isLinux {
             inherit (self.packages.${system}) opendeck-udev-rules;

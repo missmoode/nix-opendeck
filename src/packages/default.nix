@@ -20,31 +20,37 @@ let
     inherit pluginLib buildTools;
   };
 
+  # The only OpenDeck package requiring Rust/Tauri compilation.
   opendeck-core = final.callPackage ./opendeck {
     deno = denoPkgs.deno;
-
-    pname = "opendeck-core";
-
-    bundledPlugins = [ ];
   };
+
+  # Provide the core as a default while allowing callers to override it.
+  wrapOpenDeckImpl = final.callPackage ./wrapOpenDeck.nix { };
+
+  wrapOpenDeck =
+    args:
+    wrapOpenDeckImpl (
+      {
+        package = opendeck-core;
+      }
+      // args
+    );
 
   allPlugins = lib.collect lib.isDerivation plugins;
-  opendeck-with-plugins = final.callPackage ./opendeck {
-    deno = denoPkgs.deno;
 
-    pname = "opendeck-with-plugins";
-
-    bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ] && !(plugin ? udev)) allPlugins;
-  };
-
-  opendeck = final.callPackage ./opendeck {
-    deno = denoPkgs.deno;
-
+  opendeck = wrapOpenDeck {
     pname = "opendeck";
 
-    bundledPlugins = [
+    plugins = [
       plugins.nekename.starterpack
     ];
+  };
+
+  opendeck-with-plugins = wrapOpenDeck {
+    pname = "opendeck-with-plugins";
+
+    plugins = lib.filter (plugin: plugin.requiredCommands == [ ] && !(plugin ? udev)) allPlugins;
   };
 
   opendeck-udev-rules = opendeck-core.udev;
@@ -64,6 +70,8 @@ in
   };
 
   legacyPackages = {
+    inherit wrapOpenDeck;
+
     opendeck-plugins = lib.recurseIntoAttrs (
       lib.mapAttrs (_: ownerPlugins: lib.recurseIntoAttrs ownerPlugins) plugins
     );
@@ -74,6 +82,7 @@ in
       opendeck
       opendeck-core
       opendeck-with-plugins
+      wrapOpenDeck
       ;
 
     opendeck-plugins = plugins;

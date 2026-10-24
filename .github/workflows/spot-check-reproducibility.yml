@@ -56,7 +56,7 @@ jobs:
                     inherit flake system;
                   };
                 in
-                  [ targets.opendeck ] ++ targets.plugins
+                  [ targets.core targets.opendeck ] ++ targets.plugins
               ) systems)
           ' | jq -c '{
             include: [
@@ -126,7 +126,7 @@ jobs:
             exit 1
           }
 
-          if [[ "$TARGET_KIND" == opendeck ]]; then
+          if [[ "$TARGET_KIND" == opendeck || "$TARGET_KIND" == core ]]; then
             # OpenDeck must have an independently published Cachix reference.
             # Never silently replace it with a local build.
             echo "Checking published reference in Cachix: $output"
