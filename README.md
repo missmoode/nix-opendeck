@@ -18,7 +18,7 @@ spirit of Nix, I'm making it public and doing what I can to make it useful for e
 
 <div align="center">
 
-[Quick Start](#quick-start) | [Installation](#installation) | [Usage](#usage) | [Plugin Listing](#plugin-listing)
+[Quick Start](#quick-start) | [Installation](#installation) | [Usage](#usage) | [Custom Bundles](#custom-bundled-packages) | [Plugin Listing](#plugin-listing)
 
 </div>
 
@@ -66,6 +66,12 @@ The Home Manager module installs OpenDeck by default; no overlay is required.
 Some [device-support plugins](#device-support-plugins) need additional udev rules.
 For prebuilt packages, see [Binary Cache](#binary-cache). Other installation methods
 and configuration options are documented below.
+
+
+**Want plugins bundled into OpenDeck instead?**
+You can use `wrapOpenDeck` to create a custom OpenDeck package containing your chosen plugins, without recompiling the application. This works with or without Home Manager, and lets you install or distribute a preconfigured OpenDeck package.
+
+See [Custom bundled packages](#custom-bundled-packages) for examples.
 
 ## Packages and Scope
 
@@ -278,6 +284,62 @@ Alternatively, you can [bundle plugins](#bundled-plugins) into an OpenDeck packa
 
 The `opendeck-with-plugins` package is also available as a convenience, bundling all plugins supported on the selected platform that do not declare additional runtime commands or udev rules.
 
+### Custom bundled packages
+
+The `wrapOpenDeck` helper creates an OpenDeck package containing your chosen plugins. It works independently of Home Manager and can be used with NixOS, nix-darwin, or standalone Nix installations.
+
+With either [overlay](#overlay) applied, you can use `pkgs.wrapOpenDeck`:
+
+```nix
+{ pkgs, ... }:
+let
+  customOpenDeck = pkgs.wrapOpenDeck {
+    plugins = with pkgs.opendeck-plugins; [
+      nekename.starterpack
+      openactionplugins.mpris
+      gallowaylabs.tomato-timer
+    ];
+  };
+in
+{
+  environment.systemPackages = [ customOpenDeck ];
+
+  # NixOS only: install rules for supported devices.
+  services.udev.packages = [ customOpenDeck.udev ];
+}
+```
+
+Alternatively, you can use the helper directly from the flake without an overlay:
+
+```nix
+{ inputs, pkgs, ... }:
+let
+  system = pkgs.stdenv.hostPlatform.system;
+  opendeck = inputs.opendeck;
+  plugins = opendeck.legacyPackages.${system}.opendeck-plugins;
+
+  customOpenDeck = opendeck.legacyPackages.${system}.wrapOpenDeck {
+    plugins = with plugins; [
+      nekename.starterpack
+      openactionplugins.mpris
+      gallowaylabs.tomato-timer
+    ];
+  };
+in
+{
+  environment.systemPackages = [ customOpenDeck ];
+  services.udev.packages = [ customOpenDeck.udev ];
+}
+```
+
+Both examples use NixOS to install the resulting package, but the wrapper itself is not NixOS-specific.
+
+The wrapper retains OpenDeck's normal bundled-plugin behaviour, desktop integration, command-line arguments, and built-in autostart functionality. On Linux, bundled plugins are provided through a separate Nix store directory. On macOS, they are assembled into the application bundle without recompiling the application.
+
+If a bundled plugin provides udev rules, these are included in the resulting package's `.udev` attribute on Linux. NixOS users must still install those rules through `services.udev.packages`. Plugins installed separately through Home Manager do not contribute rules to the OpenDeck package's `.udev` attribute.
+
+Plugins may also depend on [runtime commands](#required-runtime-commands) or external services that the wrapper does not automatically configure.
+
 ### Overlay
 
 Overlays are optional. The Home Manager module and NixOS udev configuration work without
@@ -421,61 +483,7 @@ Upstream OpenDeck includes the StarterPack plugin by default, so nix-opendeck's 
 
 nix-opendeck assembles bundled packages from the same compiled `opendeck-core` derivation. This means you can change the bundled plugins without recompiling OpenDeck itself.
 
-#### Custom bundled packages
-
-The `wrapOpenDeck` helper creates an OpenDeck package containing your chosen plugins. It works independently of Home Manager and can be used with NixOS, nix-darwin, or standalone Nix installations.
-
-With either [overlay](#overlay) applied, you can use `pkgs.wrapOpenDeck`:
-
-```nix
-{ pkgs, ... }:
-let
-  customOpenDeck = pkgs.wrapOpenDeck {
-    plugins = with pkgs.opendeck-plugins; [
-      nekename.starterpack
-      openactionplugins.mpris
-      gallowaylabs.tomato-timer
-    ];
-  };
-in
-{
-  environment.systemPackages = [ customOpenDeck ];
-
-  # NixOS only: install rules for supported devices.
-  services.udev.packages = [ customOpenDeck.udev ];
-}
-```
-
-Alternatively, you can use the helper directly from the flake without an overlay:
-
-```nix
-{ inputs, pkgs, ... }:
-let
-  system = pkgs.stdenv.hostPlatform.system;
-  opendeck = inputs.opendeck;
-  plugins = opendeck.legacyPackages.${system}.opendeck-plugins;
-
-  customOpenDeck = opendeck.legacyPackages.${system}.wrapOpenDeck {
-    plugins = with plugins; [
-      nekename.starterpack
-      openactionplugins.mpris
-      gallowaylabs.tomato-timer
-    ];
-  };
-in
-{
-  environment.systemPackages = [ customOpenDeck ];
-  services.udev.packages = [ customOpenDeck.udev ];
-}
-```
-
-Both examples use NixOS to install the resulting package, but the wrapper itself is not NixOS-specific.
-
-The wrapper retains OpenDeck's normal bundled-plugin behaviour, desktop integration, command-line arguments, and built-in autostart functionality. On Linux, bundled plugins are provided through a separate Nix store directory. On macOS, they are assembled into the application bundle without recompiling the application.
-
-If a bundled plugin provides udev rules, these are included in the resulting package's `.udev` attribute on Linux. NixOS users must still install those rules through `services.udev.packages`. Plugins installed separately through Home Manager do not contribute rules to the OpenDeck package's `.udev` attribute.
-
-Plugins may also depend on [runtime commands](#required-runtime-commands) or external services that the wrapper does not automatically configure.
+You can also create your own [custom bundles](#custom-bundled-packages).
 
 ### Required runtime commands
 Some plugins invoke external commands at runtime. When nix-opendeck does not provide such a command as
