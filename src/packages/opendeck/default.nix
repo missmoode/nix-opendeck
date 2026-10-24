@@ -225,7 +225,7 @@ rustPlatform.buildRustPackage (
       # retain the frame-pointer setting supplied by Nixpkgs.
       ${lib.optionalString stdenv.hostPlatform.isDarwin ''
         # Rust source paths.
-        export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-Cforce-frame-pointers=yes --remap-path-prefix=$NIX_BUILD_TOP=/build"
+        export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-Cforce-frame-pointers=yes --remap-path-prefix=$NIX_BUILD_TOP=/build -C link-arg=-Wl,-S"
 
         # C/C++ source paths, including those compiled by aws-lc-sys.
         export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:+$NIX_CFLAGS_COMPILE }-ffile-prefix-map=$NIX_BUILD_TOP=/build"
@@ -273,11 +273,6 @@ rustPlatform.buildRustPackage (
     '';
 
     postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
-      # The linker can produce a different LC_UUID for otherwise identical
-      # executables. Normalize it after stripping but before signing.
-      ${python3}/bin/python3 ${./normalize-mach-o-uuid.py} \
-        "$out/Applications/OpenDeck.app/Contents/MacOS/opendeck"
-
       rcodesign sign \
         --code-signature-flags runtime \
         "$out/Applications/OpenDeck.app"
