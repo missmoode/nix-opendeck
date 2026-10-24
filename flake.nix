@@ -25,61 +25,6 @@
 
   outputs =
     inputs@{ self, flake-parts, ... }:
-    let
-      mkPluginLib =
-        pkgs:
-        let
-          mkOpenDeckPlugin = import ./src/lib/mkOpenDeckPlugin.nix {
-            inherit (pkgs)
-              lib
-              stdenv
-              runCommand
-              nix-update-script
-              jq
-              ;
-          };
-
-          mkRustOpenDeckPlugin = import ./src/lib/mkRustOpenDeckPlugin.nix {
-            inherit (pkgs)
-              lib
-              rustPlatform
-              stdenv
-              ;
-            inherit mkOpenDeckPlugin;
-          };
-
-          mkNpmOpenDeckPlugin = import ./src/lib/mkNpmOpenDeckPlugin.nix {
-            inherit (pkgs) buildNpmPackage;
-            inherit mkOpenDeckPlugin;
-          };
-
-          mkYarnOpenDeckPlugin = import ./src/lib/mkYarnOpenDeckPlugin.nix {
-            inherit (pkgs)
-              yarnConfigHook
-              yarnBuildHook
-              nodejs
-              stdenv
-              fetchYarnDeps
-              ;
-            inherit mkOpenDeckPlugin;
-          };
-
-          mkPrebuiltOpenDeckPlugin = import ./src/lib/mkPrebuiltOpenDeckPlugin.nix {
-            inherit (pkgs) stdenv;
-            inherit mkOpenDeckPlugin;
-          };
-        in
-        {
-          inherit
-            mkOpenDeckPlugin
-            mkRustOpenDeckPlugin
-            mkNpmOpenDeckPlugin
-            mkYarnOpenDeckPlugin
-            mkPrebuiltOpenDeckPlugin
-            ;
-        };
-
-    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         flake-parts.flakeModules.easyOverlay
@@ -92,104 +37,14 @@
       ];
 
       perSystem =
-        {
-          final,
-          lib,
-          pkgs,
-          ...
-        }:
-        let
-          denoPkgs = import inputs.deno-nixpkgs {
-            system = pkgs.stdenv.buildPlatform.system;
-          };
-
-          buildTools = {
-            deno = denoPkgs.deno;
-          };
-
-          pluginLib = mkPluginLib final;
-
-          plugins = import ./src/plugins {
-            pkgs = final;
-
-            inherit pluginLib buildTools;
-          };
-
-          opendeck-core = final.callPackage ./src/opendeck.nix {
-            deno = denoPkgs.deno;
-
-            pname = "opendeck-core";
-
-            bundledPlugins = [ ];
-          };
-
-          allPlugins = lib.collect lib.isDerivation plugins;
-          opendeck-with-plugins = final.callPackage ./src/opendeck.nix {
-            deno = denoPkgs.deno;
-
-            pname = "opendeck-with-plugins";
-
-            bundledPlugins = lib.filter (plugin: plugin.requiredCommands == [ ] && !(plugin ? udev)) allPlugins;
-          };
-
-          opendeck = final.callPackage ./src/opendeck.nix {
-            deno = denoPkgs.deno;
-
-            pname = "opendeck";
-
-            bundledPlugins = [
-              plugins.nekename.starterpack
-            ];
-          };
-
-          opendeck-udev-rules = opendeck-core.udev;
-        in
-        {
-          packages = {
-            inherit
-              opendeck
-              opendeck-core
-              opendeck-with-plugins
-              ;
-
-            default = opendeck;
-          }
-          // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-            inherit opendeck-udev-rules;
-          };
-
-          legacyPackages = {
-            opendeck-plugins = lib.recurseIntoAttrs (
-              lib.mapAttrs (_: ownerPlugins: lib.recurseIntoAttrs ownerPlugins) plugins
-            );
-          };
-
-          overlayAttrs = {
-            inherit
-              opendeck
-              opendeck-core
-              opendeck-with-plugins
-              ;
-
-            opendeck-plugins = plugins;
-          }
-          // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-            inherit opendeck-udev-rules;
-          };
+        { final, lib, pkgs, ... }:
+        import ./src/packages {
+          inherit inputs final lib pkgs;
+          pluginLib = (import ./src/lib/plugins) final;
         };
 
       flake = {
-        lib = {
-          mkOpenDeckPlugin = import ./src/lib/mkOpenDeckPlugin.nix;
-
-          mkRustOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkRustOpenDeckPlugin;
-
-          mkNpmOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkNpmOpenDeckPlugin;
-
-          mkYarnOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkYarnOpenDeckPlugin;
-
-          mkPrebuiltOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkPrebuiltOpenDeckPlugin;
-        };
+        lib = import ./src/lib;
 
         homeManagerModules.default =
           { pkgs, ... }@moduleArgs:
