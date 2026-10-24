@@ -3,8 +3,8 @@
   fetchFromGitHub,
   stdenv,
   deno,
-  glib,
-  makeWrapper,
+  pkg-config,
+  openssl,
   python3,
   writeShellScript,
   nix-update-script,
@@ -25,10 +25,13 @@ mkRustOpenDeckPlugin (
         deno
       ];
 
-      outputHash = {
-        x86_64-linux = "sha256-gk0lz/CXwyc0o9Txggu3qSk/WTN3KlQDiOXEgCaKC2U=";
-        aarch64-linux = "sha256-nEZR6+3VDlDEvlUwfOi+qqROGRfgCDTOfhYPsTJOHSw=";
-      }.${stdenv.hostPlatform.system};
+      outputHash =
+        {
+          x86_64-linux = "sha256-01MuKsT8WwQPb5XNYhAdM6WcJy/6aEBREVSHTuk5dy0=";
+          aarch64-linux = "sha256-AtQsrRF+tDZNnCHGozVZ4IS+USNBoquFs6+noRT9M74=";
+          aarch64-darwin = "sha256-ATV6Nq8gLgji7SD+muFXYVJS4IFB0dDdMEDpca1hiYs=";
+        }
+        .${stdenv.hostPlatform.system};
       outputHashMode = "recursive";
 
       buildPhase = ''
@@ -58,24 +61,22 @@ mkRustOpenDeckPlugin (
     };
   in
   {
-    pname = "opendeck-openactionplugins-desktopentry";
-    version = "1.0.3";
+    pname = "opendeck-openactionplugins-discord";
+    version = "0.5.1";
 
     src = fetchFromGitHub {
       owner = "OpenActionPlugins";
-      repo = "desktopentry";
+      repo = "discord";
       tag = "v${finalAttrs.version}";
-      hash = "sha256-OOsQzT0rvE3HDgTprs5rcM/As5WO8tafFKoSAyP2mZg=";
+      hash = "sha256-mUX0jqxsZ6kB9NrbULSfa/2KQPHisWeWNE6Q9eOaZgI=";
     };
 
     cargoLock = {
       lockFile = ./Cargo.lock;
+      outputHashes = {
+        "discord-ipc-rust-0.1.4" = "sha256-6zTIJwZSxUsrma9005sfyInBcM7sk9W08+TfolUhlZY=";
+      };
     };
-
-    patches = [
-      ./patches/icon-lookup.patch
-      ./patches/stable-desktop-entry-id.patch
-    ];
 
     postPatch = ''
       ln -s ${./Cargo.lock} Cargo.lock
@@ -86,9 +87,14 @@ mkRustOpenDeckPlugin (
 			  'adapter: adapter({ pages: "../assets/pi" }),' \
 			  'adapter: adapter({ pages: "../assets/pi" }), version: { name: "${finalAttrs.version}" },'
     '';
+
     nativeBuildInputs = [
       deno
-      makeWrapper
+      pkg-config
+    ];
+
+    buildInputs = [
+      openssl
     ];
 
     preBuild = ''
@@ -99,25 +105,20 @@ mkRustOpenDeckPlugin (
       cd ..
     '';
 
-    pluginId = "me.amankhanna.oadesktopentry.sdPlugin";
-    binaryName = "oadesktopentry";
+    pluginId = "me.amankhanna.oadiscord.sdPlugin";
+    binaryName = "oadiscord";
 
-    binaryInstallPath = "oadesktopentry-${stdenv.hostPlatform.rust.rustcTarget}";
-
-    postInstall = ''
-      wrapProgram "$out/${finalAttrs.pluginId}/${finalAttrs.binaryInstallPath}" \
-        --prefix PATH : "${glib}/bin"
-    '';
+    binaryInstallPath = "oadiscord-${stdenv.hostPlatform.rust.rustcTarget}";
 
     licenseFiles = [
-      "LICENSE"
+      "LICENSE.md"
     ];
 
     meta = {
-      description = "OpenAction plugin for launching desktop applications";
-      homepage = "https://github.com/OpenActionPlugins/desktopentry";
-      license = lib.licenses.mit;
-      platforms = lib.platforms.linux;
+      description = "OpenAction plugin for controlling the Discord desktop client";
+      homepage = "https://github.com/OpenActionPlugins/discord";
+      license = lib.licenses.gpl3Only;
+      platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
       authors = [
         "nekename"
@@ -128,10 +129,10 @@ mkRustOpenDeckPlugin (
       inherit denoDeps;
 
       updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
-        exec ${python3}/bin/python3 ${../../../lib/updateDenoDeps.py} \
+        exec ${python3}/bin/python3 ${../../../../lib/updateDenoDeps.py} \
           --attr "$1" \
           --package "${denoDeps.pname}" \
-          --file src/plugins/openactionplugins/desktopentry/default.nix \
+          --file src/packages/plugins/openactionplugins/discord/default.nix \
           --system "${stdenv.hostPlatform.system}" \
           --output "$2"
       '';

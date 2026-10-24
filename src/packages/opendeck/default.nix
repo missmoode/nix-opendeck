@@ -104,7 +104,7 @@ rustPlatform.buildRustPackage (
       # Requests must still originate through a specific plugin entry under
       # OpenDeck's plugin directory, and the requested file must canonicalize
       # beneath that plugin's canonical target.
-      ./patches/opendeck/0001-support-symlinked-plugin-assets.patch
+      ./patches/0001-support-symlinked-plugin-assets.patch
 
       # Preserve plugin directory symlinks instead of replacing them with their
       # resolved targets.
@@ -112,14 +112,14 @@ rustPlatform.buildRustPackage (
       # Normal filesystem access already follows the symlink when reading plugin
       # contents, while retaining the lexical plugin path preserves plugin IDs and
       # ensures asset URLs continue to pass through OpenDeck's plugin directory.
-      ./patches/opendeck/0002-preserve-symlinked-plugin-paths.patch
+      ./patches/0002-preserve-symlinked-plugin-paths.patch
 
       # Avoid rewriting Unix permissions when a plugin executable is already
       # executable.
       #
       # This allows executables stored in immutable locations such as the Nix
       # store to be used without attempting to chmod them.
-      ./patches/opendeck/0003-avoid-redundant-plugin-chmod.patch
+      ./patches/0003-avoid-redundant-plugin-chmod.patch
 
       # Support an optional externally-managed-plugins file in OpenDeck's config
       # directory.
@@ -129,24 +129,24 @@ rustPlatform.buildRustPackage (
       # retains the normal upstream behaviour.
       #
       # This is a downstream functionality used by nix-opendeck,
-      ./patches/opendeck/0004-protect-externally-managed-plugins.patch
+      ./patches/0004-protect-externally-managed-plugins.patch
 
       # Preserve Nix wrapper-provided runtime paths when OpenDeck reconstructs
       # PATH from the user's login shell. Perform environment initialization
       # before starting Tokio's multithreaded runtime.
-      ./patches/opendeck/0005-preserve-wrapper-path.patch
+      ./patches/0005-preserve-wrapper-path.patch
 
       # Direct users of the Nix build to nix-opendeck's plugin
       # compatibility documentation before reporting upstream issues.
-      ./patches/opendeck/0006-nix-plugin-store-warning.patch
+      ./patches/0006-nix-plugin-store-warning.patch
 
       # Explain the PATH requirement for OpenDeck's built-in Linux autostart.
       # The autostart toggle and settings behaviour remain unchanged.
-      ./patches/opendeck/0007-document-nix-autostart-path.patch
+      ./patches/0007-document-nix-autostart-path.patch
 
       # Sync explicitly identified externally managed plugins after activation.
       # No directory watching or user-settings deletion.
-      ./patches/opendeck/0008-sync-external-plugins.patch
+      ./patches/0008-sync-external-plugins.patch
     ];
 
     postPatch = ''
@@ -299,10 +299,10 @@ rustPlatform.buildRustPackage (
       # Native CI runs this optional hook before building the package. The
       # hook updates only this host's hash if the Deno dependency FOD changed.
       updatePlatformDeps = writeShellScript "${finalAttrs.pname}-update-platform-deps" ''
-        exec ${python3}/bin/python3 ${./lib/updateDenoDeps.py} \
+        exec ${python3}/bin/python3 ${../../lib/updateDenoDeps.py} \
           --attr "$1" \
           --package "${denoDeps.pname}" \
-          --file src/opendeck.nix \
+          --file src/packages/opendeck/default.nix \
           --system "${stdenv.hostPlatform.system}" \
           --output "$2"
       '';
