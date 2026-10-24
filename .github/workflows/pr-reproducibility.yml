@@ -1,0 +1,323 @@
+# Rebuild only packages whose Nix output paths differ from the PR's base.
+# This tests the proposed merge result, not just the contributor's branch.
+name: PR Reproducibility
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-opendeck-pr-repro-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: Discover changed packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      targets: ${{ steps.compare.outputs.targets }}
+
+    steps:
+      # The default PR checkout is GitHub's proposed merge commit.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Check flake evaluation
+        run: nix flake check --no-build --all-systems
+
+      - name: Compare evaluated package outputs with main
+        id: compare
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          # Compare with the exact base used for this PR, not whichever
+          # commit happens to be on main by the time this job executes.
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git worktree add --detach "$RUNNER_TEMP/repro-base" "$BASE_SHA"
+
+          evaluate_targets() {
+            local directory="$1"
+            local output="$2"
+            (
+              cd "$directory"
+              nix eval --impure --json --expr '
+                let
+                  flake = builtins.getFlake (toString ./.);
+                  systems = builtins.attrNames flake.packages;
+                in
+                  builtins.concatLists (map (system:
+                    let
+                      targets = import ./.github/ci/targets.nix {
+                        inherit flake system;
+                      };
+                    in
+                      [ targets.opendeck ] ++ targets.plugins
+                  ) systems)
+              '
+            ) > "$output"
+          }
+
+          evaluate_targets "$RUNNER_TEMP/repro-base" "$RUNNER_TEMP/base-targets.json"
+          evaluate_targets "$GITHUB_WORKSPACE" "$RUNNER_TEMP/pr-targets.json"
+
+          # Each attr includes the system, making it a unique target key.
+          # Missing (new) PR targets are selected automatically.
+          jq -c --slurpfile base "$RUNNER_TEMP/base-targets.json" '
+            ($base[0] | map({key: .attr, value: .storePath}) | from_entries) as $old
+            | [ .[]
+                | select(.storePath != ($old[.attr] // null))
+                | {kind, system, runner, attr, label, redistributable}
+              ]
+          ' "$RUNNER_TEMP/pr-targets.json" > "$RUNNER_TEMP/changed-targets.json"
+
+          echo "targets=$(cat "$RUNNER_TEMP/changed-targets.json")" >> "$GITHUB_OUTPUT"
+
+          {
+            echo '## Changed package outputs'
+            echo
+            echo "- PR targets: $(jq 'length' "$RUNNER_TEMP/pr-targets.json")"
+            echo "- Changed/new targets: $(jq 'length' "$RUNNER_TEMP/changed-targets.json")"
+            echo
+            if [[ "$(jq 'length' "$RUNNER_TEMP/changed-targets.json")" -eq 0 ]]; then
+              echo 'No changed package outputs require a reproducibility rebuild.'
+            else
+              jq -r '.[] | "- `\(.system)` / `\(.label)`"' "$RUNNER_TEMP/changed-targets.json"
+            fi
+            echo
+            echo 'Selection compares evaluated output paths; removed targets are not rebuilt.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  check:
+    name: 'Rebuild: ${{ matrix.system }} / ${{ matrix.label }}'
+    needs: discover
+    if: ${{ needs.discover.outputs.targets != '[]' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include: ${{ fromJSON(needs.discover.outputs.targets) }}
+
+    env:
+      TARGET_SYSTEM: ${{ matrix.system }}
+      TARGET_KIND: ${{ matrix.kind }}
+      TARGET_ATTR: ${{ matrix.attr }}
+      TARGET_LABEL: ${{ matrix.label }}
+      REDISTRIBUTABLE: ${{ matrix.redistributable }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v31
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-opendeck
+          skipPush: true
+
+      - name: Fetch or build reference from PR
+        id: reference
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          attr=".#${TARGET_ATTR}"
+          output="$(nix eval --raw "${attr}.outPath")"
+          [[ "$output" == /nix/store/* ]] || {
+            echo "Unexpected output path: $output" >&2
+            exit 1
+          }
+
+          # The PR's proposed output is not expected to exist in Cachix.
+          # Build locally if no substitute is available; never publish it.
+          nix build "$attr" --no-link -L
+          nix path-info "$output"
+
+          {
+            echo '## Reference'
+            echo
+            echo "- Target: \`${TARGET_ATTR}\`"
+            echo "- Store path: \`$output\`"
+            echo '- Source: configured substituter or local build'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rebuild and compare outputs
+        id: rebuild
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Rebuild this derivation, reusing its dependencies as appropriate.
+          nix build ".#${TARGET_ATTR}" \
+            --rebuild \
+            --no-link \
+            --keep-failed \
+            -L
+
+      - name: Diagnose reproducibility failure
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
+          rebuilt="${output}.check"
+          if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
+            echo 'Both outputs are not available for comparison.'
+            exit 0
+          fi
+
+          # Keep a bounded excerpt for the summary and full diagnostics in logs.
+          {
+            echo '=== Differing files ==='
+            diff -qr "$output" "$rebuilt" || true
+
+            if [[ "$TARGET_SYSTEM" == *-linux ]]; then
+              echo '=== Permissions and symlink differences ==='
+              diff -u \
+                <(cd "$output" && find . -printf '%P\t%m\t%l\n' | sort) \
+                <(cd "$rebuilt" && find . -printf '%P\t%m\t%l\n' | sort) \
+                || true
+            fi
+
+            if [[ "$TARGET_KIND" == opendeck && "$TARGET_SYSTEM" == *-darwin ]]; then
+              echo '=== Code signatures ==='
+              for path in "$output" "$rebuilt"; do
+                echo "--- $path ---"
+                codesign -dv --verbose=4 \
+                  "$path/Applications/OpenDeck.app" 2>&1 \
+                  | grep -E 'Signature|CodeDirectory|CDHash|flags' \
+                  || true
+              done
+            fi
+          } | tee "$RUNNER_TEMP/repro-differences.txt"
+
+      - name: Archive non-reproducible outputs
+        if: ${{ failure() && matrix.redistributable }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
+          rebuilt="${output}.check"
+          if [[ ! -d "$output" || ! -d "$rebuilt" ]]; then
+            echo 'Both outputs are not available; skipping archival.'
+            exit 0
+          fi
+
+          archive_dir="$RUNNER_TEMP/opendeck-repro"
+          mkdir -p "$archive_dir"
+          tar -C "$output" -cf "$archive_dir/reference.tar" .
+          tar -C "$rebuilt" -cf "$archive_dir/rebuilt.tar" .
+          printf 'Target: %s\nSystem: %s\nReference: %s\nRebuilt: %s\n' \
+            "$TARGET_ATTR" "$TARGET_SYSTEM" "$output" "$rebuilt" \
+            > "$archive_dir/paths.txt"
+
+      - name: Upload reproducibility artifacts
+        id: repro_artifact
+        if: ${{ failure() && matrix.redistributable }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-repro-${{ matrix.system }}-${{ matrix.attr }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/opendeck-repro/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Summarize result
+        if: ${{ always() }}
+        shell: bash
+        env:
+          REFERENCE_RESULT: ${{ steps.reference.outcome }}
+          REBUILD_RESULT: ${{ steps.rebuild.outcome }}
+          ARTIFACT_URL: ${{ steps.repro_artifact.outputs.artifact-url }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo '## Reproducibility result'
+            echo
+            echo "**${TARGET_SYSTEM} / ${TARGET_LABEL}**"
+            echo
+
+            if [[ "$REFERENCE_RESULT" != success ]]; then
+              echo '**Failed — reference acquisition or build did not complete.**'
+            elif [[ "$REBUILD_RESULT" == success ]]; then
+              echo '**Passed — rebuilt output matches the reference bit-for-bit.**'
+            elif [[ -f "$RUNNER_TEMP/repro-differences.txt" ]]; then
+              echo '**Failed — rebuilt output differs from the reference.**'
+              echo
+              echo 'First 35 diagnostic lines (see job logs for the rest):'
+              echo '```text'
+              sed -n '1,35p' "$RUNNER_TEMP/repro-differences.txt"
+              echo '```'
+            else
+              echo '**Failed — rebuild or test did not complete.**'
+              echo 'See the rebuild step logs for the error.'
+            fi
+
+            if [[ -n "$ARTIFACT_URL" ]]; then
+              echo
+              echo "[Download reference and rebuilt archives]($ARTIFACT_URL) (retained for 7 days)."
+            elif [[ "$REBUILD_RESULT" != success ]]; then
+              echo
+              if [[ "$REDISTRIBUTABLE" != true ]]; then
+                echo 'Binary archives were not uploaded (redistribution restricted).'
+              else
+                echo 'No binary archives available (both outputs may not have been preserved).'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  result:
+    name: Reproducibility Test
+    needs: [discover, check]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report overall status
+        shell: bash
+        env:
+          DISCOVER_RESULT: ${{ needs.discover.result }}
+          CHECK_RESULT: ${{ needs.check.result }}
+          TARGETS: ${{ needs.discover.outputs.targets }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo '## Reproducibility Test'
+            echo
+            if [[ "$DISCOVER_RESULT" != success ]]; then
+              echo '**Failed — flake evaluation or target discovery failed.**'
+              echo 'See the Discover changed packages job logs.'
+            elif [[ "$TARGETS" == '[]' ]]; then
+              echo '**Passed — no changed package outputs require rebuilding.**'
+            elif [[ -z "$TARGETS" ]]; then
+              echo '**Failed — target discovery produced no matrix.**'
+            elif [[ "$CHECK_RESULT" == success ]]; then
+              echo "**Passed — all $(jq -r 'length' <<< "$TARGETS") affected package outputs reproduced.**"
+            else
+              echo "**Failed — one or more of $(jq -r 'length' <<< "$TARGETS") affected package checks did not pass.**"
+              echo 'Open the failing Rebuild jobs for differing files and links to diagnostic archives.'
+              echo
+              echo "[View workflow jobs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          [[ "$DISCOVER_RESULT" == success ]] || exit 1
+          [[ "$TARGETS" == '[]' ]] && exit 0
+          [[ -n "$TARGETS" && "$CHECK_RESULT" == success ]] || exit 1
