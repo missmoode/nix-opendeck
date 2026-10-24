@@ -534,6 +534,6 @@ cleaned up some embedded build paths in Rust compilations, which should make the
 build deterministic. This absolutely isn't a substitute for confident verification,
 though.
 
-I do run weekly spot-checks on the main `opendeck` package:
+I do run weekly spot-checks on the `opendeck` package and plugins:
 
 [![Reproducibility (all systems)](https://github.com/missmoode/nix-opendeck/actions/workflows/reproducibility.yml/badge.svg?branch=main)](https://github.com/missmoode/nix-opendeck/actions/workflows/reproducibility.yml)
