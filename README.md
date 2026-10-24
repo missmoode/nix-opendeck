@@ -519,7 +519,8 @@ The source code for each package can be obtained through the upstream repositori
 in its derivation, using the specified version or commit.
 
 For packages requiring corresponding source availability under licenses such as GPLv3 or 
-MPL 2.0, please consult the relevant derivation and its upstream source. If any referenced source is unavailable, please open an issue so that the corresponding source can be provided.
+MPL 2.0, please consult the relevant derivation and its upstream source. If any referenced
+source is unavailable, please open an issue so that the corresponding source can be provided.
 
 The LICENSE file in the root of this repository applies to nix-opendeck's original packaging 
 and integration code. Downstream patches to third-party projects are distributed in accordance 
@@ -528,14 +529,13 @@ distributed under GPL-3.0-or-later.
 
 ## Reproducibility
 
-I’m pretty sure that this is properly reproducible, but I’ve not verified it. 
-I pinned Deno separately, replaced an unpredictable string in SvelteKit, and
-cleaned up some embedded build paths in various compilations, which should make
-the build deterministic. This absolutely isn't a substitute for confident
-verification, though.
+The `opendeck` package and plugins get tested for reproducibility across their
+supported platforms when their output paths change in a pull request. The checks
+independently rebuild the affected derivations and compare their outputs
+bit-for-bit against a reference build. Passing is required before merging into
+`main`.
 
-I do run weekly spot-checks on the `opendeck` package and plugins:
-
-[![Reproducibility (all systems)](https://github.com/missmoode/nix-opendeck/actions/workflows/spot-check-reproducibility.yml/badge.svg?branch=main)](https://github.com/missmoode/nix-opendeck/actions/workflows/spot-check-reproducibility.yml)
-
-Reproducibility is also checked on PRs.
+This doesn't verify the entire dependency closure, or guarantee that everything
+operates at runtime. I don't have the hardware to test it all, though during
+development I do test everything in this repo that can be tested on a 
+Stream Deck Mk2 and NixOS on `x86_64-linux`.
