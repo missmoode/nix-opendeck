@@ -8,4 +8,6 @@ in
   mkNpmOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkNpmOpenDeckPlugin;
   mkYarnOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkYarnOpenDeckPlugin;
   mkPrebuiltOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkPrebuiltOpenDeckPlugin;
+
+  wrapOpenDeck = pkgs: pkgs.callPackage ../packages/wrapOpenDeck.nix { };
 }
