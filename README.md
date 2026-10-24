@@ -523,7 +523,7 @@ MPL 2.0, please consult the relevant derivation and its upstream source. If any 
 
 The LICENSE file in the root of this repository applies to nix-opendeck's original packaging 
 and integration code. Downstream patches to third-party projects are distributed in accordance 
-with the applicable upstream licences. In particular, the modified OpenDeck application is 
+with the applicable upstream licenses. In particular, the modified OpenDeck application is 
 distributed under GPL-3.0-or-later.
 
 ## Reproducibility
