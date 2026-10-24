@@ -119,7 +119,7 @@ jobs:
           python3 .github/ci/package_updates.py update \
             --plan "$RUNNER_TEMP/discovery/plan.json" \
             --system "$UPDATE_SYSTEM" \
-            --output "$RUNNER_TEMP/updates"
+            --output "$RUNNER_TEMP/updates/updates-$UPDATE_SYSTEM"
       - name: Upload proposed patches and updater results
         if: always()
         uses: actions/upload-artifact@v7
@@ -149,7 +149,7 @@ jobs:
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
-          merge-multiple: false
+          merge-multiple: true
         continue-on-error: true
       - name: Plan native builds for changed packages
         id: plan
@@ -190,7 +190,7 @@ jobs:
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
-          merge-multiple: false
+          merge-multiple: true
         continue-on-error: true
       - uses: cachix/install-nix-action@v31
         with:
@@ -205,13 +205,13 @@ jobs:
         run: |
           python3 .github/ci/package_updates.py build \
             --updates "$RUNNER_TEMP/updates" \
-            --output "$RUNNER_TEMP/result.json"
+            --output "$RUNNER_TEMP/build-reports/build-${{ matrix.id }}-${{ matrix.system }}/result.json"
       - name: Upload native build result
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: build-${{ matrix.id }}-${{ matrix.system }}
-          path: ${{ runner.temp }}/result.json
+          path: ${{ runner.temp }}/build-reports/
           if-no-files-found: warn
           retention-days: 7
 
@@ -235,7 +235,7 @@ jobs:
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
-          merge-multiple: false
+          merge-multiple: true
         continue-on-error: true
       - uses: cachix/install-nix-action@v31
         with:
@@ -250,13 +250,13 @@ jobs:
         run: |
           python3 .github/ci/package_updates.py build \
             --updates "$RUNNER_TEMP/updates" \
-            --output "$RUNNER_TEMP/result.json"
+            --output "$RUNNER_TEMP/build-reports/build-opendeck-${{ matrix.system }}/result.json"
       - name: Upload native build result
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: build-opendeck-${{ matrix.system }}
-          path: ${{ runner.temp }}/result.json
+          path: ${{ runner.temp }}/build-reports/
           if-no-files-found: warn
           retention-days: 7
 
@@ -290,14 +290,14 @@ jobs:
         with:
           pattern: updates-*
           path: ${{ runner.temp }}/updates
-          merge-multiple: false
+          merge-multiple: true
         continue-on-error: true
       - uses: actions/download-artifact@v8
         if: needs.prepare-builds.result == 'success' && (needs.plugins.result != 'skipped' || needs.opendeck.result != 'skipped')
         with:
           pattern: build-*
           path: ${{ runner.temp }}/builds
-          merge-multiple: false
+          merge-multiple: true
         continue-on-error: true
       - uses: cachix/install-nix-action@v31
         if: needs.prepare-builds.result == 'success'
