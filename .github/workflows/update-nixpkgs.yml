@@ -1,15 +1,11 @@
+# Propose a nixpkgs lock-file update; the required PR reproducibility check
+# performs the native builds. cache.yml publishes outputs after merging.
 name: Update nixpkgs
 
 on:
   schedule:
-    - cron: "43 5 * * 1"
+    - cron: '43 5 * * 1'
   workflow_dispatch:
-    inputs:
-      validate_only:
-        description: 'Build and validate all systems without updating nixpkgs'
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
@@ -20,84 +16,81 @@ concurrency:
   queue: max
 
 jobs:
-  prepare:
-    permissions:
-      contents: write
-      pull-requests: write
+  update:
+    name: Propose nixpkgs update
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    outputs:
-      changed: ${{ steps.update.outputs.changed }}
-      base_sha: ${{ steps.update.outputs.base_sha }}
-      pr_number: ${{ steps.pr.outputs.pull-request-number }}
-      pr_head_sha: ${{ steps.pr.outputs.pull-request-head-sha }}
-      validate: ${{ steps.update.outputs.validate }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
-          fetch-depth: 0
+          persist-credentials: false
 
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ github.token }}
 
-      - name: Update only the main nixpkgs input
+      - name: Update nixpkgs lock
         id: update
         shell: bash
         run: |
           set -euo pipefail
-          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          if [[ "${{ inputs.validate_only }}" == "true" ]]; then
-            echo 'changed=false' >> "$GITHUB_OUTPUT"
-            echo 'validate=true' >> "$GITHUB_OUTPUT"
-            echo 'Validation-only: testing the existing flake.lock.' >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
 
-          # Do not update the separately pinned deno-nixpkgs input.
+          # Keep the separately pinned deno-nixpkgs input untouched.
           nix flake update nixpkgs
           git add flake.lock
 
           if git diff --cached --quiet -- flake.lock; then
             echo 'changed=false' >> "$GITHUB_OUTPUT"
-            echo 'validate=false' >> "$GITHUB_OUTPUT"
             echo 'nixpkgs is already up to date.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
           echo 'changed=true' >> "$GITHUB_OUTPUT"
-          echo 'validate=true' >> "$GITHUB_OUTPUT"
-
           old_rev=$(git show HEAD:flake.lock | jq -r '.nodes.nixpkgs.locked.rev')
           new_rev=$(jq -r '.nodes.nixpkgs.locked.rev' flake.lock)
+
           {
-            echo '## Weekly nixpkgs update'
+            echo '## Proposed nixpkgs update'
             echo
             echo "- Old revision: \`$old_rev\`"
             echo "- New revision: \`$new_rev\`"
             echo
-            echo 'All supported builds must pass, and the default OpenDeck package'
-            echo 'and all plugin targets must be published to Cachix before merging.'
-            echo 'The separately pinned deno-nixpkgs input was not targeted.'
+            echo 'The required PR reproducibility check validates affected packages.'
+            echo 'Once merged, cache.yml publishes missing redistributable outputs.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo '## Automated nixpkgs update'
             echo
-            echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            echo "- Old revision: \`$old_rev\`"
+            echo "- New revision: \`$new_rev\`"
+            echo
+            echo 'Merge is automatic only after the required PR checks pass.'
+            echo 'Cache publication follows the merge to main.'
+            echo
+            echo "[Updater run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
           } > "$RUNNER_TEMP/nixpkgs-report.md"
 
-      - name: Save candidate lock file for native builders
-        if: steps.update.outputs.validate == 'true'
-        uses: actions/upload-artifact@v7
+      # A separately installed GitHub App lets PR checks run automatically.
+      # Mint the short-lived token only after confirming an update exists.
+      - name: Generate automation token
+        id: app-token
+        if: steps.update.outputs.changed == 'true'
+        uses: actions/create-github-app-token@v3
         with:
-          name: proposed-flake-lock
-          path: flake.lock
-          if-no-files-found: error
-          retention-days: 7
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Create or update pull request
         id: pr
         if: steps.update.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
           base: ${{ github.ref_name }}
           branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/nixpkgs-update' || format('automated/nixpkgs-update-{0}', github.ref_name) }}
           delete-branch: true
@@ -109,306 +102,29 @@ jobs:
             updates
             nixpkgs
 
-  discover:
-    needs: prepare
-    if: needs.prepare.outputs.validate == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    outputs:
-      plugins: ${{ steps.targets.outputs.plugins }}
-      opendeck: ${{ steps.targets.outputs.opendeck }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.prepare.outputs.base_sha }}
-          persist-credentials: false
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: proposed-flake-lock
-
-      # Flakes use the Git working tree; the downloaded lock file must be staged.
-      - run: git add flake.lock
-
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ github.token }}
-
-      - name: Check all declared systems
-        run: nix flake check --no-build --all-systems
-
-      - name: Discover targets and enforce cache publication policy
-        id: targets
-        shell: bash
-        run: |
-          set -euo pipefail
-          nix eval --impure --json --expr '
-            let
-              flake = builtins.getFlake (toString ./.);
-              systems = builtins.attrNames flake.packages;
-            in
-              builtins.concatLists (map (system:
-                let targets = import ./.github/ci/targets.nix { inherit flake system; };
-                in [ targets.opendeck ] ++ targets.plugins
-              ) systems)
-          ' > "$RUNNER_TEMP/targets.json"
-
-          # Exactly the same fail-closed rule as cache.yml. targets.nix only
-          # enumerates the default OpenDeck package and declared plugins.
-          # In particular, neither opendeck-core nor opendeck-with-plugins
-          # is ever a publication target.
-          if ! jq -e 'all(.[]; .redistributable)' "$RUNNER_TEMP/targets.json" >/dev/null; then
-            echo 'Missing or non-redistributable license metadata:' >&2
-            jq -r '.[] | select(.redistributable | not) | "\(.system) / \(.label)"' \
-              "$RUNNER_TEMP/targets.json" >&2
-            exit 1
-          fi
-
-          plugins=$(jq -c '[.[] | select(.kind == "plugin") |
-            {system, runner, attr, label}]' "$RUNNER_TEMP/targets.json")
-          opendeck=$(jq -c '[.[] | select(.kind == "opendeck") |
-            {system, runner, attr, label}]' "$RUNNER_TEMP/targets.json")
-
-          echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
-          echo "opendeck=$opendeck" >> "$GITHUB_OUTPUT"
-
-          {
-            echo '## Native build / publication targets'
-            echo "- Individual plugins: $(jq 'length' <<< "$plugins")"
-            echo "- Default OpenDeck builds: $(jq 'length' <<< "$opendeck")"
-            echo '- All discovered targets passed the redistributability check.'
-            echo '- Other OpenDeck variants are not publication targets.'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  plugins:
-    name: 'Plugin: ${{ matrix.system }} / ${{ matrix.label }}'
-    needs: [prepare, discover]
-    if: >-
-      needs.discover.result == 'success' &&
-      needs.discover.outputs.plugins != '[]'
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 300
-    strategy:
-      fail-fast: false
-      max-parallel: 6
-      matrix:
-        include: ${{ fromJSON(needs.discover.outputs.plugins) }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.prepare.outputs.base_sha }}
-          persist-credentials: false
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: proposed-flake-lock
-
-      - run: git add flake.lock
-
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ github.token }}
-
-      - uses: cachix/cachix-action@v17
-        with:
-          name: nix-opendeck
-          skipPush: true
-
-      - name: Build plugin
-        shell: bash
-        env:
-          TARGET_ATTR: ${{ matrix.attr }}
-        run: |
-          set -euo pipefail
-          nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
-            > "$RUNNER_TEMP/built-paths"
-          test -s "$RUNNER_TEMP/built-paths"
-
-      # Keep write credentials out of the build process. Cachix publishes
-      # precisely the store outputs produced by the validated build above.
-      - name: Publish plugin runtime closure
-        if: needs.prepare.outputs.changed == 'true'
-        shell: bash
-        env:
-          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${CACHIX_AUTH_TOKEN:-}" ]]; then
-            echo '::error::CACHIX_AUTH_TOKEN is missing'
-            exit 1
-          fi
-          cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
-
-  opendeck:
-    name: 'OpenDeck: ${{ matrix.system }}'
-    needs: [prepare, discover]
-    if: >-
-      needs.discover.result == 'success' &&
-      needs.discover.outputs.opendeck != '[]'
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 300
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix:
-        include: ${{ fromJSON(needs.discover.outputs.opendeck) }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.prepare.outputs.base_sha }}
-          persist-credentials: false
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: proposed-flake-lock
-
-      - run: git add flake.lock
-
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ github.token }}
-
-      - uses: cachix/cachix-action@v17
-        with:
-          name: nix-opendeck
-          skipPush: true
-
-      - name: Build default OpenDeck
-        shell: bash
-        env:
-          TARGET_ATTR: ${{ matrix.attr }}
-        run: |
-          set -euo pipefail
-          nix build --no-link --print-out-paths -L ".#${TARGET_ATTR}" \
-            > "$RUNNER_TEMP/built-paths"
-          test -s "$RUNNER_TEMP/built-paths"
-
-      - name: Publish default OpenDeck runtime closure
-        if: needs.prepare.outputs.changed == 'true'
-        shell: bash
-        env:
-          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${CACHIX_AUTH_TOKEN:-}" ]]; then
-            echo '::error::CACHIX_AUTH_TOKEN is missing'
-            exit 1
-          fi
-          cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
-
-  finalize:
-    permissions:
-      contents: write
-      pull-requests: write
-    needs: [prepare, discover, plugins, opendeck]
-    if: always() && needs.prepare.outputs.validate == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.ref_name }}
-          fetch-depth: 0
-
-      - name: Confirm the proposed base has not moved
-        id: base
-        shell: bash
-        env:
-          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
-          BASE_BRANCH: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          git fetch origin "$BASE_BRANCH"
-          if [[ "$(git rev-parse "origin/$BASE_BRANCH")" == "$BASE_SHA" ]]; then
-            echo 'unchanged=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'unchanged=false' >> "$GITHUB_OUTPUT"
-            echo '::warning::base branch moved after update preparation; automatic merge is disabled'
-          fi
-
-      - name: Write validation and publication report
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
-          CHANGED: ${{ needs.prepare.outputs.changed }}
-          DISCOVER: ${{ needs.discover.result }}
-          PLUGINS: ${{ needs.plugins.result }}
-          OPENDECK: ${{ needs.opendeck.result }}
-          BASE_UNCHANGED: ${{ steps.base.outputs.unchanged }}
-        run: |
-          set -euo pipefail
-          {
-            echo '## Weekly nixpkgs validation'
-            echo
-            echo "- Evaluation, target discovery and license policy: **$DISCOVER**"
-            echo "- Plugin builds: **$PLUGINS**"
-            echo "- Default OpenDeck builds: **$OPENDECK**"
-            if [[ "$CHANGED" == true ]]; then
-              echo '- Cache publication: **required** (included in both build job results)'
-            else
-              echo '- Cache publication: **skipped** (validation-only run)'
-            fi
-            echo "- Base unchanged: **$BASE_UNCHANGED**"
-            echo
-            echo 'Only nixpkgs was targeted; deno-nixpkgs remains pinned.'
-            echo
-            echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
-          } > "$RUNNER_TEMP/nixpkgs-report.md"
-          cat "$RUNNER_TEMP/nixpkgs-report.md" >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ -n "$PR_NUMBER" ]]; then
-            gh pr edit "$PR_NUMBER" --body-file "$RUNNER_TEMP/nixpkgs-report.md"
-          fi
-
-      # Reusable PR branch: merge only the validated head revision after all
-      # native builds AND synchronous Cachix uploads have completed successfully.
-      - name: Merge validated and published update
-        id: merge
+      # GitHub, not this job, decides when the required PR checks have passed.
+      - name: Enable auto-merge
         if: >-
           github.ref_name == github.event.repository.default_branch &&
-          needs.prepare.outputs.changed == 'true' &&
-          needs.prepare.outputs.pr_number != '' &&
-          needs.discover.result == 'success' &&
-          needs.plugins.result == 'success' &&
-          needs.opendeck.result == 'success' &&
-          steps.base.outputs.unchanged == 'true'
+          steps.pr.outputs.pull-request-number != ''
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
-          PR_HEAD_SHA: ${{ needs.prepare.outputs.pr_head_sha }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.pull-request-number }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.pull-request-head-sha }}
         run: |
+          set -euo pipefail
           gh pr merge "$PR_NUMBER" \
+            --auto \
             --squash \
             --match-head-commit "$PR_HEAD_SHA"
+          echo "Auto-merge requested for PR #$PR_NUMBER; required checks must pass." \
+            >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Assign PR requiring attention
+      - name: Check PR creation
         if: >-
-          always() &&
-          needs.prepare.outputs.pr_number != '' &&
-          (needs.discover.result != 'success' ||
-           needs.plugins.result != 'success' ||
-           needs.opendeck.result != 'success' ||
-           steps.base.outputs.unchanged != 'true' ||
-           steps.merge.outcome == 'failure')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
-          UPDATE_MAINTAINERS: ${{ vars.UPDATE_MAINTAINERS }}
+          steps.update.outputs.changed == 'true' &&
+          steps.pr.outputs.pull-request-number == ''
         run: |
-          if [[ -n "$UPDATE_MAINTAINERS" ]]; then
-            gh pr edit "$PR_NUMBER" --add-assignee "$UPDATE_MAINTAINERS"
-          fi
-
-      - name: Fail unless validation, publication and merge succeeded
-        if: >-
-          needs.discover.result != 'success' ||
-          needs.plugins.result != 'success' ||
-          needs.opendeck.result != 'success' ||
-          steps.base.outputs.unchanged != 'true' ||
-          (needs.prepare.outputs.changed == 'true' &&
-           needs.prepare.outputs.pr_number == '') ||
-          (needs.prepare.outputs.changed == 'true' &&
-           github.ref_name == github.event.repository.default_branch &&
-           steps.merge.outcome != 'success')
-        run: exit 1
+          echo '::error::The lock file changed but no pull request was created.'
+          exit 1
