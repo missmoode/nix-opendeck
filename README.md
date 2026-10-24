@@ -537,3 +537,5 @@ verification, though.
 I do run weekly spot-checks on the `opendeck` package and plugins:
 
 [![Reproducibility (all systems)](https://github.com/missmoode/nix-opendeck/actions/workflows/spot-check-reproducibility.yml/badge.svg?branch=main)](https://github.com/missmoode/nix-opendeck/actions/workflows/spot-check-reproducibility.yml)
+
+Reproducibility is also checked on PRs.
