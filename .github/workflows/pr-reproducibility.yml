@@ -63,9 +63,7 @@ jobs:
                         inherit flake system;
                       };
                     in
-                      [ targets.opendeck ]
-                      ++ (if targets ? core then [ targets.core ] else [ ])
-                      ++ targets.plugins
+                      [ targets.core targets.opendeck ] ++ targets.plugins
                   ) systems)
               '
             ) > "$output"
