@@ -1,12 +1,13 @@
 diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
 --- a/src-tauri/src/events/frontend/plugins.rs
 +++ b/src-tauri/src/events/frontend/plugins.rs
-@@ -178,3 +178,53 @@
+@@ -178,3 +178,54 @@
 +/// Notify the running instance that an external package manager changed one plugin.
 +/// Does not install files or erase saved plugin settings/profile assignments.
 +pub async fn sync_external_plugin(app: AppHandle, id: String) {
 +	// An explicit plugin ID, never a path supplied by the caller.
-+	let valid = id.strip_suffix(".sdPlugin").is_some_and(|stem| !stem.is_empty())
++	// Accept safe directory names without assuming a particular suffix.
++	let valid = id.bytes().any(|c| c.is_ascii_alphanumeric())
 +		&& id.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'));
 +	if !valid {
 +		log::warn!("Refusing to sync invalid plugin ID: {id:?}");

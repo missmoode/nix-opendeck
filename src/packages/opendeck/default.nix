@@ -225,7 +225,7 @@ rustPlatform.buildRustPackage (
       # retain the frame-pointer setting supplied by Nixpkgs.
       ${lib.optionalString stdenv.hostPlatform.isDarwin ''
         # Rust source paths.
-        export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-Cforce-frame-pointers=yes --remap-path-prefix=$NIX_BUILD_TOP=/build"
+        export RUSTFLAGS="''${RUSTFLAGS:+$RUSTFLAGS }-Cforce-frame-pointers=yes --remap-path-prefix=$NIX_BUILD_TOP=/build -C link-arg=-Wl,-S"
 
         # C/C++ source paths, including those compiled by aws-lc-sys.
         export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:+$NIX_CFLAGS_COMPILE }-ffile-prefix-map=$NIX_BUILD_TOP=/build"
