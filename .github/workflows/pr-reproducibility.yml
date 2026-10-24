@@ -156,6 +156,47 @@ jobs:
             echo '- Source: configured substituter or local build'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Verify macOS OpenDeck bundle
+        if: matrix.system == 'aarch64-darwin' && matrix.kind == 'opendeck'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          output="$(nix eval --raw ".#${TARGET_ATTR}.outPath")"
+          app="$output/Applications/OpenDeck.app"
+          plugins="$app/Contents/Resources/plugins"
+
+          echo "Checking native architecture"
+          uname -m
+          test "$(uname -m)" = arm64
+
+          echo "Checking application structure"
+          test -x "$app/Contents/MacOS/opendeck"
+          test -d "$plugins"
+          test -x "$output/bin/opendeck"
+
+          echo "Checking bundled plugins"
+          nix eval --json \
+            '.#packages.aarch64-darwin.opendeck.bundledPluginIds' \
+            | jq -e 'length > 0'
+
+          while IFS= read -r id; do
+            echo "Checking plugin: $id"
+            test -f "$plugins/$id/manifest.json"
+          done < <(
+            nix eval --json \
+              '.#packages.aarch64-darwin.opendeck.bundledPluginIds' \
+              | jq -r '.[]'
+          )
+
+          echo "Verifying application signature"
+          codesign --verify --deep --strict --verbose=2 "$app"
+
+          echo "Inspecting signature"
+          codesign --display --verbose=4 "$app"
+
+          echo "macOS OpenDeck bundle checks passed"
+
       - name: Rebuild and compare outputs
         id: rebuild
         shell: bash
