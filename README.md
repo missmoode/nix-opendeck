@@ -68,7 +68,7 @@ For prebuilt packages, see [Binary Cache](#binary-cache). Other installation met
 and configuration options are documented below.
 
 
-**Want plugins bundled into OpenDeck instead?**
+**Want to bundle plugins directly into OpenDeck?**
 You can use `wrapOpenDeck` to create a custom OpenDeck package containing your chosen plugins, without recompiling the application. This works with or without Home Manager, and lets you install or distribute a preconfigured OpenDeck package.
 
 See [Custom bundled packages](#custom-bundled-packages) for examples.
@@ -280,7 +280,7 @@ It loads or reloads the plugin if its directory exists, or unloads it if
 the directory has been removed. It does not start OpenDeck if it isn't
 already running.
 
-Alternatively, you can [bundle plugins](#bundled-plugins) into an OpenDeck package using `wrapOpenDeck`. This lets you select plugins declaratively without Home Manager, and without recompiling OpenDeck when the plugin selection changes.
+Alternatively, you can [bundle plugins](#custom-bundled-packages) into an OpenDeck package using `wrapOpenDeck`. This lets you select plugins declaratively without Home Manager, and without recompiling OpenDeck when the plugin selection changes.
 
 The `opendeck-with-plugins` package is also available as a convenience, bundling all plugins supported on the selected platform that do not declare additional runtime commands or udev rules.
 
@@ -291,21 +291,28 @@ The `wrapOpenDeck` helper creates an OpenDeck package containing your chosen plu
 With either [overlay](#overlay) applied, you can use `pkgs.wrapOpenDeck`:
 
 ```nix
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 let
-  customOpenDeck = pkgs.wrapOpenDeck {
-    plugins = with pkgs.opendeck-plugins; [
-      nekename.starterpack
-      openactionplugins.mpris
+  opendeck = inputs.opendeck.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+in
+{
+  imports = [ inputs.opendeck.homeManagerModules.default ];
+
+  programs.opendeck = {
+    enable = true;
+
+    package = opendeck.wrapOpenDeck {
+      plugins = with opendeck.opendeck-plugins; [
+        nekename.starterpack
+        openactionplugins.mpris
+      ];
+    };
+
+    # Additional plugins can still be managed separately.
+    plugins = with opendeck.opendeck-plugins; [
       gallowaylabs.tomato-timer
     ];
   };
-in
-{
-  environment.systemPackages = [ customOpenDeck ];
-
-  # NixOS only: install rules for supported devices.
-  services.udev.packages = [ customOpenDeck.udev ];
 }
 ```
 
