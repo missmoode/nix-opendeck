@@ -2,8 +2,9 @@
 
 nix-opendeck packages [OpenDeck](https://github.com/nekename/OpenDeck) and a 
 selection of plugins for Nix, with patches to support immutable plugins in the 
-Nix store. It provides custom bundled packages and optional declarative plugin
-management through Home Manager.
+Nix store. It provides declarative plugin
+management through both custom bundled
+packages and Home Manager.
 
 This is useful on NixOS, where plugins installed through OpenDeck's GUI may fail because
 they expect a conventional Linux environment. On other platforms, nix-opendeck still
