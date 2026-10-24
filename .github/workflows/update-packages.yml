@@ -378,7 +378,6 @@ jobs:
           labels: |
             updates
             upstream
-          assignees: ${{ vars.UPDATE_MAINTAINERS }}
 
       # Partial successes still produce a PR, but never auto-merge it.
       - name: Enable auto-merge for fully successful updates
