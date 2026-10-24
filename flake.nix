@@ -25,61 +25,6 @@
 
   outputs =
     inputs@{ self, flake-parts, ... }:
-    let
-      mkPluginLib =
-        pkgs:
-        let
-          mkOpenDeckPlugin = import ./src/lib/mkOpenDeckPlugin.nix {
-            inherit (pkgs)
-              lib
-              stdenv
-              runCommand
-              nix-update-script
-              jq
-              ;
-          };
-
-          mkRustOpenDeckPlugin = import ./src/lib/mkRustOpenDeckPlugin.nix {
-            inherit (pkgs)
-              lib
-              rustPlatform
-              stdenv
-              ;
-            inherit mkOpenDeckPlugin;
-          };
-
-          mkNpmOpenDeckPlugin = import ./src/lib/mkNpmOpenDeckPlugin.nix {
-            inherit (pkgs) buildNpmPackage;
-            inherit mkOpenDeckPlugin;
-          };
-
-          mkYarnOpenDeckPlugin = import ./src/lib/mkYarnOpenDeckPlugin.nix {
-            inherit (pkgs)
-              yarnConfigHook
-              yarnBuildHook
-              nodejs
-              stdenv
-              fetchYarnDeps
-              ;
-            inherit mkOpenDeckPlugin;
-          };
-
-          mkPrebuiltOpenDeckPlugin = import ./src/lib/mkPrebuiltOpenDeckPlugin.nix {
-            inherit (pkgs) stdenv;
-            inherit mkOpenDeckPlugin;
-          };
-        in
-        {
-          inherit
-            mkOpenDeckPlugin
-            mkRustOpenDeckPlugin
-            mkNpmOpenDeckPlugin
-            mkYarnOpenDeckPlugin
-            mkPrebuiltOpenDeckPlugin
-            ;
-        };
-
-    in
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         flake-parts.flakeModules.easyOverlay
@@ -95,21 +40,11 @@
         { final, lib, pkgs, ... }:
         import ./src/packages {
           inherit inputs final lib pkgs;
-          pluginLib = mkPluginLib final;
+          pluginLib = (import ./src/lib/plugins) final;
         };
 
       flake = {
-        lib = {
-          mkOpenDeckPlugin = import ./src/lib/mkOpenDeckPlugin.nix;
-
-          mkRustOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkRustOpenDeckPlugin;
-
-          mkNpmOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkNpmOpenDeckPlugin;
-
-          mkYarnOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkYarnOpenDeckPlugin;
-
-          mkPrebuiltOpenDeckPlugin = pkgs: (mkPluginLib pkgs).mkPrebuiltOpenDeckPlugin;
-        };
+        lib = import ./src/lib;
 
         homeManagerModules.default =
           { pkgs, ... }@moduleArgs:
