@@ -100,6 +100,9 @@ if stdenvNoCC.hostPlatform.isDarwin then
         cp -RL "$source/." "$destination/"
       '') plugins}
 
+      # Copied plugin binaries must be writable for code signing.
+      chmod -R u+w "$pluginDir"
+
       # A CLI entry point without replacing the native .app executable.
       ln -s \
         ../Applications/OpenDeck.app/Contents/MacOS/opendeck \
