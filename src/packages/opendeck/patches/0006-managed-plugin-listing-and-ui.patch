@@ -1,7 +1,6 @@
 Subject: List effective plugins using the existing upstream GUI interface
 
 diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
-index bc2e06b..8e84f7d 100644
 --- a/src-tauri/src/events/frontend/plugins.rs
 +++ b/src-tauri/src/events/frontend/plugins.rs
 @@ -1,6 +1,6 @@
@@ -12,13 +11,7 @@ index bc2e06b..8e84f7d 100644
  use crate::plugins::{SpawnRequest, deactivate_plugin, initialise_plugin};
  use crate::shared::{config_dir, log_dir};
  use crate::store::profiles::{acquire_locks, get_instance};
-@@ -18,47 +18,29 @@ pub struct PluginInfo {
- 	icon: String,
- 	version: String,
- 	has_settings_interface: bool,
--	builtin: bool,
-+	builtin: bool, // Preserve the upstream GUI field; only package sources are built-ins.
- 	registered: bool,
+@@ -23,38 +23,21 @@ pub struct PluginInfo {
  }
  
  #[command]
@@ -41,37 +34,26 @@ index bc2e06b..8e84f7d 100644
 -		let path = match entry.metadata().await.unwrap().is_symlink() {
 -			true => fs::read_link(entry.path()).await.unwrap(),
 -			false => entry.path(),
-+	for plugin in sources::installed_plugins() {
-+		let Ok(manifest) = crate::plugins::manifest::read_manifest(&plugin.path) else {
-+			continue;
- 		};
+-		};
 -		let metadata = fs::metadata(&path).await.unwrap();
 -		if metadata.is_dir() {
 -			let id = path.file_name().unwrap().to_str().unwrap().to_owned();
 -			let Ok(manifest) = crate::plugins::manifest::read_manifest(&path) else {
 -				continue;
 -			};
--			plugins.push(PluginInfo {
--				name: manifest.name,
--				author: manifest.author,
++	for plugin in sources::installed_plugins() {
++		let path = plugin.path;
++		let id = plugin.id;
++		if let Ok(manifest) = crate::plugins::manifest::read_manifest(&path) {
+ 			plugins.push(PluginInfo {
+ 				name: manifest.name,
+ 				author: manifest.author,
 -				icon: crate::shared::convert_icon(path.join(manifest.icon).to_str().unwrap().to_owned()),
--				version: manifest.version,
--				has_settings_interface: manifest.has_settings_interface.unwrap_or(false),
++				icon: crate::shared::convert_icon(path.join(manifest.icon).to_string_lossy().into_owned()),
+ 				version: manifest.version,
+ 				has_settings_interface: manifest.has_settings_interface.unwrap_or(false),
 -				builtin: builtins.contains(&id),
--				registered: registered.contains(&id),
--				id,
--			});
--		}
-+		plugins.push(PluginInfo {
-+			name: manifest.name,
-+			author: manifest.author,
-+			icon: crate::shared::convert_icon(plugin.path.join(manifest.icon).to_string_lossy().into_owned()),
-+			version: manifest.version,
-+			has_settings_interface: manifest.has_settings_interface.unwrap_or(false),
-+			builtin: plugin.management == PluginManagement::Package,
-+			registered: registered.contains(&plugin.id),
-+			id: plugin.id,
-+		});
- 	}
- 
- 	Ok(plugins)
++				builtin: plugin.management == PluginManagement::Package,
+ 				registered: registered.contains(&id),
+ 				id,
+ 			});
