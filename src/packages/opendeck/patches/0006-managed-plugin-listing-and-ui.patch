@@ -1,19 +1,24 @@
-Subject: List effective plugins using the existing upstream GUI interface
+Subject: List effective plugins and skip GUI update checks for managed sources
 
 diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
 --- a/src-tauri/src/events/frontend/plugins.rs
 +++ b/src-tauri/src/events/frontend/plugins.rs
 @@ -1,6 +1,6 @@
  use super::Error;
- 
+
 -use crate::plugins::sources;
 +use crate::plugins::sources::{self, PluginManagement};
  use crate::plugins::{SpawnRequest, deactivate_plugin, initialise_plugin};
  use crate::shared::{config_dir, log_dir};
  use crate::store::profiles::{acquire_locks, get_instance};
-@@ -23,38 +23,21 @@ pub struct PluginInfo {
+@@ -19,42 +19,27 @@ pub struct PluginInfo {
+ 	version: String,
+ 	has_settings_interface: bool,
+ 	builtin: bool,
++	gui_managed: bool,
+ 	registered: bool,
  }
- 
+
  #[command]
 -pub async fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, Error> {
 +pub async fn list_plugins() -> Result<Vec<PluginInfo>, Error> {
@@ -29,7 +34,7 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
 -		Ok(Ok(entries)) => entries.flatten().map(|x| x.file_name().to_str().unwrap().to_owned()).collect(),
 -		_ => vec![],
 -	};
- 
+
 -	while let Ok(Some(entry)) = entries.next_entry().await {
 -		let path = match entry.metadata().await.unwrap().is_symlink() {
 -			true => fs::read_link(entry.path()).await.unwrap(),
@@ -54,6 +59,19 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  				has_settings_interface: manifest.has_settings_interface.unwrap_or(false),
 -				builtin: builtins.contains(&id),
 +				builtin: plugin.management == PluginManagement::Package,
++				gui_managed: plugin.management == PluginManagement::User,
  				registered: registered.contains(&id),
  				id,
  			});
+diff --git a/src/components/PluginManager.svelte b/src/components/PluginManager.svelte
+--- a/src/components/PluginManager.svelte
++++ b/src/components/PluginManager.svelte
+@@ -196,7 +196,7 @@
+ 	let checkedPlugins = new Set<string>();
+ 	$: if (showPopup) {
+ 		for (const plugin of installed) {
+-			if (!checkedPlugins.has(plugin.id)) {
++			if (plugin.gui_managed && !checkedPlugins.has(plugin.id)) {
+ 				checkedPlugins.add(plugin.id);
+ 				isUpdateAvailable(plugin).then((version) => (availableUpdates = { ...availableUpdates, [plugin.id]: version }));
+ 			}
