@@ -16,7 +16,7 @@ new file mode 100644
 index 0000000..ae8566e
 --- /dev/null
 +++ b/src-tauri/src/plugins/sources.rs
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,229 @@
 +//! Read-only source selection for user, Home Manager and wrapped-package plugins.
 +//!
 +//! Keep the version comparison almost in step with upstream's bundled-plugin reconciliation:
@@ -29,8 +29,7 @@ index 0000000..ae8566e
 +
 +use tauri::{AppHandle, Manager};
 +
-+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
-+#[serde(rename_all = "lowercase")]
++#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 +pub enum PluginManagement {
 +	User,
 +	External,
@@ -53,21 +52,10 @@ index 0000000..ae8566e
 +	matches!(components.next(), Some(std::path::Component::Normal(_))) && components.next().is_none()
 +}
 +
-+/// Writes and Home Manager sync must explicitly use the user source.
++/// GUI plugin installation and removal must use the user source.
 +pub fn user_plugin_path(id: &str) -> anyhow::Result<PathBuf> {
 +	anyhow::ensure!(valid_plugin_id(id), "Invalid plugin ID: {id:?}");
 +	Ok(crate::shared::config_dir().join("plugins").join(id))
-+}
-+
-+/// Include missing or shadowed roots: cached profiles may still refer to a
-+/// source whose user entry was just removed or replaced.
-+pub fn plugin_resource_roots(id: &str) -> Vec<PathBuf> {
-+	let Ok(user_path) = user_plugin_path(id) else { return vec![] };
-+	let mut roots = vec![user_path];
-+	if let Some(package_root) = package_root() {
-+		roots.push(package_root.join(id));
-+	}
-+	roots
 +}
 +
 +fn external_ids() -> BTreeSet<String> {
@@ -157,7 +145,7 @@ index 0000000..ae8566e
 +	Some(resolve_at(id, user_root, package_root, external.contains(id))?.path.join(relative))
 +}
 +
-+/// Backend authority; the frontend's management field is only a presentation aid.
++/// Authoritative backend guard for GUI installation and removal.
 +pub fn ensure_gui_managed(id: &str) -> anyhow::Result<()> {
 +	let _ = user_plugin_path(id)?;
 +	anyhow::ensure!(

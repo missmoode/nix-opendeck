@@ -507,7 +507,7 @@ Upstream OpenDeck copies bundled plugins into the user's plugin directory at sta
 
 When a plugin exists in multiple places, Home Manager-managed installations take precedence. Otherwise, the packaged version is selected when its manifest version is **newer than or equal to** the user's version; a newer user version wins. If a user installation's version cannot be compared, nix-opendeck leaves it in place rather than replacing it automatically. The Home Manager module also prevents declaring a plugin separately when it is already bundled.
 
-A selected packaged plugin cannot be updated or removed through OpenDeck's graphical plugin manager. Any shadowed user installation remains on disk and can become active again if the plugin is removed from the package. Configuration backups retain ordinary user-installed plugins, while managed plugin symlinks and package resources are handled separately.
+A selected packaged plugin cannot be updated or removed through OpenDeck's graphical plugin manager. Any shadowed user installation remains on disk and can become active again if the plugin is removed from the package. Configuration backups retain ordinary user-installed plugins, while managed plugin symlinks and package resources are handled separately. If removing a newer user-installed plugin reveals a bundled version, restart OpenDeck to refresh resources in existing profile instances.
 
 Upstream OpenDeck includes the StarterPack plugin by default, so nix-opendeck's `opendeck` package does as well. The `opendeck-core` package includes no bundled plugins.
 

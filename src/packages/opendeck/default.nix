@@ -112,7 +112,7 @@ rustPlatform.buildRustPackage (
       # Allow Home Manager to restart an existing instance without opening one.
       ./patches/0009-restart-if-running.patch
 
-      # Repair cached resource paths when GUI operations change plugin sources.
+      # Preserve portable encoder resources when saving and loading profiles.
       ./patches/0010-rebind-plugin-resources.patch
 
       # Preserve wrapper-provided runtime paths when importing the login shell.
