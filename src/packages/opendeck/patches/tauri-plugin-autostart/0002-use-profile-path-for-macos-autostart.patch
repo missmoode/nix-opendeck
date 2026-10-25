@@ -1,7 +1,7 @@
 diff --git a/src/lib.rs b/src/lib.rs
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -198,9 +198,26 @@
+@@ -198,9 +198,33 @@
                      // but this results in seeing a Unix Executable in macOS login items
                      // It must be: /Applications/Example.app
                      // If it didn't find exactly a single occurance of .app, it will default to
@@ -17,7 +17,14 @@ diff --git a/src/lib.rs b/src/lib.rs
 +                                .map(std::path::PathBuf::from)
 +                                .filter(|path| path.is_absolute())
 +                                .unwrap_or_else(|| home.join(".local/state"));
-+                            [home.join(".nix-profile"), state_home.join("nix/profile")]
++                            let mut profiles = vec![home.join(".nix-profile"), state_home.join("nix/profile")];
++                            // nix-darwin with home-manager.useUserPackages = true.
++                            if let Some(user) = home.file_name() {
++                                profiles.push(
++                                    std::path::PathBuf::from("/etc/profiles/per-user").join(user),
++                                );
++                            }
++                            profiles
 +                                .into_iter()
 +                                .map(|profile| profile.join("Applications/OpenDeck.app/Contents/MacOS/opendeck"))
 +                                .find(|candidate| {
