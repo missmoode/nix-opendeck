@@ -100,7 +100,7 @@ rustPlatform.buildRustPackage (
       # Guard backend mutations and preserve data when effective sources change.
       ./patches/0005-managed-plugin-backend.patch
 
-      # Report effective ownership and update its GUI consumers together.
+      # List effective plugins via the upstream GUI's existing builtin field.
       ./patches/0006-managed-plugin-listing-and-ui.patch
 
       # Back up user plugin files, excluding links and declarative ownership.
@@ -112,7 +112,7 @@ rustPlatform.buildRustPackage (
       # Allow Home Manager to restart an existing instance without opening one.
       ./patches/0009-restart-if-running.patch
 
-      # Repair cached paths and profile views after a plugin source changes.
+      # Repair cached resource paths when GUI operations change plugin sources.
       ./patches/0010-rebind-plugin-resources.patch
 
       # Preserve wrapper-provided runtime paths when importing the login shell.

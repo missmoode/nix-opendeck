@@ -1,4 +1,4 @@
-Subject: Rebind cached plugin resources and refresh profile views after source transitions
+Subject: Rebind cached resources when GUI operations change plugin sources
 
 diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
 index 8cee8fa..6aa4341 100644
@@ -17,7 +17,7 @@ index 8cee8fa..6aa4341 100644
 +	}
 +}
 +
-+// The existing reload event also tells profile views to refresh rebound paths.
++// Keep upstream's existing reload event for property inspectors.
 +fn notify_plugin_reloaded(app: &AppHandle, id: &str) {
 +	if let Some(window) = app.get_webview_window("main") {
 +		let _ = window.emit("plugin_reloaded", id);
@@ -243,57 +243,3 @@ index 0b3b129..27cff82 100644
  
  		ActionInstance {
  			context: self.context.into_action_context(device, profile),
-diff --git a/src/components/PropertyInspectorView.svelte b/src/components/PropertyInspectorView.svelte
-index 4117b55..74e88b3 100644
---- a/src/components/PropertyInspectorView.svelte
-+++ b/src/components/PropertyInspectorView.svelte
-@@ -9,6 +9,7 @@
- 
- 	import { invoke } from "@tauri-apps/api/core";
- 	import { listen } from "@tauri-apps/api/event";
-+	import { onDestroy, tick } from "svelte";
- 
- 	let iframes: { [context: string]: HTMLIFrameElement } = {};
- 	let iframeContainer: HTMLDivElement;
-@@ -168,15 +169,34 @@
- 		.concat(profile.sliders.filter(nonNull))
- 		.concat(profile.infobars.filter(nonNull));
- 
--	listen("plugin_reloaded", ({ payload }: { payload: string }) => {
--		for (const instance of instances) {
--			if (instance.action.plugin == payload && iframes[instance.context]) {
--				iframes[instance.context].src += "";
--				if ($inspectedInstance == instance.context) {
--					invoke("switch_property_inspector", { new: instance.context });
-+	let disposed = false;
-+	let reloadRefresh = Promise.resolve();
-+	const unlistenReload = listen("plugin_reloaded", ({ payload }: { payload: string }) => {
-+		// Keep every plugin notification when activation reloads several IDs.
-+		reloadRefresh = reloadRefresh.then(async () => {
-+			if (disposed) return;
-+			const deviceId = device.id;
-+			const profileId = profile.id;
-+			const refreshed = await invoke<Profile>("get_selected_profile", { device: deviceId });
-+			if (disposed || device.id != deviceId || profile.id != profileId || refreshed.id != profileId) return;
-+			profile = refreshed;
-+			await tick();
-+			if (disposed || device.id != deviceId || profile.id != profileId) return;
-+
-+			for (const instance of instances) {
-+				if (disposed || device.id != deviceId || profile.id != profileId) return;
-+				if (instance.action.plugin == payload && iframes[instance.context]) {
-+					iframes[instance.context].src += "";
-+					if ($inspectedInstance == instance.context) {
-+						await invoke("switch_property_inspector", { new: instance.context });
-+					}
- 				}
- 			}
--		}
-+		}).catch((error) => console.warn("Failed to refresh plugin property inspectors:", error));
-+	});
-+	onDestroy(() => {
-+		disposed = true;
-+		void unlistenReload.then((unlisten) => unlisten());
- 	});
- </script>
- 

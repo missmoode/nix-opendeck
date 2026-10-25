@@ -20,7 +20,7 @@ index 0000000..ae8566e
 +//! Read-only source selection for user, Home Manager and wrapped-package plugins.
 +//!
 +//! Keep the version comparison almost in step with upstream's bundled-plugin reconciliation:
-+//! raw manifests (without platform overrides), *newer or equal* SemVer ordering, and user wins ties.
++//! raw manifests (without platform overrides), SemVer ordering, but packaged plugins win ties.
 +//! We select a source instead of copying it, preserving even shadowed user entries.
 +
 +use std::collections::BTreeSet;
