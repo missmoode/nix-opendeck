@@ -109,8 +109,8 @@ rustPlatform.buildRustPackage (
       # Keep the current HM links and ownership when restoring user data.
       ./patches/0008-protect-managed-plugin-restore.patch
 
-      # Reload changed external plugins without deleting saved user data.
-      ./patches/0009-sync-external-plugins.patch
+      # Allow Home Manager to restart an existing instance without opening one.
+      ./patches/0009-restart-if-running.patch
 
       # Repair cached paths and profile views after a plugin source changes.
       ./patches/0010-rebind-plugin-resources.patch

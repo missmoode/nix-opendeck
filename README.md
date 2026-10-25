@@ -241,7 +241,7 @@ do that and still want StarterPack, you'll need to declare
 If `programs.opendeck.installPackage` is `false`, `programs.opendeck.package` should
 still match the OpenDeck package you installed elsewhere. The module uses it to check
 which plugins are already bundled and prevent accidental double-declarations, as well
-as to notify a running OpenDeck instance of plugin changes.
+as to target the correct executable when requesting an optional restart.
 
 > [!IMPORTANT]
 > Plugins managed by the Home Manager module are marked as externally managed.
@@ -251,11 +251,12 @@ as to notify a running OpenDeck instance of plugin changes.
 > Plugins installed through the GUI are unaffected. The Home Manager module will
 > refuse to overwrite a plugin it doesn't already manage.
 
-When Home Manager adds, removes, or updates a plugin, it notifies the running
-OpenDeck instance to load, unload, or reload that plugin without restarting
-OpenDeck. Only plugins whose installed paths are changed are affected.
-If OpenDeck isn't running (or notification fails), the changes will take effect
-when OpenDeck next starts as normal.
+Home Manager changes to declared plugins take effect when OpenDeck next starts.
+Set `programs.opendeck.restartOnPluginChanges = true` to request a single restart
+of an already-running instance after plugin symlinks are added, removed, or updated.
+The option defaults to `false`, does not start OpenDeck if it is closed, and does
+nothing when plugin paths have not changed. It does not detect changes to the
+bundled plugins in `programs.opendeck.package`.
 
 ### Usage without the Home Manager module
 
@@ -269,17 +270,14 @@ You could symlink the plugins from the Nix store (or elsewhere) directly into th
 the patched `opendeck` should be able to use them. However, without the Home Manager
 module they will not be protected from modification through the GUI.
 
-If you manage plugin symlinks yourself, you can notify a running OpenDeck
-instance of a change without restarting it:
+If you manage plugin symlinks yourself, restart OpenDeck after changing them.
+For an already-running instance, you can request a restart with:
 
 ```bash
-opendeck --sync-plugin com.example.plugin.sdPlugin
+opendeck --restart-if-running
 ```
 
-The command accepts a single plugin ID, rather than a filesystem path.
-It reloads the effective plugin source for that ID (including a bundled
-fallback if a user installation was removed), or unloads it if none remains.
-It does not start OpenDeck if it isn't already running.
+This exits without starting a new instance when OpenDeck is not running.
 
 Alternatively, you can [bundle plugins](#custom-bundled-packages) into an OpenDeck package using `wrapOpenDeck`. This lets you select plugins declaratively without Home Manager, and without recompiling OpenDeck when the plugin selection changes.
 
@@ -463,8 +461,8 @@ These patches:
   executable permissions.
 - Load bundled plugins directly from package resources without copying them into the
   user's plugin directory, while protecting managed plugins from GUI modification.
-- Synchronize individual externally managed plugin changes without restarting OpenDeck,
-  preserving profile assignments and rebinding resources when plugin sources change.
+- Support an optional restart of an already-running OpenDeck instance after Home
+  Manager changes declared plugin symlinks, without launching an inactive app.
 - Preserve PATH entries supplied by Nix wrappers and explain the PATH requirement for
   OpenDeck's built-in autostart.
 - Exclude managed plugin links and ownership metadata from configuration backups and

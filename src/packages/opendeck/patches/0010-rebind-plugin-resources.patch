@@ -73,13 +73,13 @@ index 8cee8fa..6aa4341 100644
  
  	use tauri_plugin_aptabase::EventTracker;
  	let _ = app.track_event("plugin_installed", Some(serde_json::json!({ "id": id.strip_suffix(".sdPlugin").unwrap_or(&id) })));
-@@ -173,7 +203,23 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
+@@ -173,7 +203,20 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
  	};
  	let _ = deactivate_plugin(&app, &id).await;
  	let tx = (*app.state::<mpsc::Sender<SpawnRequest>>()).clone();
 -	let _ = initialise_plugin(plugin.path, tx).await;
-+	// Ordinary reload must discard actions removed from a new manifest, as
-+	// the external synchronization path already does. Preserve profile data.
++	// Reload must discard actions removed from a changed manifest, while
++	// preserving saved profile assignments.
 +	{
 +		let mut categories = crate::shared::CATEGORIES.write().await;
 +		for category in categories.values_mut() {
@@ -89,16 +89,13 @@ index 8cee8fa..6aa4341 100644
 +	}
 +	if let Err(error) = initialise_plugin(plugin.path.clone(), tx).await {
 +		log::warn!("Failed to reload plugin {id}: {error:#}");
-+		if let Some(window) = app.get_webview_window("main") {
-+			let _ = window.emit("plugins_changed", &id);
-+		}
 +		return;
 +	}
 +	rebind_plugin_resources(&app, &id, &plugin.path).await;
  
  	let locks = acquire_locks().await;
  	let all = locks.profile_stores.all_from_plugin(&id);
-@@ -184,9 +230,10 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
+@@ -184,9 +227,7 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
  		}
  	}
  
@@ -106,38 +103,9 @@ index 8cee8fa..6aa4341 100644
 -		let _ = window.emit("plugin_reloaded", &id);
 -	}
 +	notify_plugin_reloaded(&app, &id);
-+	if let Some(window) = app.get_webview_window("main") {
-+		let _ = window.emit("plugins_changed", &id);
-+	}
  }
  
- /// Notify the running instance that an external package manager changed one plugin.
-@@ -215,9 +262,10 @@ pub async fn sync_external_plugin(app: AppHandle, id: String) {
- 
- 	if let Some(plugin) = plugin {
- 		let tx = (*app.state::<mpsc::Sender<SpawnRequest>>()).clone();
--		match initialise_plugin(plugin.path, tx).await {
-+		match initialise_plugin(plugin.path.clone(), tx).await {
- 			Ok(()) => {
- 				loaded = true;
-+				rebind_plugin_resources(&app, &id, &plugin.path).await;
- 				let locks = acquire_locks().await;
- 				for context in locks.profile_stores.all_from_plugin(&id) {
- 					if let Ok(Some(instance)) = get_instance(&context, &locks).await {
-@@ -229,10 +277,10 @@ pub async fn sync_external_plugin(app: AppHandle, id: String) {
- 		}
- 	}
- 
-+	if loaded {
-+		notify_plugin_reloaded(&app, &id);
-+	}
- 	if let Some(window) = app.get_webview_window("main") {
--		if loaded {
--			let _ = window.emit("plugin_reloaded", &id);
--		}
- 		let _ = window.emit("plugins_changed", &id);
- 	}
- }
+ #[command]
 diff --git a/src-tauri/src/plugins/mod.rs b/src-tauri/src/plugins/mod.rs
 index 5a6b3d9..b65a2ce 100644
 --- a/src-tauri/src/plugins/mod.rs
