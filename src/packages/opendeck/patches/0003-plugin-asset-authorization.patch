@@ -4,7 +4,7 @@ diff --git a/src-tauri/src/plugins/webserver.rs b/src-tauri/src/plugins/webserve
 index 95097e3..d184a40 100644
 --- a/src-tauri/src/plugins/webserver.rs
 +++ b/src-tauri/src/plugins/webserver.rs
-@@ -14,6 +14,60 @@ fn mime(extension: &str) -> String {
+@@ -14,6 +14,138 @@ fn mime(extension: &str) -> String {
  	}
  }
  
@@ -62,10 +62,88 @@ index 95097e3..d184a40 100644
 +	}
 +}
 +
++
++#[cfg(all(test, unix))]
++mod tests {
++	use super::*;
++	use std::sync::atomic::{AtomicU64, Ordering};
++
++	static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
++
++	struct Fixture(PathBuf);
++
++	impl Fixture {
++		fn new() -> Self {
++			let path = std::env::temp_dir().join(format!(
++				"opendeck-assets-test-{}-{}",
++				std::process::id(), NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
++			));
++			std::fs::create_dir(&path).unwrap();
++			Self(path)
++		}
++
++		fn file(&self, relative: &str) -> PathBuf {
++			let path = self.0.join(relative);
++			std::fs::create_dir_all(path.parent().unwrap()).unwrap();
++			std::fs::write(&path, b"asset").unwrap();
++			path
++		}
++	}
++
++	impl Drop for Fixture {
++		fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
++	}
++
++	#[test]
++	fn accepts_config_files_and_only_the_authorized_package() {
++		let fixture = Fixture::new();
++		let config = fixture.file("config/settings.json");
++		let allowed = fixture.file("store/allowed.sdPlugin/icons/action.svg");
++		let unrelated = fixture.file("store/other.sdPlugin/icons/action.svg");
++		let prefix = fixture.0.join("config").canonicalize().unwrap();
++		let package = fixture.0.join("store/allowed.sdPlugin");
++
++		assert!(path_is_allowed_with_packages(&config, &prefix, None));
++		assert!(path_is_allowed_with_packages(&allowed, &prefix, Some(&package)));
++		assert!(!path_is_allowed_with_packages(&unrelated, &prefix, Some(&package)));
++		assert!(!path_is_allowed_with_packages(&unrelated, &prefix, None));
++	}
++
++	#[test]
++	fn allows_managed_symlink_assets_without_exposing_the_store() {
++		use std::os::unix::fs::symlink;
++
++		let fixture = Fixture::new();
++		let allowed = fixture.file("store/managed/icons/action.svg");
++		let unrelated = fixture.file("store/unrelated/icons/action.svg");
++		let config = fixture.0.join("config");
++		std::fs::create_dir_all(config.join("plugins")).unwrap();
++		let link = config.join("plugins/managed.sdPlugin");
++		symlink(allowed.parent().unwrap().parent().unwrap(), &link).unwrap();
++		let prefix = config.canonicalize().unwrap();
++
++		assert!(path_is_allowed_with_packages(&link.join("icons/action.svg"), &prefix, None));
++		assert!(!path_is_allowed_with_packages(&unrelated, &prefix, None));
++	}
++
++	#[test]
++	fn rejects_escaping_symlinks_and_parent_components() {
++		use std::os::unix::fs::symlink;
++
++		let fixture = Fixture::new();
++		let outside = fixture.file("outside/secret.txt");
++		let config = fixture.0.join("config");
++		std::fs::create_dir_all(config.join("plugins")).unwrap();
++		symlink(&outside, config.join("escape.txt")).unwrap();
++		let prefix = config.canonicalize().unwrap();
++		assert!(!path_is_allowed_with_packages(&config.join("escape.txt"), &prefix, None));
++		assert!(!path_is_allowed_with_packages(&config.join("plugins/../escape.txt"), &prefix, None));
++	}
++}
  /// Start a simple webserver to serve files of plugins that run in a browser environment.
  pub async fn init_webserver(prefix: PathBuf) {
  	let prefix = prefix.canonicalize().unwrap();
-@@ -32,22 +86,28 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -32,22 +164,28 @@ pub async fn init_webserver(prefix: PathBuf) {
  	};
  
  	for request in server.incoming_requests() {
@@ -99,7 +177,7 @@ index 95097e3..d184a40 100644
  			let _ = request.respond(Response::empty(403));
  			continue;
  		}
-@@ -67,9 +127,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -67,9 +205,7 @@ pub async fn init_webserver(prefix: PathBuf) {
  		// Instead, we have to inject a replacement window.open implementation that creates an IFrame element
  		// and requests the Svelte frontend to maximise the property inspector.
  
@@ -110,7 +188,7 @@ index 95097e3..d184a40 100644
  			let mut content = tokio::fs::read_to_string(path).await.unwrap_or_default();
  			content += r#"
  				<div id="opendeck_iframe_container" style="position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; display: none;"></div>
-@@ -143,9 +201,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -143,9 +279,7 @@ pub async fn init_webserver(prefix: PathBuf) {
  				value: "text/html".parse().unwrap(),
  			});
  			let _ = request.respond(response);
@@ -121,7 +199,7 @@ index 95097e3..d184a40 100644
  			let mut content = tokio::fs::read_to_string(path).await.unwrap_or_default();
  			content = format!("<script>window.opener ??= window.parent;</script>{content}");
  
-@@ -157,7 +213,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -157,7 +291,7 @@ pub async fn init_webserver(prefix: PathBuf) {
  			});
  			let _ = request.respond(response);
  		} else {
@@ -130,7 +208,7 @@ index 95097e3..d184a40 100644
  				Some(extension) => extension.to_string_lossy().into_owned(),
  				None => "html".to_owned(),
  			});
-@@ -168,12 +224,12 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -168,12 +302,12 @@ pub async fn init_webserver(prefix: PathBuf) {
  			};
  
  			if mime_type.starts_with("text/") || mime_type == "image/svg+xml" {

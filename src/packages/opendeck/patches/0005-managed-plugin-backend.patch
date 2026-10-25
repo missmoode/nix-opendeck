@@ -123,7 +123,7 @@ diff --git a/src-tauri/src/zip_extract.rs b/src-tauri/src/zip_extract.rs
 index 16d5a12..a9bea85 100644
 --- a/src-tauri/src/zip_extract.rs
 +++ b/src-tauri/src/zip_extract.rs
-@@ -56,6 +56,30 @@ pub fn dir_name<S: Read + Seek>(source: S) -> Result<String, ZipExtractError> {
+@@ -56,6 +56,95 @@ pub fn dir_name<S: Read + Seek>(source: S) -> Result<String, ZipExtractError> {
  	Err(ZipExtractError::Zip(zip::result::ZipError::FileNotFound))
  }
  
@@ -151,6 +151,71 @@ index 16d5a12..a9bea85 100644
 +	Ok(())
 +}
 +
++
++#[cfg(test)]
++mod validation_tests {
++	use super::*;
++	use std::io::Write;
++
++	const ID: &str = "com.example.test.sdPlugin";
++
++	fn archive(files: &[(&str, &[u8])]) -> Vec<u8> {
++		let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
++		for &(name, data) in files {
++			writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
++			writer.write_all(data).unwrap();
++		}
++		writer.finish().unwrap().into_inner()
++	}
++
++	#[test]
++	fn accepts_regular_plugin_archives() {
++		let contents = archive(&[
++			("com.example.test.sdPlugin/manifest.json", b"{}"),
++			("com.example.test.sdPlugin/plugin.js", b"test"),
++		]);
++		assert!(validate_plugin_archive(Cursor::new(contents), ID).is_ok());
++	}
++
++	#[test]
++	fn rejects_unrelated_plugin_files_and_root_files() {
++		for extra in ["another.sdPlugin/manifest.json", "README.md"] {
++			let contents = archive(&[
++				("com.example.test.sdPlugin/manifest.json", b"{}"),
++				(extra, b"unexpected"),
++			]);
++			assert!(validate_plugin_archive(Cursor::new(contents), ID).is_err(), "accepted {extra}");
++		}
++	}
++
++	#[test]
++	fn rejects_parent_traversal_and_windows_separators() {
++		for extra in ["com.example.test.sdPlugin/../escape.txt", "com.example.test.sdPlugin\\..\\escape.txt"] {
++			let contents = archive(&[
++				("com.example.test.sdPlugin/manifest.json", b"{}"),
++				(extra, b"unexpected"),
++			]);
++			assert!(validate_plugin_archive(Cursor::new(contents), ID).is_err(), "accepted {extra}");
++		}
++	}
++
++	#[test]
++	fn validates_nested_plugin_archives() {
++		let inner = archive(&[
++			("com.example.test.sdPlugin/manifest.json", b"{}"),
++			("com.example.test.sdPlugin/plugin.js", b"test"),
++		]);
++		let outer = archive(&[("nested.streamdeckplugin", inner.as_slice())]);
++		assert!(validate_plugin_archive(Cursor::new(outer), ID).is_ok());
++
++		let bad_inner = archive(&[
++			("com.example.test.sdPlugin/manifest.json", b"{}"),
++			("other.sdPlugin/plugin.js", b"bad"),
++		]);
++		let bad_outer = archive(&[("nested.streamdeckplugin", bad_inner.as_slice())]);
++		assert!(validate_plugin_archive(Cursor::new(bad_outer), ID).is_err());
++	}
++}
  pub fn extract<S: Read + Seek>(source: S, target_dir: &Path) -> Result<(), ZipExtractError> {
  	if !target_dir.exists() {
  		fs::create_dir(target_dir)?;

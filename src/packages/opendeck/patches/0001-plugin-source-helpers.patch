@@ -16,7 +16,7 @@ new file mode 100644
 index 0000000..ae8566e
 --- /dev/null
 +++ b/src-tauri/src/plugins/sources.rs
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,382 @@
 +//! Read-only source selection for user, Home Manager and wrapped-package plugins.
 +//!
 +//! Keep the version comparison almost in step with upstream's bundled-plugin reconciliation:
@@ -245,4 +245,157 @@ index 0000000..ae8566e
 +		}
 +	}
 +	ids.into_iter().filter_map(|id| resolve_at(&id, user_root, package_root, external.contains(&id))).collect()
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++	use std::sync::atomic::{AtomicU64, Ordering};
++
++	const ID: &str = "com.example.test.sdPlugin";
++	static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
++
++	struct Fixture(PathBuf);
++
++	impl Fixture {
++		fn new() -> Self {
++			let root = std::env::temp_dir().join(format!(
++				"opendeck-source-test-{}-{}",
++				std::process::id(), NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
++			));
++			fs::create_dir(&root).unwrap();
++			Self(root)
++		}
++
++		fn user(&self) -> PathBuf { self.0.join("user") }
++		fn package(&self) -> PathBuf { self.0.join("package") }
++
++		fn plugin(&self, root: &Path, id: &str, version: &str) -> PathBuf {
++			let plugin = root.join(id);
++			fs::create_dir_all(&plugin).unwrap();
++			fs::write(plugin.join("manifest.json"), serde_json::json!({
++				"Name": "Test", "Author": "Test", "Version": version,
++				"Icon": "icon", "Actions": [], "OS": []
++			}).to_string()).unwrap();
++			plugin
++		}
++
++		fn resolve(&self, external: bool) -> Option<ResolvedPlugin> {
++			resolve_at(ID, &self.user(), Some(&self.package()), external)
++		}
++	}
++
++	impl Drop for Fixture {
++		fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
++	}
++
++	#[test]
++	fn selects_the_only_available_source() {
++		let fixture = Fixture::new();
++		fixture.plugin(&fixture.user(), ID, "1.0.0");
++		assert_eq!(fixture.resolve(false).unwrap().management, PluginManagement::User);
++
++		fs::remove_dir_all(fixture.user()).unwrap();
++		fixture.plugin(&fixture.package(), ID, "1.0.0");
++		assert_eq!(fixture.resolve(false).unwrap().management, PluginManagement::Package);
++	}
++
++	#[test]
++	fn packaged_version_wins_when_newer_or_equal() {
++		for user_version in ["1.0.0", "2.0.0"] {
++			let fixture = Fixture::new();
++			fixture.plugin(&fixture.user(), ID, user_version);
++			fixture.plugin(&fixture.package(), ID, "2.0.0");
++			assert_eq!(fixture.resolve(false).unwrap().management, PluginManagement::Package);
++		}
++	}
++
++	#[test]
++	fn newer_user_version_wins() {
++		let fixture = Fixture::new();
++		fixture.plugin(&fixture.user(), ID, "3.0.0");
++		fixture.plugin(&fixture.package(), ID, "2.0.0");
++		assert_eq!(fixture.resolve(false).unwrap().management, PluginManagement::User);
++	}
++
++	#[test]
++	fn home_manager_ownership_takes_precedence() {
++		let fixture = Fixture::new();
++		fixture.plugin(&fixture.user(), ID, "1.0.0");
++		fixture.plugin(&fixture.package(), ID, "2.0.0");
++		let resolved = fixture.resolve(true).unwrap();
++		assert_eq!(resolved.management, PluginManagement::External);
++		assert_eq!(resolved.path, fixture.user().join(ID));
++	}
++
++	#[test]
++	fn invalid_user_manifest_is_not_overridden_by_a_package() {
++		let fixture = Fixture::new();
++		let user = fixture.plugin(&fixture.user(), ID, "not-semver");
++		fixture.plugin(&fixture.package(), ID, "2.0.0");
++		let resolved = fixture.resolve(false).unwrap();
++		assert_eq!(resolved.path, user);
++		assert_eq!(resolved.management, PluginManagement::User);
++	}
++
++	#[test]
++	fn installed_plugins_deduplicate_ids() {
++		let fixture = Fixture::new();
++		fixture.plugin(&fixture.user(), ID, "1.0.0");
++		fixture.plugin(&fixture.package(), ID, "2.0.0");
++		fixture.plugin(&fixture.user(), "com.example.other.sdPlugin", "1.0.0");
++		let plugins = installed_at(&fixture.user(), Some(&fixture.package()), &BTreeSet::new());
++		assert_eq!(plugins.len(), 2);
++		assert_eq!(plugins.iter().filter(|plugin| plugin.id == ID).count(), 1);
++	}
++
++	#[test]
++	fn saved_package_paths_follow_the_selected_version() {
++		let fixture = Fixture::new();
++		let old = fixture.plugin(&fixture.user(), ID, "1.0.0");
++		let current = fixture.plugin(&fixture.package(), ID, "2.0.0");
++		let icon = current.join("icons/action.png");
++		let portable = Path::new("plugins").join(ID).join("icons/action.png");
++
++		assert_eq!(normalise_package_path(&icon, &fixture.package()), Some(portable.clone()));
++		assert_eq!(
++			resolve_saved_at(&portable, &fixture.user(), Some(&fixture.package()), &BTreeSet::new()),
++			Some(icon)
++		);
++
++		// A later GUI installation can supersede the packaged version.
++		fixture.plugin(&fixture.user(), ID, "3.0.0");
++		assert_eq!(
++			resolve_saved_at(&portable, &fixture.user(), Some(&fixture.package()), &BTreeSet::new()),
++			Some(old.join("icons/action.png"))
++		);
++	}
++
++	#[test]
++	fn saved_paths_preserve_external_ownership() {
++		let fixture = Fixture::new();
++		fixture.plugin(&fixture.user(), ID, "1.0.0");
++		fixture.plugin(&fixture.package(), ID, "2.0.0");
++		let portable = Path::new("plugins").join(ID).join("icons/action.png");
++		let external = BTreeSet::from([ID.to_owned()]);
++		assert_eq!(
++			resolve_saved_at(&portable, &fixture.user(), Some(&fixture.package()), &external),
++			Some(fixture.user().join(ID).join("icons/action.png"))
++		);
++	}
++
++	#[test]
++	fn invalid_ids_and_escaping_paths_are_rejected() {
++		for id in ["", ".", "..", "../escape", "one/two", "one\\two", "a\0b"] {
++			assert!(!valid_plugin_id(id), "accepted invalid ID: {id:?}");
++		}
++		assert!(valid_plugin_id(ID));
++
++		let fixture = Fixture::new();
++		fixture.plugin(&fixture.package(), ID, "1.0.0");
++		for path in ["plugins/../escape", "plugins/com.example.test.sdPlugin/../../escape", "elsewhere/icon.png"] {
++			assert_eq!(resolve_saved_at(Path::new(path), &fixture.user(), Some(&fixture.package()), &BTreeSet::new()), None);
++		}
++		assert_eq!(normalise_package_path(&fixture.0.join("other/icon.png"), &fixture.package()), None);
++	}
 +}
