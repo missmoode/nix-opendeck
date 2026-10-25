@@ -101,7 +101,7 @@ rustPlatform.buildRustPackage (
       ./patches/0005-managed-plugin-backend.patch
 
       # List effective plugins via the upstream GUI's existing builtin field.
-      ./patches/0006-managed-plugin-listing-and-ui.patch
+      ./patches/0006-effective-plugin-listing.patch
 
       # Back up user plugin files, excluding links and declarative ownership.
       ./patches/0007-managed-plugin-backups.patch
@@ -113,7 +113,7 @@ rustPlatform.buildRustPackage (
       ./patches/0009-restart-if-running.patch
 
       # Preserve portable encoder resources when saving and loading profiles.
-      ./patches/0010-rebind-plugin-resources.patch
+      ./patches/0010-persist-encoder-resource-paths.patch
 
       # Preserve wrapper-provided runtime paths when importing the login shell.
       ./patches/0011-preserve-wrapper-path.patch
