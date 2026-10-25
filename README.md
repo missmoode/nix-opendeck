@@ -277,9 +277,9 @@ opendeck --sync-plugin com.example.plugin.sdPlugin
 ```
 
 The command accepts a single plugin ID, rather than a filesystem path.
-It loads or reloads the plugin if its directory exists, or unloads it if
-the directory has been removed. It does not start OpenDeck if it isn't
-already running.
+It reloads the effective plugin source for that ID (including a bundled
+fallback if a user installation was removed), or unloads it if none remains.
+It does not start OpenDeck if it isn't already running.
 
 Alternatively, you can [bundle plugins](#custom-bundled-packages) into an OpenDeck package using `wrapOpenDeck`. This lets you select plugins declaratively without Home Manager, and without recompiling OpenDeck when the plugin selection changes.
 
@@ -363,7 +363,7 @@ in
 
 The examples using `environment.systemPackages` demonstrate NixOS installation, but `wrapOpenDeck` itself is also available on nix-darwin and standalone Nix installations.
 
-The wrapper retains OpenDeck's normal bundled-plugin behaviour, desktop integration, command-line arguments, and built-in autostart functionality. On Linux, bundled plugins are provided through a separate Nix store directory. On macOS, they are assembled into the application bundle without recompiling the application.
+The wrapper retains OpenDeck's desktop integration, command-line arguments, and built-in autostart support. Bundled plugins are loaded directly from package resources instead of being copied into the user's plugin directory. On Linux, they are provided through a separate Nix store directory; on macOS, they are assembled into the application bundle without recompiling OpenDeck.
 
 If a bundled plugin provides udev rules, these are included in the resulting package's `.udev` attribute on Linux. NixOS users must still install those rules through `services.udev.packages`. Plugins installed separately through Home Manager do not contribute rules to the OpenDeck package's `.udev` attribute.
 
@@ -459,15 +459,16 @@ nix-opendeck applies a small collection of downstream patches to OpenDeck to imp
 with Nix installations.
 
 These patches:
-- Support plugins symlinked from the immutable Nix store, including their assets and
-executable permissions.
-- Prevent OpenDeck from modifying or removing plugins marked as externally managed.
-- Allow external package managers to explicitly notify OpenDeck when individual plugins
-are added, removed, or updated, without requiring a restart (matching the behaviour when
-installed via the GUI).
-- Preserve runtime paths provided by Nix wrappers for use in application-based profile switching.
-- Adjust OpenDeck's built-in "Start at login" functionality to avoid referencing obsolete Nix store paths after package upgrades.
-- Allow bundled plugins to be supplied independently of the compiled application while retaining OpenDeck's built-in plugin behaviour, including graphical management and configuration backups.
+- Support symlinked plugins in the immutable Nix store, including their assets and
+  executable permissions.
+- Load bundled plugins directly from package resources without copying them into the
+  user's plugin directory, while protecting managed plugins from GUI modification.
+- Synchronize individual externally managed plugin changes without restarting OpenDeck,
+  preserving profile assignments and rebinding resources when plugin sources change.
+- Preserve PATH entries supplied by Nix wrappers and explain the PATH requirement for
+  OpenDeck's built-in autostart.
+- Exclude managed plugin links and ownership metadata from configuration backups and
+  preserve the current Home Manager links and ownership state on restore.
 
 The Nix build also includes minor changes to identify itself and direct users to the relevant
 plugin compatibility documentation.
@@ -504,9 +505,11 @@ nix-opendeck is a personal packaging project maintained on a best-effort basis. 
 
 ### Bundled Plugins
 
-OpenDeck supports plugins bundled with the application. On startup, it installs any bundled plugins that are missing or older than the bundled versions.
+Upstream OpenDeck copies bundled plugins into the user's plugin directory at startup when they are missing or older. nix-opendeck instead loads bundled plugins directly from their package resources, leaving existing user installations untouched.
 
-Bundled plugins are treated as built-in by OpenDeck and cannot normally be removed through its graphical interface. Removing a plugin from the bundle does not automatically uninstall an existing copy from the user's configuration directory.
+When a plugin exists in multiple places, Home Manager-managed installations take precedence. Otherwise, the packaged version is selected when its manifest version is **newer than or equal to** the user's version; a newer user version wins. If a user installation's version cannot be compared, nix-opendeck leaves it in place rather than replacing it automatically. The Home Manager module also prevents declaring a plugin separately when it is already bundled.
+
+A selected packaged plugin cannot be updated or removed through OpenDeck's graphical plugin manager. Any shadowed user installation remains on disk and can become active again if the plugin is removed from the package. Configuration backups retain ordinary user-installed plugins, while managed plugin symlinks and package resources are handled separately.
 
 Upstream OpenDeck includes the StarterPack plugin by default, so nix-opendeck's `opendeck` package does as well. The `opendeck-core` package includes no bundled plugins.
 

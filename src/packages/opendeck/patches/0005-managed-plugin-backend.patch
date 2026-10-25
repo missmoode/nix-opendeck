@@ -1,0 +1,156 @@
+Subject: Guard managed plugin operations and preserve effective-source lifecycle data
+
+diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
+index f8780d1..bc2e06b 100644
+--- a/src-tauri/src/events/frontend/plugins.rs
++++ b/src-tauri/src/events/frontend/plugins.rs
+@@ -1,5 +1,6 @@
+ use super::Error;
+ 
++use crate::plugins::sources;
+ use crate::plugins::{SpawnRequest, deactivate_plugin, initialise_plugin};
+ use crate::shared::{config_dir, log_dir};
+ use crate::store::profiles::{acquire_locks, get_instance};
+@@ -94,10 +95,15 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+ 		},
+ 	};
+ 
++	sources::ensure_gui_managed(&id)?;
++	// Only extract the guarded plugin, never a second ID hidden in the archive.
++	crate::zip_extract::validate_plugin_archive(std::io::Cursor::new(&bytes), &id)
++		.map_err(anyhow::Error::from)?;
++
+ 	let _ = deactivate_plugin(&app, &id).await;
+ 
+ 	let config_dir = config_dir();
+-	let actual = config_dir.join("plugins").join(&id);
++	let actual = sources::user_plugin_path(&id)?;
+ 
+ 	if actual.exists() {
+ 		let _ = fs::create_dir_all(config_dir.join("temp")).await;
+@@ -109,14 +115,25 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+ 	if let Err(error) = crate::zip_extract::extract(std::io::Cursor::new(bytes), &config_dir.join("plugins")) {
+ 		log::error!("Failed to unzip file: {}", error);
+ 		let _ = fs::rename(&temp, &actual).await;
+-		let _ = initialise_plugin(actual, tx).await;
++		if let Some(plugin) = sources::resolve_plugin(&id) {
++			let _ = initialise_plugin(plugin.path, tx).await;
++		}
+ 		return Err(anyhow::Error::from(error).into());
+ 	}
+-	if let Err(error) = initialise_plugin(actual.clone(), tx.clone()).await {
++	let initialisation = async {
++		// A package fallback must not make an empty or malformed installation
++		// appear successful and discard the previous user copy.
++		crate::plugins::manifest::read_manifest(&actual)?;
++		let effective_path = sources::resolve_plugin(&id).map(|plugin| plugin.path).unwrap_or_else(|| actual.clone());
++		initialise_plugin(effective_path, tx.clone()).await
++	}.await;
++	if let Err(error) = initialisation {
+ 		log::warn!("Failed to initialise plugin at {}: {}", actual.display(), error);
+ 		let _ = fs::remove_dir_all(&actual).await;
+ 		let _ = fs::rename(&temp, &actual).await;
+-		let _ = initialise_plugin(actual, tx).await;
++		if let Some(plugin) = sources::resolve_plugin(&id) {
++			let _ = initialise_plugin(plugin.path, tx).await;
++		}
+ 		return Err(error.into());
+ 	}
+ 	let _ = fs::remove_dir_all(config_dir.join("temp")).await;
+@@ -129,16 +146,23 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+ 
+ #[command]
+ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
+-	let locks = acquire_locks().await;
+-	let all = locks.profile_stores.all_from_plugin(&id);
+-	drop(locks);
+-
+-	for context in all {
+-		super::instances::remove_instance(context).await?;
++	sources::ensure_gui_managed(&id)?;
++	let user_path = sources::user_plugin_path(&id)?;
++	// Removing an effective user copy can reveal a packaged copy of the same ID.
++	// Keep its saved data, as the plugin remains available.
++	let package_fallback = sources::packaged_plugin_path(&id).is_some();
++	if !package_fallback {
++		let locks = acquire_locks().await;
++		let all = locks.profile_stores.all_from_plugin(&id);
++		drop(locks);
++
++		for context in all {
++			super::instances::remove_instance(context).await?;
++		}
+ 	}
+ 
+ 	deactivate_plugin(&app, &id).await?;
+-	if let Err(error) = fs::remove_dir_all(config_dir().join("plugins").join(&id)).await {
++	if let Err(error) = fs::remove_dir_all(user_path).await {
+ 		return Err(anyhow::Error::from(error).into());
+ 	}
+ 
+@@ -147,18 +171,27 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
+ 		category.actions.retain(|v| v.plugin != id);
+ 	}
+ 	categories.retain(|_, v| !v.actions.is_empty());
++	drop(categories);
+ 
+-	let _ = fs::remove_file(log_dir().join("plugins").join(format!("{id}.log"))).await;
+-	let _ = fs::remove_file(config_dir().join("settings").join(format!("{id}.json"))).await;
++	if package_fallback {
++		reload_plugin(app, id).await;
++	} else {
++		let _ = fs::remove_file(log_dir().join("plugins").join(format!("{id}.log"))).await;
++		let _ = fs::remove_file(config_dir().join("settings").join(format!("{id}.json"))).await;
++	}
+ 
+ 	Ok(())
+ }
+ 
+ #[command]
+ pub async fn reload_plugin(app: AppHandle, id: String) {
++	let Some(plugin) = sources::resolve_plugin(&id) else {
++		log::warn!("Cannot reload unavailable plugin {id:?}");
++		return;
++	};
+ 	let _ = deactivate_plugin(&app, &id).await;
+ 	let tx = (*app.state::<mpsc::Sender<SpawnRequest>>()).clone();
+-	let _ = initialise_plugin(config_dir().join("plugins").join(&id), tx).await;
++	let _ = initialise_plugin(plugin.path, tx).await;
+ 
+ 	let locks = acquire_locks().await;
+ 	let all = locks.profile_stores.all_from_plugin(&id);
+diff --git a/src-tauri/src/zip_extract.rs b/src-tauri/src/zip_extract.rs
+index 16d5a12..a9bea85 100644
+--- a/src-tauri/src/zip_extract.rs
++++ b/src-tauri/src/zip_extract.rs
+@@ -56,6 +56,30 @@ pub fn dir_name<S: Read + Seek>(source: S) -> Result<String, ZipExtractError> {
+ 	Err(ZipExtractError::Zip(zip::result::ZipError::FileNotFound))
+ }
+ 
++/// Verify that installation can only write beneath the ID whose ownership was checked.
++/// Keep the nested-archive handling used by `dir_name` and `extract`.
++pub fn validate_plugin_archive<S: Read + Seek>(source: S, id: &str) -> Result<(), ZipExtractError> {
++	let mut archive = zip::ZipArchive::new(source)?;
++	if archive.len() == 1 {
++		let file = archive.by_index(0)?;
++		if file.is_file() {
++			return validate_plugin_archive(Cursor::new(BufReader::new(file).bytes().flatten().collect::<Vec<u8>>()), id);
++		}
++	}
++
++	for index in 0..archive.len() {
++		let file = archive.by_index(index)?;
++		let name = file.name().replace('\\', "/");
++		let path = Path::new(&name);
++		let mut components = path.components().filter(|component| !matches!(component, std::path::Component::CurDir));
++		let root_matches = matches!(components.next(), Some(std::path::Component::Normal(root)) if root == id);
++		if !root_matches || components.any(|component| !matches!(component, std::path::Component::Normal(_))) {
++			return Err(io::Error::new(io::ErrorKind::InvalidData, "Plugin archive contains paths outside the selected plugin directory").into());
++		}
++	}
++	Ok(())
++}
++
+ pub fn extract<S: Read + Seek>(source: S, target_dir: &Path) -> Result<(), ZipExtractError> {
+ 	if !target_dir.exists() {
+ 		fs::create_dir(target_dir)?;

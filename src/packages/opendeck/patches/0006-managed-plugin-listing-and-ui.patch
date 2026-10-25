@@ -1,0 +1,276 @@
+Subject: Report effective plugin ownership and match plugin-manager GUI actions
+
+diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
+index bc2e06b..8e84f7d 100644
+--- a/src-tauri/src/events/frontend/plugins.rs
++++ b/src-tauri/src/events/frontend/plugins.rs
+@@ -1,6 +1,6 @@
+ use super::Error;
+ 
+-use crate::plugins::sources;
++use crate::plugins::sources::{self, PluginManagement};
+ use crate::plugins::{SpawnRequest, deactivate_plugin, initialise_plugin};
+ use crate::shared::{config_dir, log_dir};
+ use crate::store::profiles::{acquire_locks, get_instance};
+@@ -18,47 +18,29 @@ pub struct PluginInfo {
+ 	icon: String,
+ 	version: String,
+ 	has_settings_interface: bool,
+-	builtin: bool,
++	management: PluginManagement,
+ 	registered: bool,
+ }
+ 
+ #[command]
+-pub async fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, Error> {
++pub async fn list_plugins() -> Result<Vec<PluginInfo>, Error> {
+ 	let mut plugins = vec![];
+-
+-	let mut entries = match fs::read_dir(&config_dir().join("plugins")).await {
+-		Ok(entries) => entries,
+-		Err(error) => return Err(anyhow::Error::from(error).into()),
+-	};
+-
+ 	let registered = crate::events::registered_plugins().await;
+-	let builtins = match app.path().resolve("plugins", tauri::path::BaseDirectory::Resource).map(std::fs::read_dir) {
+-		Ok(Ok(entries)) => entries.flatten().map(|x| x.file_name().to_str().unwrap().to_owned()).collect(),
+-		_ => vec![],
+-	};
+ 
+-	while let Ok(Some(entry)) = entries.next_entry().await {
+-		let path = match entry.metadata().await.unwrap().is_symlink() {
+-			true => fs::read_link(entry.path()).await.unwrap(),
+-			false => entry.path(),
++	for plugin in sources::installed_plugins() {
++		let Ok(manifest) = crate::plugins::manifest::read_manifest(&plugin.path) else {
++			continue;
+ 		};
+-		let metadata = fs::metadata(&path).await.unwrap();
+-		if metadata.is_dir() {
+-			let id = path.file_name().unwrap().to_str().unwrap().to_owned();
+-			let Ok(manifest) = crate::plugins::manifest::read_manifest(&path) else {
+-				continue;
+-			};
+-			plugins.push(PluginInfo {
+-				name: manifest.name,
+-				author: manifest.author,
+-				icon: crate::shared::convert_icon(path.join(manifest.icon).to_str().unwrap().to_owned()),
+-				version: manifest.version,
+-				has_settings_interface: manifest.has_settings_interface.unwrap_or(false),
+-				builtin: builtins.contains(&id),
+-				registered: registered.contains(&id),
+-				id,
+-			});
+-		}
++		plugins.push(PluginInfo {
++			name: manifest.name,
++			author: manifest.author,
++			icon: crate::shared::convert_icon(plugin.path.join(manifest.icon).to_string_lossy().into_owned()),
++			version: manifest.version,
++			has_settings_interface: manifest.has_settings_interface.unwrap_or(false),
++			management: plugin.management,
++			registered: registered.contains(&plugin.id),
++			id: plugin.id,
++		});
+ 	}
+ 
+ 	Ok(plugins)
+diff --git a/src/components/ListedPlugin.svelte b/src/components/ListedPlugin.svelte
+index 8257dd8..9b38d41 100644
+--- a/src/components/ListedPlugin.svelte
++++ b/src/components/ListedPlugin.svelte
+@@ -4,7 +4,7 @@
+ 	export let subtitle: string;
+ 	export let hidden: boolean = false;
+ 	export let disconnected: boolean = false;
+-	export let action: () => void;
++	export let action: (() => void) | undefined = undefined;
+ 	export let actionLabel: string = "";
+ 	export let secondaryAction: (() => void) | undefined = undefined;
+ 	export let secondaryActionLabel: string = "";
+@@ -23,8 +23,10 @@
+ 				<slot name="secondary" />
+ 			</button>
+ 		{/if}
+-		<button on:click={action} aria-label={actionLabel}>
+-			<slot />
+-		</button>
++		{#if action}
++			<button on:click={action} aria-label={actionLabel}>
++				<slot />
++			</button>
++		{/if}
+ 	</div>
+ </div>
+diff --git a/src/components/PluginDetails.svelte b/src/components/PluginDetails.svelte
+index 8f1f1a3..8a16d42 100644
+--- a/src/components/PluginDetails.svelte
++++ b/src/components/PluginDetails.svelte
+@@ -19,7 +19,7 @@
+ 	let readme = `<strong>${$t("plugin_details.loading")}</strong>`;
+ 	let downloadCount = 0;
+ 
+-	export let install: () => void;
++	export let install: (() => void) | undefined = undefined;
+ 	export let close: () => void;
+ 
+ 	// @ts-expect-error
+@@ -98,12 +98,14 @@
+ 			</div>
+ 
+ 			<div class="flex flex-row items-center mt-6">
+-				<button
+-					on:click={install}
+-					class="px-8 py-3 active:translate-y-0.5 text-lg text-neutral-100 bg-indigo-600 hover:bg-indigo-500 transition-colors border border-indigo-500 rounded-l-lg"
+-				>
+-					{$t("plugin_details.install")}
+-				</button>
++				{#if install}
++					<button
++						on:click={install}
++						class="px-8 py-3 active:translate-y-0.5 text-lg text-neutral-100 bg-indigo-600 hover:bg-indigo-500 transition-colors border border-indigo-500 rounded-l-lg"
++					>
++						{$t("plugin_details.install")}
++					</button>
++				{/if}
+ 
+ 				<button
+ 					on:click={() => invoke("open_url", { url: details.download_url ?? details.repository + "/releases/latest" })}
+diff --git a/src/components/PluginManager.svelte b/src/components/PluginManager.svelte
+index 71036d8..277fe7f 100644
+--- a/src/components/PluginManager.svelte
++++ b/src/components/PluginManager.svelte
+@@ -135,6 +135,7 @@
+ 	}
+ 
+ 	async function removePlugin(plugin: any) {
++		if (plugin.management !== "user") return;
+ 		if (
+ 			!(await ask($t("plugin_manager.remove.prompt", { name: plugin.name }), {
+ 				title: $t("plugin_manager.remove.title", { name: plugin.name }),
+@@ -158,7 +159,8 @@
+ 	}
+ 
+ 	async function isUpdateAvailable(plugin: any): Promise<string | false> {
+-		const id = plugin.id.endsWith(".sdPlugin") ? plugin.id.slice(0, -9) : plugin.id;
++		if (plugin.management !== "user") return false;
++		const id = catalogueId(plugin.id);
+ 		const cataloguePlugin = plugins[id];
+ 		if (!cataloguePlugin || cataloguePlugin.download_url) return false;
+ 
+@@ -184,6 +186,14 @@
+ 	}
+ 
+ 	let installed: any[] = [];
++	function catalogueId(id: string): string {
++		return id.replace(/\.sdplugin$/i, "");
++	}
++	function isGuiManaged(id: string, installedPlugins: any[]): boolean {
++		const normalizedId = catalogueId(id);
++		const plugin = installedPlugins.find((plugin) => catalogueId(plugin.id) === normalizedId);
++		return !plugin || plugin.management === "user";
++	}
+ 	(async () => (installed = await invoke("list_plugins")))();
+ 
+ 	let plugins: { [id: string]: GitHubPlugin };
+@@ -205,11 +215,12 @@
+ 
+ 	let pluginVersions: { [id: string]: string } = {};
+ 	$: for (const plugin of installed) {
+-		if (pluginVersions[plugin.id] != plugin.version) {
++		const version = `${plugin.management}:${plugin.version}`;
++		if (pluginVersions[plugin.id] != version) {
+ 			checkedPlugins.delete(plugin.id);
+ 			delete availableUpdates[plugin.id];
+ 			availableUpdates = availableUpdates;
+-			pluginVersions[plugin.id] = plugin.version;
++			pluginVersions[plugin.id] = version;
+ 		}
+ 	}
+ 
+@@ -250,8 +261,8 @@
+ 	<div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+ 		<!-- prettier-ignore -->
+ 		{#each installed.sort((a, b) =>
+-			(a.builtin && !b.builtin) ? -1 :
+-			(b.builtin && !a.builtin) ? 1 :
++			(a.management !== "user" && b.management === "user") ? -1 :
++			(b.management !== "user" && a.management === "user") ? 1 :
+ 			(a.has_settings_interface && !b.has_settings_interface) ? -1 :
+ 			(b.has_settings_interface && !a.has_settings_interface) ? 1 :
+ 			a.id.localeCompare(b.id)
+@@ -261,22 +272,22 @@
+ 				name={($localisations && $localisations[plugin.id] && $localisations[plugin.id].Name) ? $localisations[plugin.id].Name : plugin.name}
+ 				subtitle={plugin.version}
+ 				disconnected={!plugin.registered}
+-				action={() => {
++				action={$settings?.developer || plugin.management === "user" ? () => {
+ 					if ($settings?.developer) invoke("reload_plugin", { id: plugin.id });
+ 					else removePlugin(plugin);
+-				}}
++				} : undefined}
+ 				actionLabel={$settings?.developer ? $t("plugin_manager.reload") : $t("plugin_manager.remove")}}
+ 				secondaryAction={!plugin.registered ? () => invoke("open_log_directory") : plugin.has_settings_interface ? () => invoke("show_settings_interface", { plugin: plugin.id }) : undefined}
+ 				secondaryActionLabel={!plugin.registered ? $t("plugin_manager.view_logs") : $t("plugin_manager.plugin_settings")}}
+ 			>
+ 				<svelte:fragment slot="subtitle">
+ 					{plugin.version}
+-					{#if availableUpdates[plugin.id]}
++					{#if plugin.management === "user" && availableUpdates[plugin.id]}
+ 						(<span class="text-yellow-400">
+ 							{$t("plugin_manager.available")}
+ 							<button
+ 								class="font-semibold underline"
+-								on:click={() => openDetailsView = plugin.id.endsWith(".sdPlugin") ? plugin.id.slice(0, -9) : plugin.id}
++								on:click={() => openDetailsView = catalogueId(plugin.id)}
+ 							>
+ 								{availableUpdates[plugin.id]}
+ 							</button></span>)
+@@ -293,7 +304,7 @@
+ 
+ 				{#if $settings?.developer}
+ 					<ArrowClockwise size="24" class="mt-2 text-neutral-400" />
+-				{:else if !plugin.builtin}
++				{:else if plugin.management === "user"}
+ 					<Trash size="24" class="mt-2 text-neutral-400" />
+ 				{/if}
+ 			</ListedPlugin>
+@@ -386,7 +397,7 @@
+ 					name={plugin.name}
+ 					subtitle={plugin.author}
+ 					hidden={!plugin.name.toLowerCase().includes(query.toLowerCase())}
+-					action={() => installPluginElgato(plugin)}
++					action={isGuiManaged(plugin.id, installed) ? () => installPluginElgato(plugin) : undefined}
+ 					actionLabel={$t("plugin_details.install")}
+ 				>
+ 					<CloudArrowDown size="24" class="text-neutral-400" />
+@@ -405,14 +416,14 @@
+ 				icon="https://tacto.live/icon-192.png"
+ 				name="Tacto Connect"
+ 				subtitle="Rivulus"
+-				action={() => {
++				action={isGuiManaged("us.rivul.tacto", installed) ? () => {
+ 					installPluginGitHub("us.rivul.tacto", {
+ 						name: "Tacto Connect",
+ 						author: "Rivulus",
+ 						repository: "https://github.com/RivulusLive/tacto-desktop",
+ 						download_url: undefined,
+ 					});
+-				}}
++				} : undefined}
+ 				actionLabel={$t("plugin_details.install")}
+ 				secondaryAction={() => window.open("https://tacto.live")}
+ 				secondaryActionLabel={$t("plugin_manager.visit_website")}
+@@ -431,10 +442,10 @@
+ 	<PluginDetails
+ 		id={openDetailsView}
+ 		details={plugins[openDetailsView]}
+-		install={() => {
++		install={isGuiManaged(openDetailsView, installed) ? () => {
+ 			// @ts-expect-error
+ 			installPluginGitHub(openDetailsView, plugins[openDetailsView]);
+-		}}
++		} : undefined}
+ 		close={() => (openDetailsView = null)}
+ 	/>
+ {/if}

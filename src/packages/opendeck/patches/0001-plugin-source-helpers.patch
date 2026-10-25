@@ -1,0 +1,260 @@
+Subject: Define shared plugin sources, paths and ownership
+
+diff --git a/src-tauri/src/plugins/mod.rs b/src-tauri/src/plugins/mod.rs
+index 7f0aec4..1c3abd5 100644
+--- a/src-tauri/src/plugins/mod.rs
++++ b/src-tauri/src/plugins/mod.rs
+@@ -1,5 +1,6 @@
+ pub mod info_param;
+ pub mod manifest;
++pub mod sources;
+ mod webserver;
+
+ use crate::APP_HANDLE;
+diff --git a/src-tauri/src/plugins/sources.rs b/src-tauri/src/plugins/sources.rs
+new file mode 100644
+index 0000000..ae8566e
+--- /dev/null
++++ b/src-tauri/src/plugins/sources.rs
+@@ -0,0 +1,241 @@
++//! Read-only source selection for user, Home Manager and wrapped-package plugins.
++//!
++//! Keep the version comparison almost in step with upstream's bundled-plugin reconciliation:
++//! raw manifests (without platform overrides), *newer or equal* SemVer ordering, and user wins ties.
++//! We select a source instead of copying it, preserving even shadowed user entries.
++
++use std::collections::BTreeSet;
++use std::fs;
++use std::path::{Path, PathBuf};
++
++use tauri::{AppHandle, Manager};
++
++#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
++#[serde(rename_all = "lowercase")]
++pub enum PluginManagement {
++	User,
++	External,
++	Package,
++}
++
++#[derive(Debug)]
++pub struct ResolvedPlugin {
++	pub id: String,
++	pub path: PathBuf,
++	pub management: PluginManagement,
++}
++
++/// Plugin IDs are directory names, never paths supplied by an IPC caller.
++pub fn valid_plugin_id(id: &str) -> bool {
++	if id.contains(['/', '\\', '\0']) {
++		return false;
++	}
++	let mut components = Path::new(id).components();
++	matches!(components.next(), Some(std::path::Component::Normal(_))) && components.next().is_none()
++}
++
++/// Writes and Home Manager sync must explicitly use the user source.
++pub fn user_plugin_path(id: &str) -> anyhow::Result<PathBuf> {
++	anyhow::ensure!(valid_plugin_id(id), "Invalid plugin ID: {id:?}");
++	Ok(crate::shared::config_dir().join("plugins").join(id))
++}
++
++/// Include missing or shadowed roots: cached profiles may still refer to a
++/// source whose user entry was just removed or replaced.
++pub fn plugin_resource_roots(id: &str) -> Vec<PathBuf> {
++	let Ok(user_path) = user_plugin_path(id) else { return vec![] };
++	let mut roots = vec![user_path];
++	if let Some(package_root) = package_root() {
++		roots.push(package_root.join(id));
++	}
++	roots
++}
++
++fn external_ids() -> BTreeSet<String> {
++	fs::read_to_string(crate::shared::config_dir().join("externally-managed-plugins"))
++		.map(|ids| ids.lines().filter(|id| valid_plugin_id(id)).map(str::to_owned).collect())
++		.unwrap_or_default()
++}
++
++pub fn is_externally_managed(id: &str) -> bool {
++	external_ids().contains(id)
++}
++
++/// Resolve bundled plugins from an external package, or the normal Tauri resources.
++fn bundled_plugins_dir(app: &AppHandle) -> Option<PathBuf> {
++	std::env::var_os("OPENDECK_BUNDLED_PLUGINS_DIR")
++		.map(PathBuf::from)
++		.or_else(|| app.path().resolve("plugins", tauri::path::BaseDirectory::Resource).ok())
++}
++
++fn package_root() -> Option<PathBuf> {
++	crate::APP_HANDLE.get().and_then(bundled_plugins_dir)
++}
++
++/// Package fallback, used to preserve profile/settings data during user removal.
++pub fn packaged_plugin_path(id: &str) -> Option<PathBuf> {
++	if !valid_plugin_id(id) {
++		return None;
++	}
++	let path = package_root()?.join(id);
++	plugin_directory(&path).then_some(path)
++}
++
++pub fn resolve_plugin(id: &str) -> Option<ResolvedPlugin> {
++	resolve_at(id, &crate::shared::config_dir().join("plugins"), package_root().as_deref(), is_externally_managed(id))
++}
++
++/// Determine the single effective package root for a requested asset path.
++/// Never enumerate unrelated plugins on the asset-serving hot path.
++pub fn effective_package_asset_root(path: &Path) -> Option<PathBuf> {
++	let package_dir = package_root()?;
++	let relative = path.strip_prefix(&package_dir).ok()?;
++	let std::path::Component::Normal(id) = relative.components().next()? else { return None };
++	let plugin = resolve_plugin(id.to_str()?)?;
++	(plugin.management == PluginManagement::Package && path.starts_with(&plugin.path)).then_some(plugin.path)
++}
++
++/// Preserve upstream's existence check for user entries even when their manifest
++/// is missing/invalid; profile availability must not erase saved user data.
++pub fn plugin_available(id: &str) -> bool {
++	resolve_plugin(id).is_some() || user_plugin_path(id).is_ok_and(|path| path.exists())
++}
++
++pub fn installed_plugins() -> Vec<ResolvedPlugin> {
++	installed_at(&crate::shared::config_dir().join("plugins"), package_root().as_deref(), &external_ids())
++}
++
++/// Keep upstream's portable `plugins/<id>/...` profile paths for package assets.
++pub fn normalise_plugin_path(path: &Path) -> Option<PathBuf> {
++	normalise_package_path(path, &package_root()?)
++}
++
++/// Stored user-plugin paths must follow the effective source after a restart or
++/// a package change, without changing action IDs, settings or profile structure.
++pub fn resolve_saved_plugin_path(path: &Path) -> Option<PathBuf> {
++	resolve_saved_at(path, &crate::shared::config_dir().join("plugins"), package_root().as_deref(), &external_ids())
++}
++
++fn saved_plugin_parts(path: &Path) -> Option<(&str, &Path)> {
++	let mut components = path.strip_prefix("plugins").ok()?.components();
++	let std::path::Component::Normal(id) = components.next()? else { return None };
++	let id = id.to_str().filter(|id| valid_plugin_id(id))?;
++	let relative = components.as_path();
++	if relative.components().any(|component| matches!(component, std::path::Component::ParentDir)) {
++		return None;
++	}
++	Some((id, relative))
++}
++
++fn normalise_package_path(path: &Path, package_root: &Path) -> Option<PathBuf> {
++	let portable = Path::new("plugins").join(path.strip_prefix(package_root).ok()?);
++	let (id, _) = saved_plugin_parts(&portable)?;
++	plugin_directory(&package_root.join(id)).then_some(portable)
++}
++
++fn resolve_saved_at(path: &Path, user_root: &Path, package_root: Option<&Path>, external: &BTreeSet<String>) -> Option<PathBuf> {
++	let (id, relative) = saved_plugin_parts(path)?;
++	Some(resolve_at(id, user_root, package_root, external.contains(id))?.path.join(relative))
++}
++
++/// Backend authority; the frontend's management field is only a presentation aid.
++pub fn ensure_gui_managed(id: &str) -> anyhow::Result<()> {
++	let _ = user_plugin_path(id)?;
++	anyhow::ensure!(
++		!is_externally_managed(id) && !resolve_plugin(id).is_some_and(|plugin| plugin.management == PluginManagement::Package),
++		"This plugin is managed by Home Manager or the installed package and cannot be modified through OpenDeck. ({id})"
++	);
++	Ok(())
++}
++
++fn plugin_directory(path: &Path) -> bool {
++	path.is_dir() && path.join("manifest.json").is_file()
++}
++
++fn entry_exists(path: &Path) -> bool {
++	match fs::symlink_metadata(path) {
++		Ok(_) => true,
++		Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
++		Err(error) => {
++			// An unreadable entry must not be silently superseded by a package.
++			log::warn!("Cannot inspect user plugin {}: {error}", path.display());
++			true
++		}
++	}
++}
++
++fn manifest_version(path: &Path) -> anyhow::Result<semver::Version> {
++	// Deliberately mirror upstream's raw-manifest interpretation, not read_manifest's
++	// platform overrides or any Nix derivation version.
++	Ok(semver::Version::parse(&serde_json::from_slice::<super::manifest::PluginManifest>(&fs::read(path.join("manifest.json"))?)?.version)?)
++}
++
++fn resolve_at(id: &str, user_root: &Path, package_root: Option<&Path>, external: bool) -> Option<ResolvedPlugin> {
++	if !valid_plugin_id(id) {
++		return None;
++	}
++	let user_path = user_root.join(id);
++	let package_path = package_root.map(|root| root.join(id)).filter(|path| plugin_directory(path));
++	let user_exists = entry_exists(&user_path);
++
++	let (path, management) = if external {
++		if package_path.is_some() {
++			log::warn!("Package plugin {id} conflicts with Home Manager ownership; retaining the Home Manager source");
++		}
++		(user_path, PluginManagement::External)
++	} else if user_exists {
++		let use_package = package_path.as_ref().is_some_and(|package_path| {
++			match (|| -> anyhow::Result<bool> {
++				let builtin_version = manifest_version(package_path)?;
++				let existing_version = manifest_version(&user_path)?;
++				Ok(existing_version <= builtin_version)
++			})() {
++				Ok(newer) => newer,
++				Err(error) => {
++					// Upstream replaces unreadable/invalid existing installations. Direct
++					// loading cannot do that safely: retain the user source and diagnose it.
++					log::warn!("Cannot compare user and package plugin {id}; retaining the user source: {error:#}");
++					false
++				}
++			}
++		});
++		if use_package {
++			(package_path.unwrap(), PluginManagement::Package)
++		} else {
++			(user_path, PluginManagement::User)
++		}
++	} else {
++		(package_path?, PluginManagement::Package)
++	};
++
++	if !plugin_directory(&path) {
++		log::warn!("Plugin {id} has no readable plugin directory/manifest at {}; no package fallback will replace it", path.display());
++		return None;
++	}
++	Some(ResolvedPlugin { id: id.to_owned(), path, management })
++}
++
++fn installed_at(user_root: &Path, package_root: Option<&Path>, external: &BTreeSet<String>) -> Vec<ResolvedPlugin> {
++	let mut ids = BTreeSet::new();
++	for root in std::iter::once(user_root).chain(package_root) {
++		match fs::read_dir(root) {
++			Ok(entries) => {
++				for entry in entries {
++					match entry {
++						Ok(entry) => {
++							if let Some(id) = entry.file_name().to_str().filter(|id| valid_plugin_id(id)) {
++								ids.insert(id.to_owned());
++							} else {
++								log::warn!("Ignoring invalid plugin directory name at {}", entry.path().display());
++							}
++						}
++						Err(error) => log::warn!("Cannot read plugin entry under {}: {error}", root.display()),
++					}
++				}
++			}
++			Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
++			Err(error) => log::warn!("Cannot read plugin source {}: {error}", root.display()),
++		}
++	}
++	ids.into_iter().filter_map(|id| resolve_at(&id, user_root, package_root, external.contains(&id))).collect()
++}

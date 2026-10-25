@@ -1,0 +1,331 @@
+Subject: Rebind cached plugin resources and refresh profile views after source transitions
+
+diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
+index 8cee8fa..6aa4341 100644
+--- a/src-tauri/src/events/frontend/plugins.rs
++++ b/src-tauri/src/events/frontend/plugins.rs
+@@ -10,6 +10,22 @@ use std::sync::mpsc;
+ use tauri::{AppHandle, Emitter, Manager, command};
+ use tokio::fs;
+ 
++// Refresh cached paths before publishing the reload to key views/inspectors.
++async fn rebind_plugin_resources(app: &AppHandle, id: &str, root: &std::path::Path) {
++	let mut locks = crate::store::profiles::acquire_locks_mut().await;
++	locks.profile_stores.rebind_plugin_resources(id, root);
++	for context in locks.profile_stores.all_from_plugin(id) {
++		let _ = super::instances::update_state(app, context, &mut locks).await;
++	}
++}
++
++// The existing reload event also tells profile views to refresh rebound paths.
++fn notify_plugin_reloaded(app: &AppHandle, id: &str) {
++	if let Some(window) = app.get_webview_window("main") {
++		let _ = window.emit("plugin_reloaded", id);
++	}
++}
++
+ #[derive(serde::Serialize)]
+ pub struct PluginInfo {
+ 	id: String,
+@@ -98,27 +114,41 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+ 		log::error!("Failed to unzip file: {}", error);
+ 		let _ = fs::rename(&temp, &actual).await;
+ 		if let Some(plugin) = sources::resolve_plugin(&id) {
+-			let _ = initialise_plugin(plugin.path, tx).await;
++			match initialise_plugin(plugin.path.clone(), tx).await {
++				Ok(()) => {
++					rebind_plugin_resources(&app, &id, &plugin.path).await;
++					notify_plugin_reloaded(&app, &id);
++				}
++				Err(error) => log::warn!("Failed to restore plugin {id} after archive extraction failed: {error:#}"),
++			}
+ 		}
+ 		return Err(anyhow::Error::from(error).into());
+ 	}
++	let effective_path = sources::resolve_plugin(&id).map(|plugin| plugin.path).unwrap_or_else(|| actual.clone());
+ 	let initialisation = async {
+ 		// A package fallback must not make an empty or malformed installation
+ 		// appear successful and discard the previous user copy.
+ 		crate::plugins::manifest::read_manifest(&actual)?;
+-		let effective_path = sources::resolve_plugin(&id).map(|plugin| plugin.path).unwrap_or_else(|| actual.clone());
+-		initialise_plugin(effective_path, tx.clone()).await
++		initialise_plugin(effective_path.clone(), tx.clone()).await
+ 	}.await;
+ 	if let Err(error) = initialisation {
+ 		log::warn!("Failed to initialise plugin at {}: {}", actual.display(), error);
+ 		let _ = fs::remove_dir_all(&actual).await;
+ 		let _ = fs::rename(&temp, &actual).await;
+ 		if let Some(plugin) = sources::resolve_plugin(&id) {
+-			let _ = initialise_plugin(plugin.path, tx).await;
++			match initialise_plugin(plugin.path.clone(), tx).await {
++				Ok(()) => {
++					rebind_plugin_resources(&app, &id, &plugin.path).await;
++					notify_plugin_reloaded(&app, &id);
++				}
++				Err(error) => log::warn!("Failed to restore plugin {id} after installation failed: {error:#}"),
++			}
+ 		}
+ 		return Err(error.into());
+ 	}
+ 	let _ = fs::remove_dir_all(config_dir.join("temp")).await;
++	rebind_plugin_resources(&app, &id, &effective_path).await;
++	notify_plugin_reloaded(&app, &id);
+ 
+ 	use tauri_plugin_aptabase::EventTracker;
+ 	let _ = app.track_event("plugin_installed", Some(serde_json::json!({ "id": id.strip_suffix(".sdPlugin").unwrap_or(&id) })));
+@@ -173,7 +203,23 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
+ 	};
+ 	let _ = deactivate_plugin(&app, &id).await;
+ 	let tx = (*app.state::<mpsc::Sender<SpawnRequest>>()).clone();
+-	let _ = initialise_plugin(plugin.path, tx).await;
++	// Ordinary reload must discard actions removed from a new manifest, as
++	// the external synchronization path already does. Preserve profile data.
++	{
++		let mut categories = crate::shared::CATEGORIES.write().await;
++		for category in categories.values_mut() {
++			category.actions.retain(|action| action.plugin != id);
++		}
++		categories.retain(|_, category| !category.actions.is_empty());
++	}
++	if let Err(error) = initialise_plugin(plugin.path.clone(), tx).await {
++		log::warn!("Failed to reload plugin {id}: {error:#}");
++		if let Some(window) = app.get_webview_window("main") {
++			let _ = window.emit("plugins_changed", &id);
++		}
++		return;
++	}
++	rebind_plugin_resources(&app, &id, &plugin.path).await;
+ 
+ 	let locks = acquire_locks().await;
+ 	let all = locks.profile_stores.all_from_plugin(&id);
+@@ -184,9 +230,10 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
+ 		}
+ 	}
+ 
+-	if let Some(window) = app.get_webview_window("main") {
+-		let _ = window.emit("plugin_reloaded", &id);
+-	}
++	notify_plugin_reloaded(&app, &id);
++	if let Some(window) = app.get_webview_window("main") {
++		let _ = window.emit("plugins_changed", &id);
++	}
+ }
+ 
+ /// Notify the running instance that an external package manager changed one plugin.
+@@ -215,9 +262,10 @@ pub async fn sync_external_plugin(app: AppHandle, id: String) {
+ 
+ 	if let Some(plugin) = plugin {
+ 		let tx = (*app.state::<mpsc::Sender<SpawnRequest>>()).clone();
+-		match initialise_plugin(plugin.path, tx).await {
++		match initialise_plugin(plugin.path.clone(), tx).await {
+ 			Ok(()) => {
+ 				loaded = true;
++				rebind_plugin_resources(&app, &id, &plugin.path).await;
+ 				let locks = acquire_locks().await;
+ 				for context in locks.profile_stores.all_from_plugin(&id) {
+ 					if let Ok(Some(instance)) = get_instance(&context, &locks).await {
+@@ -229,10 +277,10 @@ pub async fn sync_external_plugin(app: AppHandle, id: String) {
+ 		}
+ 	}
+ 
++	if loaded {
++		notify_plugin_reloaded(&app, &id);
++	}
+ 	if let Some(window) = app.get_webview_window("main") {
+-		if loaded {
+-			let _ = window.emit("plugin_reloaded", &id);
+-		}
+ 		let _ = window.emit("plugins_changed", &id);
+ 	}
+ }
+diff --git a/src-tauri/src/plugins/mod.rs b/src-tauri/src/plugins/mod.rs
+index 5a6b3d9..b65a2ce 100644
+--- a/src-tauri/src/plugins/mod.rs
++++ b/src-tauri/src/plugins/mod.rs
+@@ -1,5 +1,6 @@
+ pub mod info_param;
+ pub mod manifest;
++pub mod resources;
+ pub mod sources;
+ mod webserver;
+ 
+diff --git a/src-tauri/src/plugins/resources.rs b/src-tauri/src/plugins/resources.rs
+new file mode 100644
+index 0000000..3535044
+--- /dev/null
++++ b/src-tauri/src/plugins/resources.rs
+@@ -0,0 +1,62 @@
++//! Rebind cached resource paths when a plugin's effective source changes.
++
++use crate::shared::{ActionInstance, ActionState, Profile, initialise_encoder_layout};
++use std::path::{Component, Path, PathBuf};
++
++/// Rebase only resources lexically beneath a known source for this plugin.
++/// Canonicalising would lose a symlink entry that may already have changed.
++pub fn rebind_resource_path(value: &mut String, roots: &[PathBuf], destination: &Path) {
++	if value.is_empty() || value.starts_with("data:") || value.starts_with("opendeck/") || value.starts_with('$') {
++		return;
++	}
++	for root in roots {
++		if let Ok(relative) = Path::new(value.as_str()).strip_prefix(root)
++			&& !relative.components().any(|component| matches!(component, Component::ParentDir))
++		{
++			*value = destination.join(relative).to_string_lossy().into_owned();
++			return;
++		}
++	}
++}
++
++fn rebind_state(state: &mut ActionState, roots: &[PathBuf], destination: &Path) {
++	rebind_resource_path(&mut state.image, roots, destination);
++	if let Some(image) = &mut state.image_override {
++		rebind_resource_path(image, roots, destination);
++	}
++}
++
++fn rebind_instance(instance: &mut ActionInstance, id: &str, roots: &[PathBuf], destination: &Path) -> bool {
++	let mut affected = instance.action.plugin == id;
++	if affected {
++		rebind_resource_path(&mut instance.action.icon, roots, destination);
++		rebind_resource_path(&mut instance.action.property_inspector, roots, destination);
++		for state in instance.action.states.iter_mut().chain(&mut instance.states) {
++			rebind_state(state, roots, destination);
++		}
++		if let Some(encoder) = &mut instance.action.encoder {
++			rebind_resource_path(&mut encoder.icon, roots, destination);
++			rebind_resource_path(&mut encoder.background, roots, destination);
++			rebind_resource_path(&mut encoder.layout, roots, destination);
++			// Even an unchanged lexical HM path may now resolve to different files.
++			encoder.layout_parsed = None;
++		}
++		if let Err(error) = initialise_encoder_layout(&mut instance.action, None) {
++			log::warn!("Failed to reload encoder layout for {id} action {}: {error:#}", instance.action.uuid);
++		}
++	}
++	if let Some(children) = &mut instance.children {
++		for child in children {
++			affected |= rebind_instance(child, id, roots, destination);
++		}
++	}
++	affected
++}
++
++pub fn rebind_profile_resources(profile: &mut Profile, id: &str, roots: &[PathBuf], destination: &Path) {
++	let mut affected = false;
++	for instance in profile.keys.iter_mut().chain(&mut profile.sliders).chain(&mut profile.infobars).flatten() {
++		affected |= rebind_instance(instance, id, roots, destination);
++	}
++	profile.stale |= affected;
++}
+diff --git a/src-tauri/src/store/profiles.rs b/src-tauri/src/store/profiles.rs
+index b718825..96f7610 100644
+--- a/src-tauri/src/store/profiles.rs
++++ b/src-tauri/src/store/profiles.rs
+@@ -4,7 +4,7 @@ use crate::shared::{ActionInstance, DEVICES, DeviceInfo, Profile, config_dir, co
+ 
+ use std::collections::HashMap;
+ use std::fs;
+-use std::path::PathBuf;
++use std::path::{Path, PathBuf};
+ use std::sync::LazyLock;
+ 
+ use anyhow::{Context, anyhow};
+@@ -16,6 +16,13 @@ pub struct ProfileStores {
+ }
+ 
+ impl ProfileStores {
++	pub fn rebind_plugin_resources(&mut self, id: &str, root: &Path) {
++		let roots = crate::plugins::sources::plugin_resource_roots(id);
++		for store in self.stores.values_mut() {
++			crate::plugins::resources::rebind_profile_resources(&mut store.value, id, &roots, root);
++		}
++	}
++
+ 	fn canonical_id(device: &str, id: &str) -> String {
+ 		if cfg!(target_os = "windows") {
+ 			PathBuf::from(device).join(id.replace('/', "\\")).to_str().unwrap().to_owned()
+diff --git a/src-tauri/src/store/simplified_profile.rs b/src-tauri/src/store/simplified_profile.rs
+index 0b3b129..27cff82 100644
+--- a/src-tauri/src/store/simplified_profile.rs
++++ b/src-tauri/src/store/simplified_profile.rs
+@@ -138,6 +138,11 @@ impl From<ActionInstance> for DiskActionInstance {
+ 		}
+ 		value.action.icon = normalise_path(&value.action.icon);
+ 		value.action.property_inspector = normalise_path(&value.action.property_inspector);
++		if let Some(encoder) = &mut value.action.encoder {
++			encoder.icon = normalise_path(&encoder.icon);
++			encoder.background = normalise_path(&encoder.background);
++			encoder.layout = normalise_path(&encoder.layout);
++		}
+ 
+ 		Self {
+ 			context: disk_context,
+@@ -195,6 +200,14 @@ impl DiskActionInstance {
+ 		}
+ 		action.icon = reconstruct_path(&action.icon);
+ 		action.property_inspector = reconstruct_path(&action.property_inspector);
++		if let Some(encoder) = &mut action.encoder {
++			encoder.icon = reconstruct_path(&encoder.icon);
++			encoder.background = reconstruct_path(&encoder.background);
++			// Raw plugin-relative names and built-in layouts remain unchanged.
++			if let Some(path) = crate::plugins::sources::resolve_saved_plugin_path(&PathBuf::from_slash(&encoder.layout)) {
++				encoder.layout = path.to_string_lossy().into_owned();
++			}
++		}
+ 
+ 		ActionInstance {
+ 			context: self.context.into_action_context(device, profile),
+diff --git a/src/components/PropertyInspectorView.svelte b/src/components/PropertyInspectorView.svelte
+index 4117b55..74e88b3 100644
+--- a/src/components/PropertyInspectorView.svelte
++++ b/src/components/PropertyInspectorView.svelte
+@@ -9,6 +9,7 @@
+ 
+ 	import { invoke } from "@tauri-apps/api/core";
+ 	import { listen } from "@tauri-apps/api/event";
++	import { onDestroy, tick } from "svelte";
+ 
+ 	let iframes: { [context: string]: HTMLIFrameElement } = {};
+ 	let iframeContainer: HTMLDivElement;
+@@ -168,15 +169,34 @@
+ 		.concat(profile.sliders.filter(nonNull))
+ 		.concat(profile.infobars.filter(nonNull));
+ 
+-	listen("plugin_reloaded", ({ payload }: { payload: string }) => {
+-		for (const instance of instances) {
+-			if (instance.action.plugin == payload && iframes[instance.context]) {
+-				iframes[instance.context].src += "";
+-				if ($inspectedInstance == instance.context) {
+-					invoke("switch_property_inspector", { new: instance.context });
++	let disposed = false;
++	let reloadRefresh = Promise.resolve();
++	const unlistenReload = listen("plugin_reloaded", ({ payload }: { payload: string }) => {
++		// Keep every plugin notification when activation reloads several IDs.
++		reloadRefresh = reloadRefresh.then(async () => {
++			if (disposed) return;
++			const deviceId = device.id;
++			const profileId = profile.id;
++			const refreshed = await invoke<Profile>("get_selected_profile", { device: deviceId });
++			if (disposed || device.id != deviceId || profile.id != profileId || refreshed.id != profileId) return;
++			profile = refreshed;
++			await tick();
++			if (disposed || device.id != deviceId || profile.id != profileId) return;
++
++			for (const instance of instances) {
++				if (disposed || device.id != deviceId || profile.id != profileId) return;
++				if (instance.action.plugin == payload && iframes[instance.context]) {
++					iframes[instance.context].src += "";
++					if ($inspectedInstance == instance.context) {
++						await invoke("switch_property_inspector", { new: instance.context });
++					}
+ 				}
+ 			}
+-		}
++		}).catch((error) => console.warn("Failed to refresh plugin property inspectors:", error));
++	});
++	onDestroy(() => {
++		disposed = true;
++		void unlistenReload.then((unlisten) => unlisten());
+ 	});
+ </script>
+ 
