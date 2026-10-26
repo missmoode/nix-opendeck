@@ -1,0 +1,225 @@
+Subject: Authorize config, symlinked user and effective package assets narrowly
+
+diff --git a/src-tauri/src/plugins/webserver.rs b/src-tauri/src/plugins/webserver.rs
+index 95097e3..d184a40 100644
+--- a/src-tauri/src/plugins/webserver.rs
++++ b/src-tauri/src/plugins/webserver.rs
+@@ -14,6 +14,138 @@ fn mime(extension: &str) -> String {
+ 	}
+ }
+ 
++// Keep the lexical plugin entry: canonicalising it first would lose the ID and
++// allow unrelated paths into the same store tree to acquire its authorization.
++fn path_is_allowed_with_packages(path: &Path, prefix: &Path, package_root: Option<&Path>) -> bool {
++	if path.components().any(|component| matches!(component, std::path::Component::ParentDir | std::path::Component::CurDir))
++		|| path.to_str().is_some_and(|path| path.split('/').any(|component| component == "." || component == ".."))
++	{
++		return false;
++	}
++
++	let Ok(canonical_path) = path.canonicalize() else {
++		return false;
++	};
++
++	if canonical_path.starts_with(prefix) {
++		return true;
++	}
++
++	let plugins_dir = prefix.join("plugins");
++	if let Ok(relative_path) = path.strip_prefix(&plugins_dir)
++		&& let Some(std::path::Component::Normal(plugin_name)) = relative_path.components().next()
++	{
++		let plugin_path = plugins_dir.join(plugin_name);
++		if plugin_path.symlink_metadata().is_ok_and(|metadata| metadata.file_type().is_symlink())
++			&& plugin_path.canonicalize().is_ok_and(|plugin_root| plugin_root.is_dir() && canonical_path.starts_with(plugin_root))
++		{
++			return true;
++		}
++	}
++
++	package_root.is_some_and(|plugin_path| {
++		path.starts_with(plugin_path)
++			&& plugin_path.canonicalize().is_ok_and(|plugin_root| plugin_root.is_dir() && canonical_path.starts_with(plugin_root))
++	})
++}
++
++fn path_is_allowed(path: &Path, prefix: &Path) -> bool {
++	let package_root = super::sources::effective_package_asset_root(path);
++	path_is_allowed_with_packages(path, prefix, package_root.as_deref())
++}
++
++#[derive(Debug, PartialEq)]
++enum InspectorMode { None, Parent, Child }
++
++// Strip one protocol suffix, then use this same target for authorization and IO.
++fn request_target(url: &str) -> (&Path, InspectorMode) {
++	if let Some(path) = url.strip_suffix("|opendeck_property_inspector_child") {
++		(Path::new(path), InspectorMode::Child)
++	} else if let Some(path) = url.strip_suffix("|opendeck_property_inspector") {
++		(Path::new(path), InspectorMode::Parent)
++	} else {
++		(Path::new(url), InspectorMode::None)
++	}
++}
++
++
++#[cfg(all(test, unix))]
++mod tests {
++	use super::*;
++	use std::sync::atomic::{AtomicU64, Ordering};
++
++	static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
++
++	struct Fixture(PathBuf);
++
++	impl Fixture {
++		fn new() -> Self {
++			let path = std::env::temp_dir().join(format!(
++				"opendeck-assets-test-{}-{}",
++				std::process::id(), NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
++			));
++			std::fs::create_dir(&path).unwrap();
++			Self(path)
++		}
++
++		fn file(&self, relative: &str) -> PathBuf {
++			let path = self.0.join(relative);
++			std::fs::create_dir_all(path.parent().unwrap()).unwrap();
++			std::fs::write(&path, b"asset").unwrap();
++			path
++		}
++	}
++
++	impl Drop for Fixture {
++		fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
++	}
++
++	#[test]
++	fn accepts_config_files_and_only_the_authorized_package() {
++		let fixture = Fixture::new();
++		let config = fixture.file("config/settings.json");
++		let allowed = fixture.file("store/allowed.sdPlugin/icons/action.svg");
++		let unrelated = fixture.file("store/other.sdPlugin/icons/action.svg");
++		let prefix = fixture.0.join("config").canonicalize().unwrap();
++		let package = fixture.0.join("store/allowed.sdPlugin");
++
++		assert!(path_is_allowed_with_packages(&config, &prefix, None));
++		assert!(path_is_allowed_with_packages(&allowed, &prefix, Some(&package)));
++		assert!(!path_is_allowed_with_packages(&unrelated, &prefix, Some(&package)));
++		assert!(!path_is_allowed_with_packages(&unrelated, &prefix, None));
++	}
++
++	#[test]
++	fn allows_managed_symlink_assets_without_exposing_the_store() {
++		use std::os::unix::fs::symlink;
++
++		let fixture = Fixture::new();
++		let allowed = fixture.file("store/managed/icons/action.svg");
++		let unrelated = fixture.file("store/unrelated/icons/action.svg");
++		let config = fixture.0.join("config");
++		std::fs::create_dir_all(config.join("plugins")).unwrap();
++		let link = config.join("plugins/managed.sdPlugin");
++		symlink(allowed.parent().unwrap().parent().unwrap(), &link).unwrap();
++		let prefix = config.canonicalize().unwrap();
++
++		assert!(path_is_allowed_with_packages(&link.join("icons/action.svg"), &prefix, None));
++		assert!(!path_is_allowed_with_packages(&unrelated, &prefix, None));
++	}
++
++	#[test]
++	fn rejects_escaping_symlinks_and_parent_components() {
++		use std::os::unix::fs::symlink;
++
++		let fixture = Fixture::new();
++		let outside = fixture.file("outside/secret.txt");
++		let config = fixture.0.join("config");
++		std::fs::create_dir_all(config.join("plugins")).unwrap();
++		symlink(&outside, config.join("escape.txt")).unwrap();
++		let prefix = config.canonicalize().unwrap();
++		assert!(!path_is_allowed_with_packages(&config.join("escape.txt"), &prefix, None));
++		assert!(!path_is_allowed_with_packages(&config.join("plugins/../escape.txt"), &prefix, None));
++	}
++}
+ /// Start a simple webserver to serve files of plugins that run in a browser environment.
+ pub async fn init_webserver(prefix: PathBuf) {
+ 	let prefix = prefix.canonicalize().unwrap();
+@@ -32,22 +164,28 @@ pub async fn init_webserver(prefix: PathBuf) {
+ 	};
+ 
+ 	for request in server.incoming_requests() {
+-		let mut url = urlencoding::decode(request.url()).unwrap().into_owned();
++		let mut url = match urlencoding::decode(request.url()) {
++			Ok(url) => url.into_owned(),
++			Err(_) => {
++				let _ = request.respond(Response::empty(400));
++				continue;
++			}
++		};
+ 		if url.contains('?') {
+ 			url = url.split_once('?').unwrap().0.to_owned();
+ 		}
+ 		#[cfg(target_os = "windows")]
+ 		let url = url[1..].replace('/', "\\");
+-		let path = Path::new(url.trim_end_matches("|opendeck_property_inspector").trim_end_matches("|opendeck_property_inspector_child"));
++		let (path, inspector) = request_target(&url);
+ 
+ 		if !matches!(tokio::fs::try_exists(path).await, Ok(true)) {
+ 			let _ = request.respond(Response::empty(404));
+ 			continue;
+ 		}
+ 
+-		// Ensure the requested path is within the config directory to prevent unrestricted access to the filesystem.
+-		let developer = crate::store::get_settings().value.developer;
+-		if !developer && !path.canonicalize().is_ok_and(|p| p.starts_with(&prefix)) {
++		// Preserve upstream's documented developer-mode filesystem access.
++		let developer = crate::store::get_settings().value.developer;
++		if !developer && !path_is_allowed(path, &prefix) {
+ 			let _ = request.respond(Response::empty(403));
+ 			continue;
+ 		}
+@@ -67,9 +205,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+ 		// Instead, we have to inject a replacement window.open implementation that creates an IFrame element
+ 		// and requests the Svelte frontend to maximise the property inspector.
+ 
+-		if url.ends_with("|opendeck_property_inspector") {
+-			let path = &url[..url.len() - 28];
+-
++		if inspector == InspectorMode::Parent {
+ 			let mut content = tokio::fs::read_to_string(path).await.unwrap_or_default();
+ 			content += r#"
+ 				<div id="opendeck_iframe_container" style="position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; display: none;"></div>
+@@ -143,9 +279,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+ 				value: "text/html".parse().unwrap(),
+ 			});
+ 			let _ = request.respond(response);
+-		} else if url.ends_with("|opendeck_property_inspector_child") {
+-			let path = &url[..url.len() - 34];
+-
++		} else if inspector == InspectorMode::Child {
+ 			let mut content = tokio::fs::read_to_string(path).await.unwrap_or_default();
+ 			content = format!("<script>window.opener ??= window.parent;</script>{content}");
+ 
+@@ -157,7 +291,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+ 			});
+ 			let _ = request.respond(response);
+ 		} else {
+-			let mime_type = mime(&match Path::new(&url).extension() {
++			let mime_type = mime(&match path.extension() {
+ 				Some(extension) => extension.to_string_lossy().into_owned(),
+ 				None => "html".to_owned(),
+ 			});
+@@ -168,12 +302,12 @@ pub async fn init_webserver(prefix: PathBuf) {
+ 			};
+ 
+ 			if mime_type.starts_with("text/") || mime_type == "image/svg+xml" {
+-				let mut response = Response::from_string(tokio::fs::read_to_string(url).await.unwrap_or_default());
++				let mut response = Response::from_string(tokio::fs::read_to_string(path).await.unwrap_or_default());
+ 				response.add_header(access_control_allow_origin);
+ 				response.add_header(content_type);
+ 				let _ = request.respond(response);
+ 			} else {
+-				let mut response = Response::from_file(match tokio::fs::File::open(url).await {
++				let mut response = Response::from_file(match tokio::fs::File::open(path).await {
+ 					Ok(file) => file.into_std().await,
+ 					Err(_) => continue,
+ 				});

@@ -1,0 +1,75 @@
+Subject: Preserve current Home Manager links and ownership when restoring user data
+
+diff --git a/src-tauri/src/events/frontend/settings.rs b/src-tauri/src/events/frontend/settings.rs
+index 997dcce..f54982d 100644
+--- a/src-tauri/src/events/frontend/settings.rs
++++ b/src-tauri/src/events/frontend/settings.rs
+@@ -107,6 +107,59 @@ fn linked_plugins(plugins_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+ 	Ok(links)
+ }
+ 
++#[cfg(unix)]
++fn remove_staged_entry(path: &Path) -> std::io::Result<()> {
++	match path.symlink_metadata() {
++		Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path),
++		Ok(_) => std::fs::remove_file(path),
++		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
++		Err(error) => Err(error),
++	}
++}
++
++/// Restore user data around the current declarative installation, without
++/// archiving plugin contents or importing an old ownership declaration.
++#[cfg(unix)]
++fn preserve_managed_plugins(config_dir: &Path, restored_dir: &Path) -> std::io::Result<()> {
++	let state_path = config_dir.join("externally-managed-plugins");
++	let state = match state_path.symlink_metadata() {
++		Ok(_) => Some(std::fs::read_to_string(&state_path)?),
++		Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
++		Err(error) => return Err(error),
++	};
++	let mut links = vec![];
++	if let Some(state) = &state {
++		for id in state.lines().filter(|id| !id.is_empty()) {
++			if !crate::plugins::sources::valid_plugin_id(id) {
++				return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid externally managed plugin ID: {id:?}")));
++			}
++			let path = config_dir.join("plugins").join(id);
++			match path.symlink_metadata() {
++				Ok(metadata) if metadata.file_type().is_symlink() => links.push((id, std::fs::read_link(path)?)),
++				Ok(_) => (),
++				Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
++				Err(error) => return Err(error),
++			}
++		}
++	}
++
++	let restored_state = restored_dir.join("externally-managed-plugins");
++	remove_staged_entry(&restored_state)?;
++	if let Some(state) = &state {
++		std::fs::write(restored_state, state)?;
++	}
++	if !links.is_empty() {
++		let plugins_dir = restored_dir.join("plugins");
++		std::fs::create_dir_all(&plugins_dir)?;
++		for (id, target) in links {
++			let path = plugins_dir.join(id);
++			remove_staged_entry(&path)?;
++			std::os::unix::fs::symlink(target, path)?;
++		}
++	}
++	Ok(())
++}
++
+ #[command]
+ pub async fn backup_config_directory(app: AppHandle) -> Result<bool, Error> {
+ 	let filename = format!(
+@@ -166,6 +219,8 @@ pub async fn restore_config_directory(app: AppHandle) -> Result<(), Error> {
+ 	let _ = std::fs::remove_dir_all(&backup_dir);
+ 
+ 	crate::zip_extract::extract(File::open(path)?, &temp_dir).map_err(anyhow::Error::from)?;
++	#[cfg(unix)]
++	preserve_managed_plugins(&config_dir, &temp_dir)?;
+ 	#[cfg(windows)]
+ 	crate::plugins::deactivate_plugins().await;
+ 	std::fs::rename(&config_dir, &backup_dir)?;

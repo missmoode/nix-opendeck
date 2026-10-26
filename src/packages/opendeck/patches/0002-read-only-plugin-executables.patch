@@ -1,8 +1,10 @@
+Subject: Avoid chmod when a plugin executable already has executable permissions
+
 diff --git a/src-tauri/src/plugins/mod.rs b/src-tauri/src/plugins/mod.rs
-index 0c75444..fd6d87a 100644
+index 1c3abd5..856e82e 100644
 --- a/src-tauri/src/plugins/mod.rs
 +++ b/src-tauri/src/plugins/mod.rs
-@@ -322,7 +322,13 @@ pub async fn initialise_plugin(path: path::PathBuf, spawner_tx: mpsc::Sender<Spa
+@@ -323,7 +323,13 @@ pub async fn initialise_plugin(path: path::PathBuf, spawner_tx: mpsc::Sender<Spa
  		#[cfg(unix)]
  		{
  			use std::os::unix::fs::PermissionsExt;

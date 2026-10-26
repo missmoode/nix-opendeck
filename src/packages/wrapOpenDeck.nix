@@ -19,7 +19,8 @@ let
   duplicateIds = lib.filter (id: lib.count (other: other == id) pluginIds > 1) (lib.unique pluginIds);
 
   # Linux only: a directory of links to plugin packages.
-  # OpenDeck copies these into its normal writable plugin directory.
+  # OpenDeck loads these directly from the Nix store without copying them
+  # into its writable plugin directory.
   pluginBundle = linkFarm "${pname}-bundled-plugins" (
     map (plugin: {
       name = plugin.pluginId;

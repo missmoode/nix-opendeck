@@ -241,21 +241,25 @@ do that and still want StarterPack, you'll need to declare
 If `programs.opendeck.installPackage` is `false`, `programs.opendeck.package` should
 still match the OpenDeck package you installed elsewhere. The module uses it to check
 which plugins are already bundled and prevent accidental double-declarations, as well
-as to notify a running OpenDeck instance of plugin changes.
+as to target the correct executable when requesting an optional restart.
 
 > [!IMPORTANT]
 > Plugins managed by the Home Manager module are marked as externally managed.
 > The OpenDeck package includes patches that prevent its plugin manager from updating
 > or removing them.
 >
+> OpenDeck also skips automatic update checks for these plugins and for bundled
+> plugins, since their updates are managed outside the graphical store.
+>
 > Plugins installed through the GUI are unaffected. The Home Manager module will
 > refuse to overwrite a plugin it doesn't already manage.
 
-When Home Manager adds, removes, or updates a plugin, it notifies the running
-OpenDeck instance to load, unload, or reload that plugin without restarting
-OpenDeck. Only plugins whose installed paths are changed are affected.
-If OpenDeck isn't running (or notification fails), the changes will take effect
-when OpenDeck next starts as normal.
+Home Manager changes to declared plugins take effect when OpenDeck next starts.
+Set `programs.opendeck.restartOnPluginChanges = true` to request a single restart
+of an already-running instance after plugin symlinks are added, removed, or updated.
+The option defaults to `false`, does not start OpenDeck if it is closed, and does
+nothing when plugin paths have not changed. It does not detect changes to the
+bundled plugins in `programs.opendeck.package`.
 
 ### Usage without the Home Manager module
 
@@ -269,17 +273,14 @@ You could symlink the plugins from the Nix store (or elsewhere) directly into th
 the patched `opendeck` should be able to use them. However, without the Home Manager
 module they will not be protected from modification through the GUI.
 
-If you manage plugin symlinks yourself, you can notify a running OpenDeck
-instance of a change without restarting it:
+If you manage plugin symlinks yourself, restart OpenDeck after changing them.
+For an already-running instance, you can request a restart with:
 
 ```bash
-opendeck --sync-plugin com.example.plugin.sdPlugin
+opendeck --restart-if-running
 ```
 
-The command accepts a single plugin ID, rather than a filesystem path.
-It loads or reloads the plugin if its directory exists, or unloads it if
-the directory has been removed. It does not start OpenDeck if it isn't
-already running.
+This exits without starting a new instance when OpenDeck is not running.
 
 Alternatively, you can [bundle plugins](#custom-bundled-packages) into an OpenDeck package using `wrapOpenDeck`. This lets you select plugins declaratively without Home Manager, and without recompiling OpenDeck when the plugin selection changes.
 
@@ -363,7 +364,7 @@ in
 
 The examples using `environment.systemPackages` demonstrate NixOS installation, but `wrapOpenDeck` itself is also available on nix-darwin and standalone Nix installations.
 
-The wrapper retains OpenDeck's normal bundled-plugin behaviour, desktop integration, command-line arguments, and built-in autostart functionality. On Linux, bundled plugins are provided through a separate Nix store directory. On macOS, they are assembled into the application bundle without recompiling the application.
+The wrapper retains OpenDeck's desktop integration, command-line arguments, and built-in autostart support. Bundled plugins are loaded directly from package resources instead of being copied into the user's plugin directory. On Linux, they are provided through a separate Nix store directory; on macOS, they are assembled into the application bundle without recompiling OpenDeck.
 
 If a bundled plugin provides udev rules, these are included in the resulting package's `.udev` attribute on Linux. NixOS users must still install those rules through `services.udev.packages`. Plugins installed separately through Home Manager do not contribute rules to the OpenDeck package's `.udev` attribute.
 
@@ -459,15 +460,16 @@ nix-opendeck applies a small collection of downstream patches to OpenDeck to imp
 with Nix installations.
 
 These patches:
-- Support plugins symlinked from the immutable Nix store, including their assets and
-executable permissions.
-- Prevent OpenDeck from modifying or removing plugins marked as externally managed.
-- Allow external package managers to explicitly notify OpenDeck when individual plugins
-are added, removed, or updated, without requiring a restart (matching the behaviour when
-installed via the GUI).
-- Preserve runtime paths provided by Nix wrappers for use in application-based profile switching.
-- Adjust OpenDeck's built-in "Start at login" functionality to avoid referencing obsolete Nix store paths after package upgrades.
-- Allow bundled plugins to be supplied independently of the compiled application while retaining OpenDeck's built-in plugin behaviour, including graphical management and configuration backups.
+- Support symlinked plugins in the immutable Nix store, including their assets and
+  executable permissions.
+- Load bundled plugins directly from package resources without copying them into the
+  user's plugin directory, while protecting managed plugins from GUI modification and excluding them from automatic graphical-store update checks.
+- Support an optional restart of an already-running OpenDeck instance after Home
+  Manager changes declared plugin symlinks, without launching an inactive app.
+- Preserve PATH entries supplied by Nix wrappers and explain the PATH requirement for
+  OpenDeck's built-in autostart.
+- Exclude managed plugin links and ownership metadata from configuration backups and
+  preserve the current Home Manager links and ownership state on restore.
 
 The Nix build also includes minor changes to identify itself and direct users to the relevant
 plugin compatibility documentation.
@@ -504,9 +506,11 @@ nix-opendeck is a personal packaging project maintained on a best-effort basis. 
 
 ### Bundled Plugins
 
-OpenDeck supports plugins bundled with the application. On startup, it installs any bundled plugins that are missing or older than the bundled versions.
+Upstream OpenDeck copies bundled plugins into the user's plugin directory at startup when they are missing or older. nix-opendeck instead loads bundled plugins directly from their package resources, leaving existing user installations untouched.
 
-Bundled plugins are treated as built-in by OpenDeck and cannot normally be removed through its graphical interface. Removing a plugin from the bundle does not automatically uninstall an existing copy from the user's configuration directory.
+When a plugin exists in multiple places, Home Manager-managed installations take precedence. Otherwise, the packaged version is selected when its manifest version is **newer than or equal to** the user's version; a newer user version wins. If a user installation's version cannot be compared, nix-opendeck leaves it in place rather than replacing it automatically. The Home Manager module also prevents declaring a plugin separately when it is already bundled.
+
+A selected packaged plugin cannot be updated or removed through OpenDeck's graphical plugin manager. Any shadowed user installation remains on disk and can become active again if the plugin is removed from the package. Configuration backups retain ordinary user-installed plugins, while managed plugin symlinks and package resources are handled separately. If removing a newer user-installed plugin reveals a bundled version, restart OpenDeck to refresh resources in existing profile instances.
 
 Upstream OpenDeck includes the StarterPack plugin by default, so nix-opendeck's `opendeck` package does as well. The `opendeck-core` package includes no bundled plugins.
 
@@ -598,6 +602,9 @@ supported platforms when their output paths change in a pull request. The checks
 independently rebuild the affected derivations and compare their outputs
 bit-for-bit against a reference build. Passing is required before merging into
 `main`.
+
+The OpenDeck core build also runs Rust regression tests covering plugin source
+selection, saved resource paths, archive validation, and asset authorization.
 
 This doesn't verify the entire dependency closure, or guarantee that everything
 operates at runtime. I don't have the hardware to test it all, though during

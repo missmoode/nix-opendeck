@@ -85,61 +85,44 @@ rustPlatform.buildRustPackage (
     };
 
     patches = [
+      # Define shared source resolution and ownership before their consumers.
+      ./patches/0001-plugin-source-helpers.patch
 
-      # Allow the local asset webserver to serve files through symlinked plugin
-      # directories, while retaining its path-containment checks.
-      #
-      # Requests must still originate through a specific plugin entry under
-      # OpenDeck's plugin directory, and the requested file must canonicalize
-      # beneath that plugin's canonical target.
-      ./patches/0001-support-symlinked-plugin-assets.patch
+      # Permit already-executable plugins in immutable locations.
+      ./patches/0002-read-only-plugin-executables.patch
 
-      # Preserve plugin directory symlinks instead of replacing them with their
-      # resolved targets.
-      #
-      # Normal filesystem access already follows the symlink when reading plugin
-      # contents, while retaining the lexical plugin path preserves plugin IDs and
-      # ensures asset URLs continue to pass through OpenDeck's plugin directory.
-      ./patches/0002-preserve-symlinked-plugin-paths.patch
+      # Authorize plugin assets using lexical roots and canonical containment.
+      ./patches/0003-plugin-asset-authorization.patch
 
-      # Avoid rewriting Unix permissions when a plugin executable is already
-      # executable.
-      #
-      # This allows executables stored in immutable locations such as the Nix
-      # store to be used without attempting to chmod them.
-      ./patches/0003-avoid-redundant-plugin-chmod.patch
+      # Load selected sources directly and resolve resources/profile paths.
+      ./patches/0004-direct-plugin-loading.patch
 
-      # Support an optional externally-managed-plugins file in OpenDeck's config
-      # directory.
-      #
-      # Plugin IDs listed in that file cannot be replaced or removed through
-      # OpenDeck's plugin manager. If the file is absent or unreadable, OpenDeck
-      # retains the normal upstream behaviour.
-      #
-      # This is a downstream functionality used by nix-opendeck,
-      ./patches/0004-protect-externally-managed-plugins.patch
+      # Guard backend mutations and preserve data when effective sources change.
+      ./patches/0005-managed-plugin-backend.patch
 
-      # Preserve Nix wrapper-provided runtime paths when OpenDeck reconstructs
-      # PATH from the user's login shell. Perform environment initialization
-      # before starting Tokio's multithreaded runtime.
-      ./patches/0005-preserve-wrapper-path.patch
+      # List effective plugins via the upstream GUI's existing builtin field.
+      ./patches/0006-effective-plugin-listing.patch
 
-      # Direct users of the Nix build to nix-opendeck's plugin
-      # compatibility documentation before reporting upstream issues.
-      ./patches/0006-nix-plugin-store-warning.patch
+      # Back up user plugin files, excluding links and declarative ownership.
+      ./patches/0007-managed-plugin-backups.patch
 
-      # Explain the PATH requirement for OpenDeck's built-in Linux autostart.
-      # The autostart toggle and settings behaviour remain unchanged.
-      ./patches/0007-document-nix-autostart-path.patch
+      # Keep the current HM links and ownership when restoring user data.
+      ./patches/0008-protect-managed-plugin-restore.patch
 
-      # Sync explicitly identified externally managed plugins after activation.
-      # No directory watching or user-settings deletion.
-      ./patches/0008-sync-external-plugins.patch
+      # Allow Home Manager to restart an existing instance without opening one.
+      ./patches/0009-restart-if-running.patch
 
-      # Allow a package wrapper to supply bundled plugins from a separate
-      # Nix store path, without rebuilding the OpenDeck executable.
-      # When unset, retain the normal Tauri resource lookup.
-      ./patches/0009-configurable-bundled-plugins.patch
+      # Preserve portable encoder resources when saving and loading profiles.
+      ./patches/0010-persist-encoder-resource-paths.patch
+
+      # Preserve wrapper-provided runtime paths when importing the login shell.
+      ./patches/0011-preserve-wrapper-path.patch
+
+      # Point Nix users to plugin compatibility information.
+      ./patches/0012-nix-plugin-store-warning.patch
+
+      # Explain the stable launcher PATH requirement for Nix autostart.
+      ./patches/0013-document-nix-autostart-path.patch
     ];
 
     postPatch = ''

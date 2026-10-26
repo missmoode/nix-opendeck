@@ -1,0 +1,59 @@
+Subject: Exclude linked plugin code and declarative ownership state from backups
+
+diff --git a/src-tauri/src/events/frontend/settings.rs b/src-tauri/src/events/frontend/settings.rs
+index 61180ab..997dcce 100644
+--- a/src-tauri/src/events/frontend/settings.rs
++++ b/src-tauri/src/events/frontend/settings.rs
+@@ -8,7 +8,7 @@ use std::io::Write;
+ use std::path::{Path, PathBuf};
+ 
+ use path_slash::PathExt;
+-use tauri::{AppHandle, Manager, command};
++use tauri::{AppHandle, command};
+ #[cfg(not(debug_assertions))]
+ use tauri_plugin_autostart::ManagerExt;
+ use tauri_plugin_dialog::{DialogExt, FilePath};
+@@ -91,6 +91,22 @@ fn add_dir_to_zip<W: Write + std::io::Seek>(zip: &mut ZipWriter<W>, base_dir: &P
+ 	Ok(())
+ }
+ 
++fn linked_plugins(plugins_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
++	let entries = match read_dir(plugins_dir) {
++		Ok(entries) => entries,
++		Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
++		Err(error) => return Err(error),
++	};
++	let mut links = vec![];
++	for entry in entries {
++		let entry = entry?;
++		if entry.file_type()?.is_symlink() {
++			links.push(entry.path());
++		}
++	}
++	Ok(links)
++}
++
+ #[command]
+ pub async fn backup_config_directory(app: AppHandle) -> Result<bool, Error> {
+ 	let filename = format!(
+@@ -119,15 +135,11 @@ pub async fn backup_config_directory(app: AppHandle) -> Result<bool, Error> {
+ 	let mut skip_paths = vec![temp_path.clone()];
+ 	let config_dir = config_dir();
+ 
+-	if let Some(builtin_plugins) = app
+-		.path()
+-		.resolve("plugins", tauri::path::BaseDirectory::Resource)
+-		.ok()
+-		.and_then(|p| read_dir(p).ok())
+-		.map(|e| e.into_iter().flatten().map(|x| config_dir.join("plugins").join(x.file_name())).collect::<Vec<_>>())
+-	{
+-		skip_paths.extend(builtin_plugins);
+-	};
++	// Back up user plugin files, including shadowed copies, but never follow
++	// linked installations or archive declarative ownership state. Package
++	// resources already live outside the configuration directory.
++	skip_paths.push(config_dir.join("externally-managed-plugins"));
++	skip_paths.extend(linked_plugins(&config_dir.join("plugins"))?);
+ 
+ 	let mut zip = ZipWriter::new(file);
+ 	let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);

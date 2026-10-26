@@ -1,4 +1,7 @@
+Subject: Explain the installed launcher PATH requirement for Nix autostart
+
 diff --git a/src/components/SettingsView.svelte b/src/components/SettingsView.svelte
+index fded329..b731009 100644
 --- a/src/components/SettingsView.svelte
 +++ b/src/components/SettingsView.svelte
 @@ -133,7 +133,7 @@
@@ -11,13 +14,14 @@ diff --git a/src/components/SettingsView.svelte b/src/components/SettingsView.sv
  			</Tooltip>
  		</div>
 diff --git a/translations/en.json b/translations/en.json
+index 630f9cc..b3fb93c 100644
 --- a/translations/en.json
 +++ b/translations/en.json
-@@ -115,6 +115,7 @@
+@@ -116,6 +116,7 @@
  	"settings.autolaunch": "Start at login:",
  	"settings.autolaunch.tooltip.1": "If this option is enabled, {{PRODUCT_NAME}} will automatically start at login.",
  	"settings.autolaunch.tooltip.2": "If you used Flatpak to install {{PRODUCT_NAME}}, this option may not function as intended.",
 +	"settings.autolaunch.tooltip.nix": "For Nix installations, the opendeck command must be available in your desktop session's PATH for this setting to work.",
  	"settings.background": "Run in background:",
  	"settings.background.tooltip": "If this option is enabled, {{PRODUCT_NAME}} will minimise to the tray and run in the background.",
-	"settings.backup_config.button": "Back up config",
+ 	"settings.backup_config.button": "Back up config",

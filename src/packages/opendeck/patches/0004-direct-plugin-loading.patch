@@ -1,0 +1,272 @@
+Subject: Load effective plugin sources directly and resolve their resources and saved paths
+
+diff --git a/src-tauri/src/encoder_layouts.rs b/src-tauri/src/encoder_layouts.rs
+index 2a93eab..1c49180 100644
+--- a/src-tauri/src/encoder_layouts.rs
++++ b/src-tauri/src/encoder_layouts.rs
+@@ -1,4 +1,4 @@
+-use crate::shared::{ActionInstance, Encoder, config_dir};
++use crate::shared::{ActionInstance, Encoder};
+ use crate::store::profiles::{acquire_locks_mut, get_slot_mut};
+ 
+ use std::path::{Path, PathBuf};
+@@ -54,7 +54,9 @@ fn get_encoder_image(encoder: &mut Encoder, instance: &ActionInstance) -> Result
+ 		return Ok(DynamicImage::new_rgb8(200, 100));
+ 	};
+ 
+-	let path = config_dir().join("plugins").join(&instance.action.plugin);
++	let path = crate::plugins::sources::resolve_plugin(&instance.action.plugin)
++		.with_context(|| format!("Plugin not found: {}", instance.action.plugin))?
++		.path;
+ 	let path_canonical = path.canonicalize()?;
+ 
+ 	let state_idx = instance.current_state as usize;
+diff --git a/src-tauri/src/events/frontend/mod.rs b/src-tauri/src/events/frontend/mod.rs
+index 5d89d80..797afc2 100644
+--- a/src-tauri/src/events/frontend/mod.rs
++++ b/src-tauri/src/events/frontend/mod.rs
+@@ -77,24 +77,12 @@ pub async fn get_categories() -> HashMap<String, Category> {
+ pub async fn get_localisations(locale: &str) -> Result<HashMap<String, serde_json::Value>, Error> {
+ 	let mut localisations: HashMap<String, serde_json::Value> = HashMap::new();
+ 
+-	let mut entries = match tokio::fs::read_dir(&crate::shared::config_dir().join("plugins")).await {
+-		Ok(entries) => entries,
+-		Err(error) => return Err(anyhow::Error::from(error).into()),
+-	};
+-
+-	while let Ok(Some(entry)) = entries.next_entry().await {
+-		let path = match entry.metadata().await.unwrap().is_symlink() {
+-			true => tokio::fs::read_link(entry.path()).await.unwrap(),
+-			false => entry.path(),
++	for plugin in crate::plugins::sources::installed_plugins() {
++		let Ok(locale) = tokio::fs::read(plugin.path.join(format!("{locale}.json"))).await else { continue };
++		let Ok(locale): Result<serde_json::Value, _> = serde_json::from_slice(&locale) else {
++			continue;
+ 		};
+-		let metadata = tokio::fs::metadata(&path).await.unwrap();
+-		if metadata.is_dir() {
+-			let Ok(locale) = tokio::fs::read(path.join(format!("{locale}.json"))).await else { continue };
+-			let Ok(locale): Result<serde_json::Value, _> = serde_json::from_slice(&locale) else {
+-				continue;
+-			};
+-			localisations.insert(path.file_name().unwrap().to_str().unwrap().to_owned(), locale);
+-		}
++		localisations.insert(plugin.id, locale);
+ 	}
+ 
+ 	Ok(localisations)
+diff --git a/src-tauri/src/events/frontend/property_inspector.rs b/src-tauri/src/events/frontend/property_inspector.rs
+index c588fb3..116f1b3 100644
+--- a/src-tauri/src/events/frontend/property_inspector.rs
++++ b/src-tauri/src/events/frontend/property_inspector.rs
+@@ -6,7 +6,8 @@ use tauri::command;
+ 
+ #[command]
+ pub async fn make_info(plugin: String) -> Result<crate::plugins::info_param::Info, Error> {
+-	let manifest = crate::plugins::manifest::read_manifest(&crate::shared::config_dir().join("plugins").join(&plugin))?;
++	let resolved = crate::plugins::sources::resolve_plugin(&plugin).ok_or_else(|| anyhow::anyhow!("Plugin not found: {plugin}"))?;
++	let manifest = crate::plugins::manifest::read_manifest(&resolved.path)?;
+ 	Ok(crate::plugins::info_param::make_info(plugin, manifest.version, false).await)
+ }
+ 
+diff --git a/src-tauri/src/events/inbound/misc.rs b/src-tauri/src/events/inbound/misc.rs
+index 2e13047..1194444 100644
+--- a/src-tauri/src/events/inbound/misc.rs
++++ b/src-tauri/src/events/inbound/misc.rs
+@@ -22,7 +22,8 @@ pub struct LogMessageEvent {
+ 
+ pub async fn log_message(uuid: Option<&str>, mut event: PayloadEvent<LogMessageEvent>) -> Result<(), anyhow::Error> {
+ 	if let Some(uuid) = uuid
+-		&& let Ok(manifest) = crate::plugins::manifest::read_manifest(&crate::shared::config_dir().join("plugins").join(uuid))
++		&& let Some(plugin) = crate::plugins::sources::resolve_plugin(uuid)
++		&& let Ok(manifest) = crate::plugins::manifest::read_manifest(&plugin.path)
+ 	{
+ 		event.payload.message = format!("[{}] {}", manifest.name, event.payload.message);
+ 	}
+diff --git a/src-tauri/src/events/inbound/states.rs b/src-tauri/src/events/inbound/states.rs
+index 29c066f..9c09e3f 100644
+--- a/src-tauri/src/events/inbound/states.rs
++++ b/src-tauri/src/events/inbound/states.rs
+@@ -73,9 +73,9 @@ pub async fn set_image(mut event: ContextAndPayloadEvent<SetImagePayload>) -> Re
+ 				event.payload.image = None;
+ 			} else if !image.trim().starts_with("data:") {
+ 				event.payload.image = Some(crate::shared::convert_icon(
+-					crate::shared::config_dir()
+-						.join("plugins")
+-						.join(&instance.action.plugin)
++					crate::plugins::sources::resolve_plugin(&instance.action.plugin)
++						.ok_or_else(|| anyhow::anyhow!("Plugin not found: {}", instance.action.plugin))?
++						.path
+ 						.join(image.trim())
+ 						.to_str()
+ 						.unwrap()
+diff --git a/src-tauri/src/events/outbound/mod.rs b/src-tauri/src/events/outbound/mod.rs
+index 8537352..4ec7c60 100644
+--- a/src-tauri/src/events/outbound/mod.rs
++++ b/src-tauri/src/events/outbound/mod.rs
+@@ -73,16 +73,8 @@ async fn send_to_plugin(plugin: &str, data: &impl Serialize) -> Result<(), anyho
+ }
+ 
+ async fn send_to_all_plugins(data: &impl Serialize) -> Result<(), anyhow::Error> {
+-	let mut entries = tokio::fs::read_dir(crate::shared::config_dir().join("plugins")).await?;
+-	while let Ok(Some(entry)) = entries.next_entry().await {
+-		let path = match entry.metadata().await?.is_symlink() {
+-			true => tokio::fs::read_link(entry.path()).await?,
+-			false => entry.path(),
+-		};
+-		let metadata = tokio::fs::metadata(&path).await?;
+-		if metadata.is_dir() {
+-			let _ = send_to_plugin(entry.file_name().to_str().unwrap(), data).await;
+-		}
++	for plugin in crate::plugins::sources::installed_plugins() {
++		let _ = send_to_plugin(&plugin.id, data).await;
+ 	}
+ 	Ok(())
+ }
+diff --git a/src-tauri/src/plugins/mod.rs b/src-tauri/src/plugins/mod.rs
+index 856e82e..5a6b3d9 100644
+--- a/src-tauri/src/plugins/mod.rs
++++ b/src-tauri/src/plugins/mod.rs
+@@ -410,7 +410,7 @@ pub async fn deactivate_plugins() {
+ 	}
+ }
+ 
+-/// Initialise plugins from the plugins directory.
++/// Initialise effective user, Home Manager and package plugin sources.
+ pub fn initialise_plugins() {
+ 	tokio::spawn(init_websocket_server());
+ 	tokio::spawn(webserver::init_webserver(config_dir()));
+@@ -419,43 +419,7 @@ pub fn initialise_plugins() {
+ 	let _ = fs::create_dir_all(&plugin_dir);
+ 	let _ = fs::create_dir_all(log_dir().join("plugins"));
+ 
+-	if let Ok(Ok(entries)) = APP_HANDLE.get().unwrap().path().resolve("plugins", tauri::path::BaseDirectory::Resource).map(fs::read_dir) {
+-		for entry in entries.flatten() {
+-			if let Err(error) = (|| -> Result<(), anyhow::Error> {
+-				let builtin_version = semver::Version::parse(&serde_json::from_slice::<manifest::PluginManifest>(&fs::read(entry.path().join("manifest.json"))?)?.version)?;
+-				let existing_path = plugin_dir.join(entry.file_name());
+-				if (|| -> Result<(), anyhow::Error> {
+-					let existing_version = semver::Version::parse(&serde_json::from_slice::<manifest::PluginManifest>(&fs::read(existing_path.join("manifest.json"))?)?.version)?;
+-					if existing_version < builtin_version {
+-						Err(anyhow::anyhow!("builtin version is newer than existing version"))
+-					} else {
+-						Ok(())
+-					}
+-				})()
+-				.is_err()
+-				{
+-					if existing_path.exists() {
+-						fs::rename(&existing_path, existing_path.with_extension("old"))?;
+-					}
+-					if crate::shared::copy_dir(entry.path(), &existing_path).is_err() && existing_path.with_extension("old").exists() {
+-						fs::rename(existing_path.with_extension("old"), &existing_path)?;
+-					}
+-					let _ = fs::remove_dir_all(existing_path.with_extension("old"));
+-				}
+-				Ok(())
+-			})() {
+-				error!("Failed to upgrade builtin plugin {}: {}", entry.file_name().to_string_lossy(), error);
+-			}
+-		}
+-	}
+-
+-	let entries = match fs::read_dir(&plugin_dir) {
+-		Ok(p) => p,
+-		Err(error) => {
+-			error!("Failed to read plugins directory at {}: {}", plugin_dir.display(), error);
+-			panic!()
+-		}
+-	};
++	let entries = sources::installed_plugins();
+ 
+ 	let (tx, rx) = mpsc::channel::<SpawnRequest>();
+ 	APP_HANDLE.get().unwrap().manage(tx.clone());
+@@ -482,25 +446,15 @@ pub fn initialise_plugins() {
+ 		}
+ 	});
+ 
+-	// Iterate through all directory entries in the plugins folder and initialise them as plugins if appropriate
+-	for entry in entries {
+-		if let Ok(entry) = entry {
+-			let path = match entry.metadata().unwrap().is_symlink() {
+-				true => entry.path().parent().unwrap_or_else(|| path::Path::new(".")).join(fs::read_link(entry.path()).unwrap()),
+-				false => entry.path(),
+-			};
+-			let metadata = fs::metadata(&path).unwrap();
+-			if metadata.is_dir() {
+-				let spawner_tx = tx.clone();
+-				tokio::spawn(async move {
+-					if let Err(error) = initialise_plugin(path.clone(), spawner_tx).await {
+-						warn!("Failed to initialise plugin at {}: {:#}", path.display(), error);
+-					}
+-				});
++	// Initialise each effective plugin once, directly from its selected source.
++	for plugin in entries {
++		let path = plugin.path;
++		let spawner_tx = tx.clone();
++		tokio::spawn(async move {
++			if let Err(error) = initialise_plugin(path.clone(), spawner_tx).await {
++				warn!("Failed to initialise plugin at {}: {:#}", path.display(), error);
+ 			}
+-		} else if let Err(error) = entry {
+-			warn!("Failed to read entry of plugins directory: {}", error)
+-		}
++		});
+ 	}
+ 
+ 	// On macOS, hidden WKWebView windows suspend JavaScript after ~7s.
+diff --git a/src-tauri/src/shared.rs b/src-tauri/src/shared.rs
+index 905bbd5..025ccb1 100644
+--- a/src-tauri/src/shared.rs
++++ b/src-tauri/src/shared.rs
+@@ -280,7 +280,9 @@ pub fn initialise_encoder_layout(action: &mut Action, layout: Option<String>) ->
+ 	let layout = if load_layout.starts_with('$') {
+ 		load_layout.clone()
+ 	} else {
+-		let plugin_dir = config_dir().join("plugins").join(&action.plugin);
++		let plugin_dir = crate::plugins::sources::resolve_plugin(&action.plugin)
++			.ok_or_else(|| anyhow::anyhow!("Plugin not found: {}", action.plugin))?
++			.path;
+ 		let layout_file = plugin_dir.join(&load_layout);
+ 
+ 		let Ok(plugin_dir) = plugin_dir.canonicalize() else {
+diff --git a/src-tauri/src/store/profiles.rs b/src-tauri/src/store/profiles.rs
+index 1d85703..b718825 100644
+--- a/src-tauri/src/store/profiles.rs
++++ b/src-tauri/src/store/profiles.rs
+@@ -49,11 +49,10 @@ impl ProfileStores {
+ 
+ 			let categories = crate::shared::CATEGORIES.read().await;
+ 			let actions = categories.values().flat_map(|v| v.actions.iter()).collect::<Vec<_>>();
+-			let plugins_dir = config_dir().join("plugins");
+ 			let registered = crate::events::registered_plugins().await;
+ 			let keep_instance = |instance: &ActionInstance| -> bool {
+ 				instance.action.plugin == "opendeck"
+-					|| (plugins_dir.join(&instance.action.plugin).exists() && (!registered.contains(&instance.action.plugin) || actions.iter().any(|v| v.uuid == instance.action.uuid)))
++					|| (crate::plugins::sources::plugin_available(&instance.action.plugin) && (!registered.contains(&instance.action.plugin) || actions.iter().any(|v| v.uuid == instance.action.uuid)))
+ 			};
+ 			for slot in store.value.keys.iter_mut().chain(store.value.sliders.iter_mut()).chain(store.value.infobars.iter_mut()) {
+ 				if let Some(instance) = slot {
+diff --git a/src-tauri/src/store/simplified_profile.rs b/src-tauri/src/store/simplified_profile.rs
+index 8e35d18..0b3b129 100644
+--- a/src-tauri/src/store/simplified_profile.rs
++++ b/src-tauri/src/store/simplified_profile.rs
+@@ -80,6 +80,8 @@ impl From<ActionInstance> for DiskActionInstance {
+ 			let path = Path::new(value);
+ 			if path.starts_with(&image_dir) {
+ 				path.strip_prefix(&image_dir).unwrap().to_slash_lossy().into_owned()
++			} else if let Some(path) = crate::plugins::sources::normalise_plugin_path(path) {
++				path.to_slash_lossy().into_owned()
+ 			} else if path.starts_with(&config_dir) {
+ 				path.strip_prefix(&config_dir).unwrap().to_slash_lossy().into_owned()
+ 			} else {
+@@ -158,7 +160,8 @@ impl DiskActionInstance {
+ 
+ 		let reconstruct_path = |value: &str| -> String {
+ 			if !(value.is_empty() || value.starts_with("data:") || value.starts_with("opendeck/")) {
+-				config_dir.join(PathBuf::from_slash(value)).to_string_lossy().into_owned()
++				let path = PathBuf::from_slash(value);
++				crate::plugins::sources::resolve_saved_plugin_path(&path).unwrap_or_else(|| config_dir.join(path)).to_string_lossy().into_owned()
+ 			} else {
+ 				value.to_owned()
+ 			}

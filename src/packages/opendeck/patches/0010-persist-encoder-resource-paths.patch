@@ -1,0 +1,33 @@
+Subject: Preserve encoder resource paths in saved profiles
+
+diff --git a/src-tauri/src/store/simplified_profile.rs b/src-tauri/src/store/simplified_profile.rs
+index 0b3b129..27cff82 100644
+--- a/src-tauri/src/store/simplified_profile.rs
++++ b/src-tauri/src/store/simplified_profile.rs
+@@ -138,6 +138,11 @@ impl From<ActionInstance> for DiskActionInstance {
+ 		}
+ 		value.action.icon = normalise_path(&value.action.icon);
+ 		value.action.property_inspector = normalise_path(&value.action.property_inspector);
++		if let Some(encoder) = &mut value.action.encoder {
++			encoder.icon = normalise_path(&encoder.icon);
++			encoder.background = normalise_path(&encoder.background);
++			encoder.layout = normalise_path(&encoder.layout);
++		}
+ 
+ 		Self {
+ 			context: disk_context,
+@@ -195,6 +200,14 @@ impl DiskActionInstance {
+ 		}
+ 		action.icon = reconstruct_path(&action.icon);
+ 		action.property_inspector = reconstruct_path(&action.property_inspector);
++		if let Some(encoder) = &mut action.encoder {
++			encoder.icon = reconstruct_path(&encoder.icon);
++			encoder.background = reconstruct_path(&encoder.background);
++			// Raw plugin-relative names and built-in layouts remain unchanged.
++			if let Some(path) = crate::plugins::sources::resolve_saved_plugin_path(&PathBuf::from_slash(&encoder.layout)) {
++				encoder.layout = path.to_string_lossy().into_owned();
++			}
++		}
+ 
+ 		ActionInstance {
+ 			context: self.context.into_action_context(device, profile),
