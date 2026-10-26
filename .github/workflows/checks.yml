@@ -5,7 +5,7 @@ run-name: "Checks PR #${{ github.event.pull_request.number }} merge ${{ github.s
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review, edited]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, edited]
   push:
     branches: [main]
   workflow_dispatch:
@@ -19,6 +19,11 @@ concurrency:
 
 jobs:
   test:
+    # A skipped job is not an approved verification: the App reporter also
+    # checks the current PR label before issuing its required status.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'ready for merge')
     name: Tests and evaluation
     runs-on: ubuntu-24.04
     timeout-minutes: 30

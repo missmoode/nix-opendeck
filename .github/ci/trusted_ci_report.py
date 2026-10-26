@@ -131,9 +131,9 @@ def assess(event, api):
     jobs = list(api.pages(f"/actions/runs/{run['id']}/jobs", key="jobs"))
     matching = [job for job in jobs if job["name"] == job_name]
     job_pass = len(matching) == 1 and matching[0]["conclusion"] == "success"
-    requested = kind != "Reproducibility" or any(
-        label["name"] == "ready for merge" for label in pr["labels"]
-    )
+    # Both checks require an actively labelled PR. A skipped Actions job
+    # counts as success to GitHub, so the App status must enforce the gate.
+    requested = any(label["name"] == "ready for merge" for label in pr["labels"])
     passed = unchanged and requested and run["conclusion"] == "success" and job_pass
     if not unchanged:
         description = "PR changed CI policy; trusted verification unavailable"

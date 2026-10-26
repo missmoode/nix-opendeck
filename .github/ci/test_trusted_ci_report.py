@@ -128,10 +128,12 @@ class ReporterTests(unittest.TestCase):
         event["workflow_run"]["conclusion"] = "cancelled"
         self.assertIsNone(reporter.assess(event, api))
 
-    def test_reproducibility_requires_label(self):
-        event, pr, api = self.setup_case("Reproducibility")
-        pr["labels"] = []
-        self.assertEqual(reporter.assess(event, api)["state"], "failure")
+    def test_both_verifications_require_label(self):
+        for kind in ("Checks", "Reproducibility"):
+            with self.subTest(kind=kind):
+                event, pr, api = self.setup_case(kind)
+                pr["labels"] = []
+                self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
     def test_required_job_must_pass_exactly_once(self):
         for conclusions in ([], ["failure"], ["success", "success"]):
