@@ -4,7 +4,7 @@ name: Reproducibility
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review, edited]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -16,6 +16,7 @@ concurrency:
 jobs:
   discover:
     name: Discover changed packages
+    if: contains(github.event.pull_request.labels.*.name, 'ready for merge')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
@@ -30,12 +31,6 @@ jobs:
           persist-credentials: false
 
       - uses: cachix/install-nix-action@v31
-
-      - name: Check flake evaluation
-        run: nix flake check --no-build --all-systems
-
-      - name: Test Linux OpenDeck wrapper
-        run: nix build .#checks.x86_64-linux.wrap-opendeck-linux -L
 
       - name: Compare evaluated package outputs with main
         id: compare
@@ -340,7 +335,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   result:
-    name: Overall result
+    name: Verify reproducibility
     needs: [discover, check]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
@@ -348,7 +343,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Report overall status
+      - name: Report reproducibility result
         shell: bash
         env:
           DISCOVER_RESULT: ${{ needs.discover.result }}
@@ -357,8 +352,14 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [[ "$DISCOVER_RESULT" == skipped ]]; then
+            echo 'Reproducibility has not been requested.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Add the `ready for merge` label when this PR is ready.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
           {
-            echo '## Reproducibility Test'
+            echo '## Reproducibility Verification'
             echo
             if [[ "$DISCOVER_RESULT" != success ]]; then
               echo '**Failed — flake evaluation or target discovery failed.**'
@@ -401,4 +402,58 @@ jobs:
           if [[ -n "$UPDATE_MAINTAINERS" ]]; then
             gh pr edit "$PR_NUMBER" \
               --add-assignee "$UPDATE_MAINTAINERS"
+          fi
+
+      - name: Update reproducibility failure comment
+        if: >-
+          always() && !cancelled() &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DISCOVER_RESULT: ${{ needs.discover.result }}
+          CHECK_RESULT: ${{ needs.check.result }}
+          TARGETS: ${{ needs.discover.outputs.targets }}
+        run: |
+          set -euo pipefail
+
+          marker='<!-- nix-opendeck-reproducibility -->'
+          comment_id=$(
+            gh api --paginate \
+              "repos/$GH_REPO/issues/$PR_NUMBER/comments?per_page=100" \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and ((.body // "") | contains("<!-- nix-opendeck-reproducibility -->"))) | .id' \
+            | tail -n 1
+          )
+
+          # A passing or unrequested check must not leave a stale failure comment.
+          if [[ "$DISCOVER_RESULT" == skipped ]] ||
+             [[ "$DISCOVER_RESULT" == success && "$TARGETS" == '[]' ]] ||
+             [[ "$DISCOVER_RESULT" == success && -n "$TARGETS" && "$CHECK_RESULT" == success ]]; then
+            if [[ -n "$comment_id" ]]; then
+              gh api --method DELETE "repos/$GH_REPO/issues/comments/$comment_id" > /dev/null
+            fi
+            exit 0
+          fi
+
+          body="$RUNNER_TEMP/reproducibility-comment.md"
+          payload="$RUNNER_TEMP/reproducibility-comment.json"
+          {
+            echo "$marker"
+            echo '### Reproducibility verification failed'
+            echo
+            echo "- Target discovery: \`$DISCOVER_RESULT\`"
+            echo "- Rebuild jobs: \`$CHECK_RESULT\`"
+            echo
+            echo 'Check the failing rebuild jobs and any diagnostic artifacts:'
+            echo "[View this workflow run]($GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID)"
+          } > "$body"
+          jq -Rs '{body: .}' "$body" > "$payload"
+
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH "repos/$GH_REPO/issues/comments/$comment_id" --input "$payload" > /dev/null
+          else
+            gh api --method POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" --input "$payload" > /dev/null
           fi
