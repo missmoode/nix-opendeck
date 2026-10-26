@@ -211,8 +211,15 @@ def assess(event, api):
 
 
 def publish(api, result):
-    for sha in (result["head"], result["merge"]):
-        api.status(sha, result["context"], result["state"], result["description"], result["url"])
+    # Publish only to the tested PR merge commit, not the PR head.
+    api.status(
+        result["merge"],
+        result["context"],
+        result["state"],
+        result["description"],
+        result["url"],
+    )
+
     if result["kind"] != "Reproducibility":
         return
     if result["report_failure"] and result["automated"]:
