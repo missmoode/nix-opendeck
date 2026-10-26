@@ -47,4 +47,3 @@ jobs:
         run: |
           set -euo pipefail
           nix flake check -L
-

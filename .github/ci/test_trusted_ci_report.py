@@ -1,140 +1,181 @@
-"""Security regression tests for the trusted workflow_run reporter."""
+"""Focused tests for the privileged reporter's trust boundary.
+
+Run manually when changing trusted_ci_report.py. These are mocked unit tests,
+not a substitute for a live GitHub Actions integration test.
+"""
+
 import importlib.util
+import json
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+from urllib.error import URLError
 
-script = Path(__file__).with_name('trusted_ci_report.py')
-spec = importlib.util.spec_from_file_location('trusted_ci_report', script)
+spec = importlib.util.spec_from_file_location(
+    "trusted_ci_report", Path(__file__).with_name("trusted_ci_report.py")
+)
 reporter = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reporter)
 
-HEAD = 'a' * 40
-MERGE = 'b' * 40
-BASE = 'c' * 40
+HEAD, MERGE, BASE = "a" * 40, "b" * 40, "c" * 40
+REPO = "missmoode/nix-opendeck"
 
 
-def fixture(kind='Checks'):
-    filename, job, _ = reporter.WORKFLOWS[kind]
-    run = {
-        'id': 10, 'name': f'{kind} PR #37 merge {MERGE}', 'event': 'pull_request',
-        'path': filename, 'status': 'completed', 'conclusion': 'success',
-        'head_sha': HEAD, 'repository': {'full_name': 'missmoode/nix-opendeck'},
-        'display_title': f'{kind} PR #37 merge {MERGE}',
-        'pull_requests': [{'number': 37}], 'html_url': 'https://github.com/123',
-    }
+def fixture(kind="Checks"):
+    path = next(path for path, (name, _, _) in reporter.WORKFLOWS.items() if name == kind)
+    title = f"{kind} PR #39 merge {MERGE}"
+    event = {"workflow_run": {
+        "id": 42, "name": title, "display_title": title, "path": path,
+        "event": "pull_request", "status": "completed", "conclusion": "success",
+        "head_sha": HEAD, "repository": {"full_name": REPO},
+        "pull_requests": [{"number": 39}], "html_url": "https://github.com/example/run/42",
+    }}
     pr = {
-        'state': 'open', 'base': {'ref': 'main', 'sha': BASE, 'repo': {'full_name': 'missmoode/nix-opendeck'}},
-        'head': {'sha': HEAD, 'ref': 'cleanup-pass', 'repo': {'full_name': 'missmoode/nix-opendeck'}},
-        'merge_commit_sha': MERGE, 'labels': [{'name': 'ready for merge'}],
-        'user': {'login': 'a-contributor'},
+        "state": "open", "merge_commit_sha": MERGE,
+        "base": {"ref": "main", "sha": BASE, "repo": {"full_name": REPO}},
+        "head": {"sha": HEAD, "ref": "feature", "repo": {"full_name": REPO}},
+        "labels": [{"name": "ready for merge"}], "user": {"login": "contributor"},
     }
-    return {'workflow_run': run}, pr, job
+    return event, pr
 
 
 class FakeAPI:
-    repo = 'missmoode/nix-opendeck'
-    def __init__(self, pr, job):
+    repo = REPO
+
+    def __init__(self, pr, kind="Checks"):
         self.pr = pr
-        self.job = job
-        self.different = set()
+        self.changed = set()
         self.newer = False
-        self.calls = []
+        self.jobs = [{"name": next(job for name, job, _ in reporter.WORKFLOWS.values() if name == kind),
+                      "conclusion": "success"}]
+        self.published = []
+        self.fail_status = False
 
     def request(self, path, **kwargs):
-        self.calls.append((path, kwargs))
-        if path.startswith('/pulls/'):
+        if path.startswith("/pulls/"):
             return self.pr
-        if '/runs?' in path:
-            return {'workflow_runs': [
-                {'id': 11, 'display_title': f'Checks PR #37 merge {MERGE}'}
-            ] if self.newer else []}
-        raise AssertionError('Unexpected request: ' + path)
+        raise AssertionError("Unexpected request: " + path)
+
+    def pages(self, path, key=None):
+        if path.startswith("/actions/workflows/"):
+            if self.newer:
+                yield {"id": 43, "display_title": f"Checks PR #39 merge {MERGE}"}
+        elif path.startswith("/actions/runs/"):
+            yield from self.jobs
+        else:
+            raise AssertionError("Unexpected pagination: " + path)
 
     def content_sha(self, path, ref):
-        return 'evil' if ref == MERGE and path in self.different else 'trusted'
+        return "changed" if (path, ref) in self.changed else "trusted"
 
-    def jobs(self, run_id):
-        return [{'name': self.job, 'conclusion': 'success'}]
+    def status(self, result):
+        if self.fail_status:
+            raise URLError("status publication failed")
+        self.published.append((result["merge"], result["context"], result["state"]))
 
 
-class SecurityTests(unittest.TestCase):
-    def test_clean_pr_tests_pass(self):
-        event, pr, job = fixture()
-        result = reporter.assess(event, FakeAPI(pr, job))
-        self.assertEqual((result['state'], result['context']), ('success', 'nix-opendeck/tests'))
+class ReporterTests(unittest.TestCase):
+    def setup_case(self, kind="Checks"):
+        event, pr = fixture(kind)
+        return event, pr, FakeAPI(pr, kind)
 
-    def test_changed_workflow_fails_closed(self):
-        event, pr, job = fixture()
-        api = FakeAPI(pr, job)
-        api.different.add('.github/workflows/checks.yml')
-        self.assertEqual(reporter.assess(event, api)['state'], 'failure')
+    def test_realistic_run_is_accepted(self):
+        for kind in ("Checks", "Reproducibility"):
+            with self.subTest(kind=kind):
+                event, _, api = self.setup_case(kind)
+                self.assertEqual(reporter.assess(event, api)["state"], "success")
 
-    def test_changed_reporter_script_fails_closed(self):
-        event, pr, job = fixture()
-        api = FakeAPI(pr, job)
-        api.different.add('.github/ci/trusted_ci_report.py')
-        self.assertEqual(reporter.assess(event, api)['state'], 'failure')
+    def test_modified_ci_policy_fails_closed(self):
+        for kind in ("Checks", "Reproducibility"):
+            event, _, api = self.setup_case(kind)
+            paths = [event["workflow_run"]["path"], *reporter.REPORTER_PATHS]
+            if kind == "Reproducibility":
+                paths.append(".github/ci/targets.nix")
+            for path in paths:
+                with self.subTest(kind=kind, path=path):
+                    api.changed = {(path, MERGE)}
+                    self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
-    def test_changed_reporter_workflow_fails_closed(self):
-        event, pr, job = fixture()
-        api = FakeAPI(pr, job)
-        api.different.add('.github/workflows/trusted-ci-report.yml')
-        self.assertEqual(reporter.assess(event, api)['state'], 'failure')
+    def test_stale_pr_revision_is_ignored(self):
+        for field in ("head", "merge"):
+            event, pr, api = self.setup_case()
+            if field == "head":
+                pr["head"]["sha"] = "d" * 40
+            else:
+                pr["merge_commit_sha"] = "d" * 40
+            with self.subTest(field=field):
+                self.assertIsNone(reporter.assess(event, api))
 
-    def test_changed_target_catalogue_fails_closed(self):
-        event, pr, job = fixture('Reproducibility')
-        api = FakeAPI(pr, job)
-        api.different.add('.github/ci/targets.nix')
-        self.assertEqual(reporter.assess(event, api)['state'], 'failure')
+    def test_unrelated_or_misidentified_run_is_ignored(self):
+        for change in ("path", "display_title", "association"):
+            event, _, api = self.setup_case()
+            if change == "path":
+                event["workflow_run"]["path"] = ".github/workflows/other.yml"
+            elif change == "display_title":
+                event["workflow_run"]["display_title"] = "Unrelated"
+            else:
+                event["workflow_run"]["pull_requests"] = [{"number": 12}]
+            with self.subTest(change=change):
+                self.assertIsNone(reporter.assess(event, api))
 
-    def test_stale_head_has_no_status(self):
-        event, pr, job = fixture()
-        pr['head']['sha'] = 'd' * 40
-        self.assertIsNone(reporter.assess(event, FakeAPI(pr, job)))
-
-    def test_stale_merge_has_no_status(self):
-        event, pr, job = fixture()
-        pr['merge_commit_sha'] = 'd' * 40
-        self.assertIsNone(reporter.assess(event, FakeAPI(pr, job)))
-
-    def test_later_run_suppresses_older_result(self):
-        event, pr, job = fixture()
-        api = FakeAPI(pr, job)
+    def test_superseded_or_cancelled_run_is_ignored(self):
+        event, _, api = self.setup_case()
         api.newer = True
         self.assertIsNone(reporter.assess(event, api))
+        api.newer = False
+        event["workflow_run"]["conclusion"] = "cancelled"
+        self.assertIsNone(reporter.assess(event, api))
 
-    def test_cancelled_run_has_no_status(self):
-        event, pr, job = fixture()
-        event['workflow_run']['conclusion'] = 'cancelled'
-        self.assertIsNone(reporter.assess(event, FakeAPI(pr, job)))
+    def test_reproducibility_requires_label(self):
+        event, pr, api = self.setup_case("Reproducibility")
+        pr["labels"] = []
+        self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
-    def test_label_missing_is_failure_not_success(self):
-        event, pr, job = fixture('Reproducibility')
-        pr['labels'] = []
-        self.assertEqual(reporter.assess(event, FakeAPI(pr, job))['state'], 'failure')
+    def test_required_job_must_pass_exactly_once(self):
+        for conclusions in ([], ["failure"], ["success", "success"]):
+            event, _, api = self.setup_case()
+            job = api.jobs[0]["name"]
+            api.jobs = [{"name": job, "conclusion": value} for value in conclusions]
+            with self.subTest(conclusions=conclusions):
+                self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
-    def test_missing_gate_is_failure(self):
-        event, pr, job = fixture('Reproducibility')
-        api = FakeAPI(pr, 'Wrong job')
-        self.assertEqual(reporter.assess(event, api)['state'], 'failure')
+    def test_workflow_failure_is_not_certified(self):
+        event, _, api = self.setup_case()
+        event["workflow_run"]["conclusion"] = "failure"
+        self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
-    def test_unrelated_workflow_is_ignored(self):
-        event, pr, job = fixture()
-        event['workflow_run']['path'] = '.github/workflows/unrelated.yml'
-        self.assertIsNone(reporter.assess(event, FakeAPI(pr, job)))
+    def test_publish_targets_merge_only(self):
+        event, _, api = self.setup_case()
+        api.status(reporter.assess(event, api))
+        self.assertEqual(api.published, [(MERGE, "nix-opendeck/tests", "success")])
 
-    def test_altered_title_cannot_claim_success(self):
-        event, pr, job = fixture()
-        event['workflow_run']['display_title'] = 'Pretend this succeeded'
-        self.assertIsNone(reporter.assess(event, FakeAPI(pr, job)))
+    def test_notification_error_does_not_undo_status(self):
+        event, _, api = self.setup_case("Reproducibility")
+        with TemporaryDirectory() as directory:
+            event_file = Path(directory) / "event.json"
+            event_file.write_text(json.dumps(event), encoding="utf-8")
+            env = {"GITHUB_EVENT_PATH": str(event_file), "GITHUB_REPOSITORY": REPO,
+                   "GH_TOKEN": "read", "APP_TOKEN": "app"}
+            with patch.dict(os.environ, env), \
+                 patch.object(reporter, "GitHub", return_value=api), \
+                 patch.object(reporter, "notify", side_effect=RuntimeError("comment failure")):
+                reporter.main()
+        self.assertEqual(api.published, [(MERGE, "nix-opendeck/reproducibility", "success")])
 
-    def test_url_encoded_path_accepted(self):
-        event, pr, job = fixture()
-        event['workflow_run']['path'] += '@refs/pull/37/merge'
-        self.assertEqual(reporter.assess(event, FakeAPI(pr, job))['state'], 'success')
+    def test_status_publication_error_is_not_suppressed(self):
+        event, _, api = self.setup_case()
+        api.fail_status = True
+        with TemporaryDirectory() as directory:
+            event_file = Path(directory) / "event.json"
+            event_file.write_text(json.dumps(event), encoding="utf-8")
+            env = {"GITHUB_EVENT_PATH": str(event_file), "GITHUB_REPOSITORY": REPO,
+                   "GH_TOKEN": "read", "APP_TOKEN": "app"}
+            with patch.dict(os.environ, env), patch.object(reporter, "GitHub", return_value=api):
+                with self.assertRaises(URLError):
+                    reporter.main()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

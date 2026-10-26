@@ -1,6 +1,4 @@
-# Only this default-branch workflow can publish the required App-issued checks.
-# It examines PR job results and GitHub metadata as data; it never executes
-# or checks out PR code and never reads untrusted artifacts.
+# Trusted reporter from main; never executes PR code or reads PR artifacts.
 name: Trusted CI report
 
 on:
@@ -17,8 +15,6 @@ jobs:
   report:
     if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-24.04
-    # Configure this environment to allow ONLY main. Keep the App's private
-    # key as an *environment* secret, never a repository secret.
     environment:
       name: trusted-automation
       deployment: false
@@ -28,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Generate App status/reporting token
+      - name: Create short-lived GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
@@ -37,10 +33,10 @@ jobs:
           permission-statuses: write
           permission-pull-requests: write
 
-      - name: Verify workflow provenance and publish result
+      - name: Verify provenance and publish trusted result
         env:
           GH_TOKEN: ${{ github.token }}
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
-          AUTOMATION_APP_BOT_LOGIN: ${{ vars.AUTOMATION_APP_BOT_LOGIN }}
+          APP_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
           UPDATE_MAINTAINERS: ${{ vars.UPDATE_MAINTAINERS }}
         run: python3 .github/ci/trusted_ci_report.py
