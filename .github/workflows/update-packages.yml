@@ -325,12 +325,17 @@ jobs:
             --builds "$RUNNER_TEMP/builds" \
             --base-unchanged "$base_unchanged" \
             --report "$RUNNER_TEMP/package-update-report.md" \
+            --pr-report "$RUNNER_TEMP/package-update-pr.md" \
             --state "$RUNNER_TEMP/package-update-state.json"
           cat "$RUNNER_TEMP/package-update-report.md" >> "$GITHUB_STEP_SUMMARY"
           echo "ready=$(jq -r '.ready' "$RUNNER_TEMP/package-update-state.json")" >> "$GITHUB_OUTPUT"
-          echo "failed=$(jq -r '.failed' "$RUNNER_TEMP/package-update-state.json")" >> "$GITHUB_OUTPUT"
+          echo "infrastructure_failure=$(jq -r '.infrastructureFailure' "$RUNNER_TEMP/package-update-state.json")" >> "$GITHUB_OUTPUT"
       - name: Report infrastructure failure
-        if: always() && (needs.prepare-builds.result != 'success' || steps.finish.outcome != 'success')
+        if: >-
+          always() &&
+          (needs.prepare-builds.result != 'success' ||
+           steps.finish.outcome != 'success' ||
+           steps.finish.outputs.infrastructure_failure == 'true')
         shell: bash
         env:
           DISCOVER: ${{ needs.discover.result }}
@@ -338,6 +343,7 @@ jobs:
           PREPARE: ${{ needs.prepare-builds.result }}
           PLUGINS: ${{ needs.plugins.result }}
           OPENDECK: ${{ needs.opendeck.result }}
+          INFRASTRUCTURE_FAILURE: ${{ steps.finish.outputs.infrastructure_failure }}
         run: |
           {
             echo '## Package update infrastructure failure'
@@ -349,18 +355,23 @@ jobs:
             echo "- OpenDeck builds: $OPENDECK"
             echo
             echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            if [[ "$INFRASTRUCTURE_FAILURE" == true ]]; then
+              echo
+              jq -r '.infrastructureErrors[] | "- " + .' "$RUNNER_TEMP/package-update-state.json"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Generate the token as late as possible; it expires after one hour.
       - name: Generate automation token
         id: app-token
-        if: steps.finish.outputs.ready == 'true'
+        if: steps.finish.outcome == 'success' && steps.finish.outputs.infrastructure_failure == 'false'
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
           private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          permission-issues: write
 
       - name: Create or update PR containing validated sources
         id: pr
@@ -374,17 +385,67 @@ jobs:
           delete-branch: true
           title: 'chore: update OpenDeck packages'
           commit-message: 'chore: update OpenDeck packages'
-          body-path: ${{ runner.temp }}/package-update-report.md
+          body-path: ${{ runner.temp }}/package-update-pr.md
           labels: |
             updates
             upstream
+            ready for merge
 
-      # Partial successes still produce a PR, but never auto-merge it.
-      - name: Enable auto-merge for fully successful updates
+      # One persistent issue tracks known package failures. Do not treat missing
+      # or corrupt validation reports as recoverable package failures.
+      - name: Reconcile package update failures
+        id: issues
+        if: steps.app-token.outcome == 'success' && github.ref_name == github.event.repository.default_branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/package-update-state.json"
+          title='Automated package update failures'
+          issue=$(gh issue list --state all --limit 100 \
+            --search 'Automated package update failures in:title' \
+            --json number,title,state \
+            --jq 'map(select(.title == "Automated package update failures")) | first // {}')
+          number=$(jq -r '.number // empty' <<< "$issue")
+          status=$(jq -r '.state // empty' <<< "$issue")
+
+          if jq -e '.packageFailures | length > 0' "$state" > /dev/null; then
+            fingerprint=$(jq -c '.packageFailures | sort' "$state" | sha256sum | cut -d' ' -f1)
+            marker="<!-- nix-opendeck-package-update-failures:$fingerprint -->"
+            body="$RUNNER_TEMP/package-update-issue.md"
+            {
+              printf '%s\n' "$marker"
+              echo '## Outstanding package update failures'
+              echo
+              echo 'The automated updater could not validate the following updates. Successfully validated updates are proposed separately.'
+              echo
+              jq -r '.packageFailures[] | "- " + .' "$state"
+              echo
+              echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+            } > "$body"
+
+            if [[ -z "$number" ]]; then
+              gh issue create --title "$title" --body-file "$body"
+            else
+              existing_body=$(gh issue view "$number" --json body --jq .body)
+              if [[ "$status" == CLOSED ]]; then
+                gh issue reopen "$number"
+              fi
+              if [[ "$status" == CLOSED || "$existing_body" != *"$marker"* ]]; then
+                gh issue edit "$number" --body-file "$body"
+              fi
+            fi
+          elif [[ -n "$number" && "$status" == OPEN ]]; then
+            gh issue close "$number" --reason completed
+          fi
+
+      # A failed package does not prevent merging other validated updates.
+      - name: Enable auto-merge for validated updates
         id: merge
         if: >-
           github.ref_name == github.event.repository.default_branch &&
-          steps.finish.outputs.failed == 'false' &&
           steps.pr.outputs.pull-request-number != ''
         shell: bash
         env:
@@ -402,16 +463,20 @@ jobs:
 
       - name: Fail after reporting all errors
         if: >-
+          always() && (
           needs.discover.result != 'success' ||
           needs.update.result != 'success' ||
           needs.prepare-builds.result != 'success' ||
           steps.finish.outcome != 'success' ||
-          steps.finish.outputs.failed != 'false' ||
+          steps.finish.outputs.infrastructure_failure != 'false' ||
+          steps.app-token.outcome != 'success' ||
+          (github.ref_name == github.event.repository.default_branch &&
+           steps.issues.outcome != 'success') ||
           steps.pr.outcome == 'failure' ||
           (steps.finish.outputs.ready == 'true' &&
            steps.pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
            steps.finish.outputs.ready == 'true' &&
-           steps.finish.outputs.failed == 'false' &&
            steps.merge.outcome != 'success')
+          )
         run: exit 1

@@ -284,21 +284,28 @@ def build(args):
 
 
 def check_builds(prepared, build_root):
+    """Separate failed builds from missing or untrustworthy build reports."""
     failures = []
+    infrastructure_errors = []
     successful = set()
     for target in prepared["plugins"] + prepared["opendeck"]:
         key = (target["id"], target["system"])
         path = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
         try:
             got = load(path)
-            if any(got.get(k) != target[k] for k in ("id", "label", "system", "attr")):
+            if not isinstance(got, dict) or any(
+                got.get(k) != target[k] for k in ("id", "label", "system", "attr")
+            ):
                 raise ValueError("build report identity mismatch")
-            if got.get("status") != "success":
-                raise ValueError(got.get("error", "build failed"))
-            successful.add(key)
-        except (ValueError, OSError, json.JSONDecodeError) as exc:
-            failures.append(f"{target['label']} ({target['system']}): {exc}")
-    return successful, failures
+            if got.get("status") == "success":
+                successful.add(key)
+            elif got.get("status") == "failed":
+                failures.append(f"{target['label']} ({target['system']}): {got.get('error', 'build failed')}")
+            else:
+                raise ValueError("invalid build report status")
+        except (ValueError, OSError, json.JSONDecodeError, TypeError) as exc:
+            infrastructure_errors.append(f"Missing or invalid build report for {target['label']} ({target['system']}): {exc}")
+    return successful, failures, infrastructure_errors
 
 
 def apply_source_edits(accepted, prepared, build_root):
@@ -345,8 +352,8 @@ def finalize(args):
     plan = load(args.plan)
     prepared = load(args.prepared)
     updates = {r["id"]: r for r in prepared["updateResults"]}
-    successes, build_failures = check_builds(prepared, args.builds)
-    errors = list(prepared["errors"]) + build_failures
+    successes, build_failures, report_errors = check_builds(prepared, args.builds)
+    infrastructure_errors = list(prepared["errors"]) + report_errors
     accepted = []
     rejected = []
 
@@ -366,8 +373,9 @@ def finalize(args):
         if status == "unchanged":
             continue
         if status == "failed":
-            msg = f"{pkg['label']}: updater failed ({updates.get(pkg['id'], {}).get('error', 'missing result')})"
-            rejected.append(msg)
+            rejected.append(
+                f"{pkg['label']}: updater failed ({updates.get(pkg['id'], {}).get('error', 'missing result')})"
+            )
             continue
         builds = [b for b in plugin_targets if b["id"] == pkg["id"]]
         plugin_ok = bool(builds) and all((b["id"], b["system"]) in successes for b in builds)
@@ -380,17 +388,15 @@ def finalize(args):
         else:
             rejected.append(f"{pkg['label']}: one or more native builds failed")
 
-    errors.extend(rejected)
+    # A known updater/build failure is not a reason to reject other packages.
+    # An incomplete report or obsolete base IS: we cannot validate the set.
+    package_failures = build_failures + rejected
     base_ok = args.base_unchanged == "true"
     if not base_ok:
-        errors.append("base branch changed while this update was running; rerun against its latest revision")
-        # Validated against an old checkout is not the same as accepted for a PR.
-        accepted = []
+        infrastructure_errors.append("base branch changed while this update was running; rerun against its latest revision")
 
     final_check = "skipped"
-    # Do not propose anything if the base changed: those patches weren't
-    # validated against the new branch revision.
-    if base_ok and accepted:
+    if accepted and not infrastructure_errors:
         try:
             for pkg in accepted:
                 record = updates[pkg["id"]]
@@ -400,16 +406,20 @@ def finalize(args):
             final_check = "passed"
         except Exception as exc:
             final_check = "failed"
-            errors.append(f"combined flake evaluation or patch application failed: {exc}")
+            infrastructure_errors.append(f"combined flake evaluation or patch application failed: {exc}")
             # Never publish partially applied or unvalidated changes.
             clean_tree()
-            accepted = []
 
+    if infrastructure_errors:
+        accepted = []
+
+    ready = bool(accepted) and final_check == "passed" and not infrastructure_errors
+    failures = infrastructure_errors + package_failures
     report = [
         "## Automated OpenDeck package updates", "",
         f"- Accepted updates: **{len(accepted)}**",
         f"- Unchanged packages: **{sum(r.get('status') == 'unchanged' for r in updates.values())}**",
-        f"- Failed updates or validation checks: **{len(errors)}**",
+        f"- Failed updates or validation checks: **{len(failures)}**",
         f"- Combined flake evaluation: **{final_check}**", "",
         f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL','https://github.com')}/"
         f"{os.environ.get('GITHUB_REPOSITORY','')}/actions/runs/{os.environ.get('GITHUB_RUN_ID','')})", "",
@@ -417,14 +427,33 @@ def finalize(args):
     ]
     report += [f"- `{p['label']}`" for p in accepted] or ["- None"]
     report += ["", "### Failed or rejected", ""]
-    report += [f"- {e}" for e in errors] or ["- None"]
+    report += [f"- {e}" for e in failures] or ["- None"]
     report += ["", "### Unchanged", ""]
     report += [f"- `{r['label']}`" for r in updates.values() if r.get("status") == "unchanged"] or ["- None"]
     report.append("")
     Path(args.report).write_text("\n".join(report))
-    save(args.state, {"ready": bool(accepted) and base_ok and final_check == "passed", "failed": bool(errors), "accepted": [p["label"] for p in accepted]})
+
+    # The PR should describe the updates it actually proposes. Failed updates
+    # are tracked separately in a persistent GitHub issue.
+    pr_report = [
+        "## Automated OpenDeck package updates", "",
+        "Only updates passing their required native builds and combined flake evaluation are included.", "",
+        "### Validated updates", "",
+    ]
+    pr_report += [f"- `{p['label']}`" for p in accepted] or ["- None"]
+    pr_report += ["", "The package-update workflow records the complete validation results.", ""]
+    Path(args.pr_report).write_text("\n".join(pr_report))
+
+    save(args.state, {
+        "ready": ready,
+        "failed": bool(failures),
+        "infrastructureFailure": bool(infrastructure_errors),
+        "infrastructureErrors": infrastructure_errors,
+        "packageFailures": package_failures,
+        "accepted": [p["label"] for p in accepted],
+    })
     print("\n".join(report))
-    # The workflow creates any usable PR before failing for partial errors.
+    # Publish validated changes and report known failures separately.
     return 0
 
 
@@ -453,6 +482,7 @@ def main():
     f.add_argument("--builds", required=True)
     f.add_argument("--base-unchanged", required=True)
     f.add_argument("--report", required=True)
+    f.add_argument("--pr-report", required=True)
     f.add_argument("--state", required=True)
     args = parser.parse_args()
     return {"discover": discover, "update": update, "prepare": prepare, "build": build, "finalize": finalize}[args.command](args) or 0
