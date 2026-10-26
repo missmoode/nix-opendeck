@@ -17,7 +17,7 @@ As this began as both a personal tool and a learning exercise, I [made
 extensive use of LLM assistance during development](#llm-usage-disclosure).
 
 > [!WARNING]
-> Breaking changes may still happen for a little while. This README will remain up-to-date.
+> Breaking changes may still happen for a little while, but I think it's unlikely at this point. This README will remain up-to-date.
 
 <div align="center">
 
