@@ -68,9 +68,9 @@ Some [device-support plugins](#device-support-plugins) need additional udev rule
 For prebuilt packages, see [Binary Cache](#binary-cache). Other installation methods
 and configuration options are documented below.
 
+**Using Nix without Home Manager, or prefer bundled plugins?**
 
-**Want to bundle plugins directly into OpenDeck?**
-You can use `wrapOpenDeck` to create a custom OpenDeck package containing your chosen plugins, without recompiling the application. This works with or without Home Manager, and lets you install or distribute a preconfigured OpenDeck package.
+You can use `wrapOpenDeck` to create a custom OpenDeck package containing your chosen plugins, without recompiling the application. It works on NixOS, nix-darwin, and standalone Nix installations, with or without Home Manager.
 
 See [Custom bundled packages](#custom-bundled-packages) for examples.
 
