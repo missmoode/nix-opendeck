@@ -248,6 +248,9 @@ as to target the correct executable when requesting an optional restart.
 > The OpenDeck package includes patches that prevent its plugin manager from updating
 > or removing them.
 >
+> OpenDeck also skips automatic update checks for these plugins and for bundled
+> plugins, since their updates are managed outside the graphical store.
+>
 > Plugins installed through the GUI are unaffected. The Home Manager module will
 > refuse to overwrite a plugin it doesn't already manage.
 
@@ -460,7 +463,7 @@ These patches:
 - Support symlinked plugins in the immutable Nix store, including their assets and
   executable permissions.
 - Load bundled plugins directly from package resources without copying them into the
-  user's plugin directory, while protecting managed plugins from GUI modification.
+  user's plugin directory, while protecting managed plugins from GUI modification and excluding them from automatic graphical-store update checks.
 - Support an optional restart of an already-running OpenDeck instance after Home
   Manager changes declared plugin symlinks, without launching an inactive app.
 - Preserve PATH entries supplied by Nix wrappers and explain the PATH requirement for
@@ -599,6 +602,9 @@ supported platforms when their output paths change in a pull request. The checks
 independently rebuild the affected derivations and compare their outputs
 bit-for-bit against a reference build. Passing is required before merging into
 `main`.
+
+The OpenDeck core build also runs Rust regression tests covering plugin source
+selection, saved resource paths, archive validation, and asset authorization.
 
 This doesn't verify the entire dependency closure, or guarantee that everything
 operates at runtime. I don't have the hardware to test it all, though during
