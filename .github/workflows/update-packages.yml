@@ -261,6 +261,7 @@ jobs:
           retention-days: 7
 
   finalize:
+    environment: trusted-automation
     needs: [discover, update, prepare-builds, plugins, opendeck]
     if: always()
     runs-on: ubuntu-24.04

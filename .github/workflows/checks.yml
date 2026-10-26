@@ -1,9 +1,10 @@
-# Always run the CI policy from main, never from the proposed PR.
-# PR code is deliberately evaluated in a separate read-only job.
+# Unprivileged PR tests. The App-issued required status is published by
+# trusted-ci-report.yml only after it verifies this workflow was unchanged.
 name: Checks
+run-name: "Checks PR #${{ github.event.pull_request.number }} merge ${{ github.sha }}"
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, synchronize, ready_for_review, edited]
   push:
     branches: [main]
@@ -27,27 +28,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out the proposed PR merge (read-only runner)
-        if: github.event_name == 'pull_request_target'
-        shell: bash
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin "+refs/pull/$PR_NUMBER/merge:refs/remotes/origin/ci-pr-merge"
-          git worktree add --detach "$RUNNER_TEMP/pr-merge" refs/remotes/origin/ci-pr-merge
-          test "$(git -C "$RUNNER_TEMP/pr-merge" rev-parse HEAD^1)" = "$BASE_SHA"
-          test "$(git -C "$RUNNER_TEMP/pr-merge" rev-parse HEAD^2)" = "$HEAD_SHA"
-
       - name: Test package updater
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == pull_request_target ]]; then
-            cd "$RUNNER_TEMP/pr-merge"
-          fi
           python3 -m unittest discover -s .github/ci -p 'test_package_updates.py'
 
       - uses: cachix/install-nix-action@v31
@@ -56,60 +40,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == pull_request_target ]]; then
-            cd "$RUNNER_TEMP/pr-merge"
-          fi
           nix flake check --no-build --all-systems -L
 
       - name: Run native checks
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == pull_request_target ]]; then
-            cd "$RUNNER_TEMP/pr-merge"
-          fi
           nix flake check -L
 
-  # Only this trusted job holds the App credential. It never checks out the
-  # PR, reads its artifacts, or runs its scripts.
-  result:
-    name: Publish trusted tests status
-    if: ${{ always() && github.event_name == 'pull_request_target' }}
-    needs: test
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Generate verification status token
-        id: verification-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
-          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
-          permission-statuses: write
-
-      - name: Publish trusted tests status
-        shell: bash
-        env:
-          GH_TOKEN: ${{ steps.verification-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          TEST_RESULT: ${{ needs.test.result }}
-        run: |
-          set -euo pipefail
-          state=failure
-          description='Tests or evaluation failed'
-          if [[ "$TEST_RESULT" == success ]]; then
-            state=success
-            description='Tests and evaluation passed'
-          fi
-
-          for sha in "$HEAD_SHA" "$MERGE_SHA"; do
-            [[ -n "$sha" && "$sha" != null ]] || continue
-            gh api --method POST "repos/$GH_REPO/statuses/$sha" \
-              -f state="$state" \
-              -f context='nix-opendeck/tests' \
-              -f description="$description" \
-              -f target_url="$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID" > /dev/null
-          done
