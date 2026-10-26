@@ -27,7 +27,6 @@ stdenv.mkDerivation (
       meta = attrs.meta or { };
       passthru = attrs.passthru or { };
       licenseFiles = attrs.licenseFiles or [ ];
-      licenseSource = attrs.licenseSource or null;
       udevRules = attrs.udevRules or { };
     };
   in

@@ -18,17 +18,14 @@
   # provided by the user's environment, rather than by Nix-Opendeck.
   requiredCommands ? [ ],
 
+  # Either a file name relative to the source root
+  # or a fetcher for a singular file (with a name attribute)
+  # see nekename/starterpack plugin
   licenseFiles ? [ ],
 
   # For plugins which provide compatibility with non-elgato USB hardware.
   # Optional udev rules: output filename -> source file.
   udevRules ? { },
-
-  # Useful for retrieving license files when the upstream repo hasn't
-  # placed them in an expected place, or has ommitted them from the
-  # current source. You only need to set it if the licenses can't be
-  # found from `src`.
-  licenseSource ? null,
 }:
 {
   installPhase = ''
@@ -39,13 +36,21 @@
 
     ${installPlugin}
 
-    ${builtins.concatStringsSep "\n" (
-      map (licenseFile: ''
+    ${lib.concatMapStringsSep "\n" (
+      file:
+      let
+        fromSrc = builtins.isString file;
+        filename = if fromSrc then file else file.name;
+
+        source =
+          if fromSrc then ''"$src"/${lib.escapeShellArg file}'' else lib.escapeShellArg (toString file);
+      in
+      ''
         install -Dm644 \
-          "${if licenseSource != null then licenseSource else "$src"}/${licenseFile}" \
-          "$plugin/${licenseFile}"
-      '') licenseFiles
-    )}
+          ${source} \
+          "$plugin"/${lib.escapeShellArg filename}
+      ''
+    ) licenseFiles}
 
     runHook postInstall
 

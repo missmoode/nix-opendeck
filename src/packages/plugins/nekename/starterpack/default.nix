@@ -1,6 +1,7 @@
 {
   lib,
   fetchFromGitHub,
+  fetchurl,
   pkg-config,
   stdenv,
 
@@ -27,6 +28,14 @@ mkRustOpenDeckPlugin (finalAttrs: {
   binaryInstallPath = "${stdenv.hostPlatform.rust.rustcTarget}/bin/${finalAttrs.binaryName}";
 
   cargoHash = "sha256-maCwWfZzsko2t4BtwJJiIBqK4lZYuUZgz4MR7YvWAy4=";
+
+  licenseFiles = [
+    (fetchurl {
+      name = "LICENSE.md";
+      url = "https://raw.githubusercontent.com/nekename/OpenDeck/v${finalAttrs.version}/LICENSE.md";
+      hash = "sha256-zFRw/u1mGSOH8GrpOu0L1P765aX9fB5UpKz06mTxAos=";
+    })
+  ];
 
   nativeBuildInputs = [
     pkg-config
