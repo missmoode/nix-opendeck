@@ -34,6 +34,9 @@ jobs:
       - name: Check flake evaluation
         run: nix flake check --no-build --all-systems
 
+      - name: Test Linux OpenDeck wrapper
+        run: nix build .#checks.x86_64-linux.wrap-opendeck-linux -L
+
       - name: Compare evaluated package outputs with main
         id: compare
         shell: bash
