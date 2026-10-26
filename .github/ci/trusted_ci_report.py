@@ -63,9 +63,10 @@ class GitHub:
         return self.request("/contents/" + path + "?ref=" + quote(ref, safe=""))["sha"]
 
     def status(self, result):
-        # Only the exact tested merge commit; never publish on the PR head.
+        # Verification runs against the merge commit, but GitHub may
+        # regenerate that commit. Publish on the stable PR head instead.
         self.request(
-            "/statuses/" + result["merge"], method="POST", app=True,
+            "/statuses/" + result["head"], method="POST", app=True,
             payload={
                 "state": result["state"],
                 "context": result["context"],
@@ -144,7 +145,8 @@ def assess(event, api):
     else:
         description = "CI verification failed (see workflow run)"
     return {
-        "pr": pr_number, "merge": merge_sha, "kind": kind, "context": context,
+        "pr": pr_number, "head": head_sha, "merge": merge_sha,
+        "kind": kind, "context": context,
         "state": "pending" if not requested else ("success" if passed else "failure"), "description": description,
         "url": run["html_url"],
         "report_failure": unchanged and requested and not passed,
