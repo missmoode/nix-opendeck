@@ -145,7 +145,7 @@ def assess(event, api):
         description = "CI verification failed (see workflow run)"
     return {
         "pr": pr_number, "merge": merge_sha, "kind": kind, "context": context,
-        "state": "success" if passed else "failure", "description": description,
+        "state": "pending" if not requested else ("success" if passed else "failure"), "description": description,
         "url": run["html_url"],
         "report_failure": unchanged and requested and not passed,
         "automated": (
