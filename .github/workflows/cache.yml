@@ -146,6 +146,9 @@ jobs:
     needs: prepare
     if: needs.prepare.result == 'success' && needs.prepare.outputs.plugins != '[]'
     runs-on: ${{ matrix.runner }}
+    environment:
+      name: trusted-cache
+      deployment: false
     timeout-minutes: 180
 
     strategy:
@@ -197,6 +200,9 @@ jobs:
     needs: prepare
     if: needs.prepare.result == 'success' && needs.prepare.outputs.opendeck != '[]'
     runs-on: ${{ matrix.runner }}
+    environment:
+      name: trusted-cache
+      deployment: false
     timeout-minutes: 180
 
     strategy:
