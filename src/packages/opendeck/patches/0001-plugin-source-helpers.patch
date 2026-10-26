@@ -9,14 +9,14 @@ index 7f0aec4..1c3abd5 100644
  pub mod manifest;
 +pub mod sources;
  mod webserver;
-
+ 
  use crate::APP_HANDLE;
 diff --git a/src-tauri/src/plugins/sources.rs b/src-tauri/src/plugins/sources.rs
 new file mode 100644
-index 0000000..ae8566e
+index 0000000..6d2bb7d
 --- /dev/null
 +++ b/src-tauri/src/plugins/sources.rs
-@@ -0,0 +1,382 @@
+@@ -0,0 +1,430 @@
 +//! Read-only source selection for user, Home Manager and wrapped-package plugins.
 +//!
 +//! Keep the version comparison almost in step with upstream's bundled-plugin reconciliation:
@@ -102,10 +102,27 @@ index 0000000..ae8566e
 +	(plugin.management == PluginManagement::Package && path.starts_with(&plugin.path)).then_some(plugin.path)
 +}
 +
-+/// Preserve upstream's existence check for user entries even when their manifest
-+/// is missing/invalid; profile availability must not erase saved user data.
++/// Preserve saved profile data when a plugin's directory entry exists,
++/// even if its manifest is invalid or its symlink target is unavailable.
 +pub fn plugin_available(id: &str) -> bool {
-+	resolve_plugin(id).is_some() || user_plugin_path(id).is_ok_and(|path| path.exists())
++	let user_root = crate::shared::config_dir().join("plugins");
++
++	plugin_available_at(
++		id,
++		&user_root,
++		package_root().as_deref(),
++		is_externally_managed(id),
++	)
++}
++
++fn plugin_available_at(
++	id: &str,
++	user_root: &Path,
++	package_root: Option<&Path>,
++	external: bool,
++) -> bool {
++	resolve_at(id, user_root, package_root, external).is_some()
++		|| (valid_plugin_id(id) && entry_exists(&user_root.join(id)))
 +}
 +
 +pub fn installed_plugins() -> Vec<ResolvedPlugin> {
@@ -326,6 +343,37 @@ index 0000000..ae8566e
 +		let resolved = fixture.resolve(true).unwrap();
 +		assert_eq!(resolved.management, PluginManagement::External);
 +		assert_eq!(resolved.path, fixture.user().join(ID));
++	}
++
++	#[cfg(unix)]
++	#[test]
++	fn dangling_plugin_symlink_remains_available_for_profile_retention() {
++		use std::os::unix::fs::symlink;
++
++		let fixture = Fixture::new();
++		fs::create_dir_all(fixture.user()).unwrap();
++
++		let link = fixture.user().join(ID);
++		symlink(fixture.0.join("missing-target"), &link).unwrap();
++
++		// The symlink exists, but its target does not.
++		assert!(!link.exists());
++		assert!(link.symlink_metadata().is_ok());
++
++		// The plugin cannot be loaded, but its saved actions
++		// should not be discarded while the symlink remains.
++		assert!(plugin_available_at(ID, &fixture.user(), None, true));
++
++		// A genuinely absent plugin is still considered unavailable.
++		assert!(!plugin_available_at(
++			"com.example.absent.sdPlugin",
++			&fixture.user(),
++			None,
++			false,
++		));
++
++		// Invalid plugin identifiers must still be rejected.
++		assert!(!plugin_available_at("../escape", &fixture.user(), None, true));
 +	}
 +
 +	#[test]
