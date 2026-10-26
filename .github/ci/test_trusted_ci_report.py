@@ -73,7 +73,7 @@ class FakeAPI:
     def status(self, result):
         if self.fail_status:
             raise URLError("status publication failed")
-        self.published.append((result["merge"], result["context"], result["state"]))
+        self.published.append((result["head"], result["context"], result["state"]))
 
 
 class ReporterTests(unittest.TestCase):
@@ -148,10 +148,10 @@ class ReporterTests(unittest.TestCase):
         event["workflow_run"]["conclusion"] = "failure"
         self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
-    def test_publish_targets_merge_only(self):
+    def test_publish_targets_head_only(self):
         event, _, api = self.setup_case()
         api.status(reporter.assess(event, api))
-        self.assertEqual(api.published, [(MERGE, "nix-opendeck/tests", "success")])
+        self.assertEqual(api.published, [(HEAD, "nix-opendeck/tests", "success")])
 
     def test_notification_error_does_not_undo_status(self):
         event, _, api = self.setup_case("Reproducibility")
@@ -164,7 +164,7 @@ class ReporterTests(unittest.TestCase):
                  patch.object(reporter, "GitHub", return_value=api), \
                  patch.object(reporter, "notify", side_effect=RuntimeError("comment failure")):
                 reporter.main()
-        self.assertEqual(api.published, [(MERGE, "nix-opendeck/reproducibility", "success")])
+        self.assertEqual(api.published, [(HEAD, "nix-opendeck/reproducibility", "success")])
 
     def test_status_publication_error_is_not_suppressed(self):
         event, _, api = self.setup_case()
