@@ -93,11 +93,24 @@ class GitHub:
 def assess(event, api):
     """Return None for stale/unrelated runs, or a validated report dict."""
     run = event["workflow_run"]
-    name = run.get("name")
-    if run.get("event") != "pull_request" or name not in WORKFLOWS:
+
+    # The run's name may contain a custom run-name, so identify the
+    # workflow by GitHub's reported workflow file path instead.
+    workflow_path = (run.get("path") or "").split("@", 1)[0]
+    name = next(
+        (
+            kind
+            for kind, (path, _, _) in WORKFLOWS.items()
+            if path == workflow_path
+        ),
+        None,
+    )
+
+    if run.get("event") != "pull_request" or name is None:
         return None
+
     path, required_job, context = WORKFLOWS[name]
-    if (run.get("path") or "").split("@", 1)[0] != path or run.get("status") != "completed":
+    if run.get("status") != "completed":
         return None
     if run.get("repository", {}).get("full_name") != api.repo:
         return None

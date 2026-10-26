@@ -18,7 +18,7 @@ BASE = 'c' * 40
 def fixture(kind='Checks'):
     filename, job, _ = reporter.WORKFLOWS[kind]
     run = {
-        'id': 10, 'name': kind, 'event': 'pull_request',
+        'id': 10, 'name': f'{kind} PR #37 merge {MERGE}', 'event': 'pull_request',
         'path': filename, 'status': 'completed', 'conclusion': 'success',
         'head_sha': HEAD, 'repository': {'full_name': 'missmoode/nix-opendeck'},
         'display_title': f'{kind} PR #37 merge {MERGE}',
@@ -122,7 +122,7 @@ class SecurityTests(unittest.TestCase):
 
     def test_unrelated_workflow_is_ignored(self):
         event, pr, job = fixture()
-        event['workflow_run']['name'] = 'Anything else'
+        event['workflow_run']['path'] = '.github/workflows/unrelated.yml'
         self.assertIsNone(reporter.assess(event, FakeAPI(pr, job)))
 
     def test_altered_title_cannot_claim_success(self):

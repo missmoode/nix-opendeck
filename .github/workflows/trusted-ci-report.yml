@@ -19,7 +19,9 @@ jobs:
     runs-on: ubuntu-24.04
     # Configure this environment to allow ONLY main. Keep the App's private
     # key as an *environment* secret, never a repository secret.
-    environment: trusted-automation
+    environment:
+      name: trusted-automation
+      deployment: false
 
     steps:
       - uses: actions/checkout@v7
