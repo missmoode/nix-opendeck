@@ -31,6 +31,13 @@ let
   passthru = {
     bundledPluginIds = pluginIds;
   }
+  # Let wrapped packages expose the core's dependency updater.
+  // lib.optionalAttrs (package ? updatePlatformDeps) {
+    inherit (package) updatePlatformDeps;
+  }
+  // lib.optionalAttrs (package ? denoDeps) {
+    inherit (package) denoDeps;
+  }
   // lib.optionalAttrs stdenvNoCC.hostPlatform.isLinux {
     udev = symlinkJoin {
       name = "${pname}-udev-rules-${package.version}";
