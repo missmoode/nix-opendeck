@@ -2,17 +2,19 @@
 
 nix-opendeck packages [OpenDeck](https://github.com/nekename/OpenDeck) and a 
 selection of plugins for Nix, with patches to support immutable plugins in the 
-Nix store. It provides declarative plugin
-management through both custom bundled
-packages and Home Manager.
+Nix store. It provides declarative plugin management through both custom
+bundled packages and Home Manager.
 
-This is useful on NixOS, where plugins installed through OpenDeck's GUI may fail because
-they expect a conventional Linux environment. On other platforms, nix-opendeck still
-provides declarative plugin management.
+This is useful on NixOS, where plugins installed through OpenDeck's GUI may fail because they expect a conventional Linux environment. On other platforms,
+nix-opendeck still provides declarative plugin management.
 
-This is my first attempt at packaging software for Nix, made out of a personal need for my
-Stream Deck to just work on NixOS. I make no promises to maintain this long-term, but in the
-spirit of Nix, I'm making it public and doing what I can to make it useful for everyone.
+This is my first attempt at packaging software for Nix, made out of a personal
+need for my Stream Deck to just work on NixOS. I make no promises to maintain
+this long-term, but in the spirit of Nix, I'm making it public and doing what
+I can to make it useful for everyone.
+
+As this began as both a personal tool and a learning exercise, I [made
+extensive use of LLM assistance during development](#llm-usage-disclosure).
 
 > [!WARNING]
 > Breaking changes may still happen for a little while. This README will remain up-to-date.
@@ -602,6 +604,21 @@ nix-opendeck pins its Nixpkgs revision to provide reproducible builds and reliab
 I may make Security-related updates outside of this schedule when relevant vulnerabilities become known, but I haven’t implemented automatic alerts at this time. Timely security fixes are therefore not guaranteed.
 
 If you want to track a more recent Nixpkgs revision you can use [`overlays.default`](#overlay) or configure `opendeck.inputs.nixpkgs.follows = “nixpkgs”`. This is likely to cause the provided binary cache to miss, and require rebuilding locally.
+
+## LLM Usage Disclosure
+
+I **used LLM assistance** while developing this project. The main uses were
+to navigate OpenDeck's code, work through Nix packaging from scratch,
+develop Rust patches (prior to this, my only experience with Rust was
+reading the book and playing with ESP32 systems), and conversationally
+review implementation decisions.
+
+Some parts of the project (the Home Manager module, and the
+GitHub workflow CI), were LLM-generated, with me directing development,
+testing, and iterating on issues I found.
+
+I've tested the results where I can, but there might still be mistakes
+or room for improvement. I'd very much welcome contributions or corrections.
 
 ## Reproducibility
 
