@@ -133,7 +133,7 @@ class ReporterTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 event, pr, api = self.setup_case(kind)
                 pr["labels"] = []
-                self.assertEqual(reporter.assess(event, api)["state"], "failure")
+                self.assertEqual(reporter.assess(event, api)["state"], "pending")
 
     def test_required_job_must_pass_exactly_once(self):
         for conclusions in ([], ["failure"], ["success", "success"]):

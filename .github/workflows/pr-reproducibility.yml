@@ -355,7 +355,9 @@ jobs:
   result:
     name: Reproducibility gate
     needs: [discover, check]
-    if: ${{ always() }}
+    if: >-
+      always() &&
+      contains(github.event.pull_request.labels.*.name, 'ready for merge')
     runs-on: ubuntu-24.04
     steps:
       - name: Verify all selected targets
