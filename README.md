@@ -601,7 +601,7 @@ nix-opendeck pins its Nixpkgs revision to provide reproducible builds and reliab
 
 I may make Security-related updates outside of this schedule when relevant vulnerabilities become known, but I haven’t implemented automatic alerts at this time. Timely security fixes are therefore not guaranteed.
 
-If you want to track a more recent Nixpkgs revision you can use [`overlays.default`](#overlays) or configure `opendeck.inputs.nixpkgs.follows = “nixpkgs”`. This is likely to cause the provided binary cache to miss, and require rebuilding locally.
+If you want to track a more recent Nixpkgs revision you can use [`overlays.default`](#overlay) or configure `opendeck.inputs.nixpkgs.follows = “nixpkgs”`. This is likely to cause the provided binary cache to miss, and require rebuilding locally.
 
 ## Reproducibility
 
