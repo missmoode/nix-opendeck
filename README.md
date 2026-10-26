@@ -595,6 +595,14 @@ and integration code. Downstream patches to third-party projects are distributed
 with the applicable upstream licenses. In particular, the modified OpenDeck application is 
 distributed under GPL-3.0-or-later.
 
+## Security and Updates
+
+nix-opendeck pins its Nixpkgs revision to provide reproducible builds and reliable binary cache availability. As rebuilding and verifying reproducibility for the entire package set is an expensive process, the revision is generally updated monthly. Upstream OpenDeck and plugins are checked for new releases and updates are attempted daily.
+
+I may make Security-related updates outside of this schedule when relevant vulnerabilities become known, but I haven’t implemented automatic alerts at this time. Timely security fixes are therefore not guaranteed.
+
+If you want to track a more recent Nixpkgs revision you can use [`overlays.default`](#overlays) or configure `opendeck.inputs.nixpkgs.follows = “nixpkgs”`. This is likely to cause the provided binary cache to miss, and require rebuilding locally.
+
 ## Reproducibility
 
 The `opendeck` package and plugins get tested for reproducibility across their
