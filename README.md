@@ -13,8 +13,8 @@ need for my Stream Deck to just work on NixOS. I make no promises to maintain
 this long-term, but in the spirit of Nix, I'm making it public and doing what
 I can to make it useful for everyone.
 
-As this began as both a personal tool and a learning exercise, I [made
-extensive use of LLM assistance during development](#llm-usage-disclosure).
+As this began as both a personal tool and a learning exercise, I [made use of
+LLM assistance during development](#llm-usage-disclosure).
 
 > [!WARNING]
 > Breaking changes may still happen for a little while, but I think it's unlikely at this point. This README will remain up-to-date.
