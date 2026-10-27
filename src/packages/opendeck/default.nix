@@ -159,7 +159,7 @@ rustPlatform.buildRustPackage (
       # Nix store paths. Resolve the installed launcher through PATH instead.
       ${lib.optionalString stdenv.hostPlatform.isLinux ''
         patch -p1 \
-          -d "$cargoDepsCopy"/*/tauri-plugin-autostart-2.5.1 \
+          -d "$cargoDepsCopy"/*/tauri-plugin-autostart-* \
           < ${./patches/tauri-plugin-autostart/0001-use-path-for-linux-autostart.patch}
       ''}
 
@@ -167,7 +167,7 @@ rustPlatform.buildRustPackage (
       # running OpenDeck executable. Otherwise retain upstream behaviour.
       ${lib.optionalString stdenv.hostPlatform.isDarwin ''
         patch -p1 \
-          -d "$cargoDepsCopy"/*/tauri-plugin-autostart-2.5.1 \
+          -d "$cargoDepsCopy"/*/tauri-plugin-autostart-* \
           < ${./patches/tauri-plugin-autostart/0002-use-profile-path-for-macos-autostart.patch}
       ''}
     '';
