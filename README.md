@@ -565,12 +565,9 @@ startup when they are missing or older. nix-opendeck instead loads bundled
 plugins directly from their package resources, leaving existing user
 installations untouched.
 
-When a plugin exists in multiple places, Home Manager-managed installations
-take precedence. Otherwise, the packaged version is selected when its manifest
-version is **newer than or equal to** the user's version; a newer user version
-wins. If a user installation's version cannot be compared, nix-opendeck leaves
-it in place rather than replacing it automatically. The Home Manager module
-also prevents declaring a plugin separately when it is already bundled.
+The Home Manager module prevents declaring a plugin separately when it is already bundled, and refuses to overwrite existing user-installed plugins.
+
+When a plugin exists both in the package and in the user’s plugin directory, the packaged version is selected when its manifest version is **newer than or equal to** the user’s version; a newer user version wins. If the versions cannot be compared, nix-opendeck retains the user installation rather than replacing it automatically.
 
 A selected packaged plugin cannot be updated or removed through OpenDeck's
 graphical plugin manager. Any shadowed user installation remains on disk and
