@@ -1,4 +1,4 @@
-Subject: Restart an already-running OpenDeck instance on explicit request
+Subject: Limit external reload and restart requests to a running instance
 
 diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
 --- a/src-tauri/src/main.rs
@@ -8,8 +8,8 @@ diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
  		])
  		.setup(|app| {
 +			// If no instance received this request, exit without opening a GUI.
-+			// When one is running, the single-instance callback handles the restart.
-+			if std::env::args().any(|arg| arg == "--restart-if-running") {
++			// When one is running, the single-instance callback handles the request.
++			if std::env::args().any(|arg| arg == "--restart-if-running" || arg == "--reload-plugin") {
 +				tauri_plugin_single_instance::destroy(app);
 +				std::process::exit(0);
 +			}
@@ -20,7 +20,7 @@ diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
  								tauri::async_runtime::block_on(frontend::plugins::reload_plugin(app, plugin_id));
  							});
  						}
-+					} else if args.iter().any(|arg| arg == "--restart-if-running") {
++					} else if args.iter().any(|arg| arg == "--restart-if-running" || arg == "--reload-plugin") {
 +						let app = app.clone();
 +						std::thread::spawn(move || crate::shared::restart(&app));
  					} else if let Some(pos) = args.iter().position(|x| x.to_lowercase().trim() == "--sleep-device") {

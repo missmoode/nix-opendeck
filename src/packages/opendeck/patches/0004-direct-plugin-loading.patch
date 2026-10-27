@@ -8,18 +8,18 @@ index 2a93eab..1c49180 100644
 -use crate::shared::{ActionInstance, Encoder, config_dir};
 +use crate::shared::{ActionInstance, Encoder};
  use crate::store::profiles::{acquire_locks_mut, get_slot_mut};
- 
+
  use std::path::{Path, PathBuf};
 @@ -54,7 +54,9 @@ fn get_encoder_image(encoder: &mut Encoder, instance: &ActionInstance) -> Result
  		return Ok(DynamicImage::new_rgb8(200, 100));
  	};
- 
+
 -	let path = config_dir().join("plugins").join(&instance.action.plugin);
 +	let path = crate::plugins::sources::resolve_plugin(&instance.action.plugin)
 +		.with_context(|| format!("Plugin not found: {}", instance.action.plugin))?
 +		.path;
  	let path_canonical = path.canonicalize()?;
- 
+
  	let state_idx = instance.current_state as usize;
 diff --git a/src-tauri/src/events/frontend/mod.rs b/src-tauri/src/events/frontend/mod.rs
 index 5d89d80..797afc2 100644
@@ -28,7 +28,7 @@ index 5d89d80..797afc2 100644
 @@ -77,24 +77,12 @@ pub async fn get_categories() -> HashMap<String, Category> {
  pub async fn get_localisations(locale: &str) -> Result<HashMap<String, serde_json::Value>, Error> {
  	let mut localisations: HashMap<String, serde_json::Value> = HashMap::new();
- 
+
 -	let mut entries = match tokio::fs::read_dir(&crate::shared::config_dir().join("plugins")).await {
 -		Ok(entries) => entries,
 -		Err(error) => return Err(anyhow::Error::from(error).into()),
@@ -53,14 +53,14 @@ index 5d89d80..797afc2 100644
 -		}
 +		localisations.insert(plugin.id, locale);
  	}
- 
+
  	Ok(localisations)
 diff --git a/src-tauri/src/events/frontend/property_inspector.rs b/src-tauri/src/events/frontend/property_inspector.rs
 index c588fb3..116f1b3 100644
 --- a/src-tauri/src/events/frontend/property_inspector.rs
 +++ b/src-tauri/src/events/frontend/property_inspector.rs
 @@ -6,7 +6,8 @@ use tauri::command;
- 
+
  #[command]
  pub async fn make_info(plugin: String) -> Result<crate::plugins::info_param::Info, Error> {
 -	let manifest = crate::plugins::manifest::read_manifest(&crate::shared::config_dir().join("plugins").join(&plugin))?;
@@ -68,13 +68,13 @@ index c588fb3..116f1b3 100644
 +	let manifest = crate::plugins::manifest::read_manifest(&resolved.path)?;
  	Ok(crate::plugins::info_param::make_info(plugin, manifest.version, false).await)
  }
- 
+
 diff --git a/src-tauri/src/events/inbound/misc.rs b/src-tauri/src/events/inbound/misc.rs
 index 2e13047..1194444 100644
 --- a/src-tauri/src/events/inbound/misc.rs
 +++ b/src-tauri/src/events/inbound/misc.rs
 @@ -22,7 +22,8 @@ pub struct LogMessageEvent {
- 
+
  pub async fn log_message(uuid: Option<&str>, mut event: PayloadEvent<LogMessageEvent>) -> Result<(), anyhow::Error> {
  	if let Some(uuid) = uuid
 -		&& let Ok(manifest) = crate::plugins::manifest::read_manifest(&crate::shared::config_dir().join("plugins").join(uuid))
@@ -106,7 +106,7 @@ index 8537352..4ec7c60 100644
 +++ b/src-tauri/src/events/outbound/mod.rs
 @@ -73,16 +73,8 @@ async fn send_to_plugin(plugin: &str, data: &impl Serialize) -> Result<(), anyho
  }
- 
+
  async fn send_to_all_plugins(data: &impl Serialize) -> Result<(), anyhow::Error> {
 -	let mut entries = tokio::fs::read_dir(crate::shared::config_dir().join("plugins")).await?;
 -	while let Ok(Some(entry)) = entries.next_entry().await {
@@ -130,7 +130,7 @@ index 856e82e..5a6b3d9 100644
 @@ -410,7 +410,7 @@ pub async fn deactivate_plugins() {
  	}
  }
- 
+
 -/// Initialise plugins from the plugins directory.
 +/// Initialise effective user, Home Manager and package plugin sources.
  pub fn initialise_plugins() {
@@ -139,7 +139,7 @@ index 856e82e..5a6b3d9 100644
 @@ -419,43 +419,7 @@ pub fn initialise_plugins() {
  	let _ = fs::create_dir_all(&plugin_dir);
  	let _ = fs::create_dir_all(log_dir().join("plugins"));
- 
+
 -	if let Ok(Ok(entries)) = APP_HANDLE.get().unwrap().path().resolve("plugins", tauri::path::BaseDirectory::Resource).map(fs::read_dir) {
 -		for entry in entries.flatten() {
 -			if let Err(error) = (|| -> Result<(), anyhow::Error> {
@@ -178,13 +178,13 @@ index 856e82e..5a6b3d9 100644
 -		}
 -	};
 +	let entries = sources::installed_plugins();
- 
+
  	let (tx, rx) = mpsc::channel::<SpawnRequest>();
  	APP_HANDLE.get().unwrap().manage(tx.clone());
 @@ -482,25 +446,15 @@ pub fn initialise_plugins() {
  		}
  	});
- 
+
 -	// Iterate through all directory entries in the plugins folder and initialise them as plugins if appropriate
 -	for entry in entries {
 -		if let Ok(entry) = entry {
@@ -213,7 +213,7 @@ index 856e82e..5a6b3d9 100644
 -		}
 +		});
  	}
- 
+
  	// On macOS, hidden WKWebView windows suspend JavaScript after ~7s.
 diff --git a/src-tauri/src/shared.rs b/src-tauri/src/shared.rs
 index 905bbd5..025ccb1 100644
@@ -228,14 +228,14 @@ index 905bbd5..025ccb1 100644
 +			.ok_or_else(|| anyhow::anyhow!("Plugin not found: {}", action.plugin))?
 +			.path;
  		let layout_file = plugin_dir.join(&load_layout);
- 
+
  		let Ok(plugin_dir) = plugin_dir.canonicalize() else {
 diff --git a/src-tauri/src/store/profiles.rs b/src-tauri/src/store/profiles.rs
 index 1d85703..b718825 100644
 --- a/src-tauri/src/store/profiles.rs
 +++ b/src-tauri/src/store/profiles.rs
 @@ -49,11 +49,10 @@ impl ProfileStores {
- 
+
  			let categories = crate::shared::CATEGORIES.read().await;
  			let actions = categories.values().flat_map(|v| v.actions.iter()).collect::<Vec<_>>();
 -			let plugins_dir = config_dir().join("plugins");
@@ -261,7 +261,7 @@ index 8e35d18..0b3b129 100644
  				path.strip_prefix(&config_dir).unwrap().to_slash_lossy().into_owned()
  			} else {
 @@ -158,7 +160,8 @@ impl DiskActionInstance {
- 
+
  		let reconstruct_path = |value: &str| -> String {
  			if !(value.is_empty() || value.starts_with("data:") || value.starts_with("opendeck/")) {
 -				config_dir.join(PathBuf::from_slash(value)).to_string_lossy().into_owned()

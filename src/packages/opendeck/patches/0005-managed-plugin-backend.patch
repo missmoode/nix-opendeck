@@ -1,7 +1,6 @@
 Subject: Guard managed plugin operations and preserve effective-source lifecycle data
 
 diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/frontend/plugins.rs
-index f8780d1..bc2e06b 100644
 --- a/src-tauri/src/events/frontend/plugins.rs
 +++ b/src-tauri/src/events/frontend/plugins.rs
 @@ -1,5 +1,6 @@
@@ -11,7 +10,7 @@ index f8780d1..bc2e06b 100644
  use crate::plugins::{SpawnRequest, deactivate_plugin, initialise_plugin};
  use crate::shared::{config_dir, log_dir};
  use crate::store::profiles::{acquire_locks, get_instance};
-@@ -94,10 +95,15 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+@@ -94,10 +95,15 @@ pub async fn install_plugin
  		},
  	};
  
@@ -28,7 +27,7 @@ index f8780d1..bc2e06b 100644
  
  	if actual.exists() {
  		let _ = fs::create_dir_all(config_dir.join("temp")).await;
-@@ -109,14 +115,25 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+@@ -109,14 +115,25 @@ pub async fn install_plugin
  	if let Err(error) = crate::zip_extract::extract(std::io::Cursor::new(bytes), &config_dir.join("plugins")) {
  		log::error!("Failed to unzip file: {}", error);
  		let _ = fs::rename(&temp, &actual).await;
@@ -57,29 +56,22 @@ index f8780d1..bc2e06b 100644
  		return Err(error.into());
  	}
  	let _ = fs::remove_dir_all(config_dir.join("temp")).await;
-@@ -129,16 +146,23 @@ pub async fn install_plugin(app: AppHandle, url: Option<String>, file: Option<St
+@@ -129,8 +146,13 @@ pub async fn remove_plugin
  
  #[command]
  pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
--	let locks = acquire_locks().await;
--	let all = locks.profile_stores.all_from_plugin(&id);
--	drop(locks);
--
--	for context in all {
--		super::instances::remove_instance(context).await?;
 +	sources::ensure_gui_managed(&id)?;
 +	let user_path = sources::user_plugin_path(&id)?;
 +	// Removing an effective user copy can reveal a packaged copy of the same ID.
 +	// Keep its saved data, as the plugin remains available.
 +	let package_fallback = sources::packaged_plugin_path(&id).is_some();
-+	if !package_fallback {
-+		let locks = acquire_locks().await;
-+		let all = locks.profile_stores.all_from_plugin(&id);
-+		drop(locks);
-+
-+		for context in all {
-+			super::instances::remove_instance(context).await?;
-+		}
+ 	let locks = acquire_locks().await;
+-	let all = locks.profile_stores.all_from_plugin(&id);
++	let all = if package_fallback { Vec::new() } else { locks.profile_stores.all_from_plugin(&id) };
+ 	drop(locks);
+ 
+ 	for context in all {
+@@ -138,7 +160,7 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
  	}
  
  	deactivate_plugin(&app, &id).await?;
@@ -88,37 +80,80 @@ index f8780d1..bc2e06b 100644
  		return Err(anyhow::Error::from(error).into());
  	}
  
-@@ -147,18 +171,27 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
+@@ -147,7 +169,12 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
  		category.actions.retain(|v| v.plugin != id);
  	}
  	categories.retain(|_, v| !v.actions.is_empty());
 +	drop(categories);
  
--	let _ = fs::remove_file(log_dir().join("plugins").join(format!("{id}.log"))).await;
--	let _ = fs::remove_file(config_dir().join("settings").join(format!("{id}.json"))).await;
 +	if package_fallback {
 +		reload_plugin(app, id).await;
-+	} else {
-+		let _ = fs::remove_file(log_dir().join("plugins").join(format!("{id}.log"))).await;
-+		let _ = fs::remove_file(config_dir().join("settings").join(format!("{id}.json"))).await;
++		return Ok(());
 +	}
+ 	let _ = fs::remove_file(log_dir().join("plugins").join(format!("{id}.log"))).await;
+ 	let _ = fs::remove_file(config_dir().join("settings").join(format!("{id}.json"))).await;
  
- 	Ok(())
- }
+@@ -156,9 +183,27 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
  
  #[command]
  pub async fn reload_plugin(app: AppHandle, id: String) {
++	if !sources::valid_plugin_id(&id) {
++		log::warn!("Refusing to reload invalid plugin ID: {id:?}");
++		return;
++	}
+ 	let _ = deactivate_plugin(&app, &id).await;
++	// Discard stale runtime actions, without deleting saved profiles or settings.
++	{
++		let mut categories = crate::shared::CATEGORIES.write().await;
++		for category in categories.values_mut() {
++			category.actions.retain(|action| action.plugin != id);
++		}
++		categories.retain(|_, category| !category.actions.is_empty());
++	}
 +	let Some(plugin) = sources::resolve_plugin(&id) else {
-+		log::warn!("Cannot reload unavailable plugin {id:?}");
++		if let Some(window) = app.get_webview_window("main") {
++			let _ = window.emit("plugins_changed", &id);
++		}
 +		return;
 +	};
- 	let _ = deactivate_plugin(&app, &id).await;
  	let tx = (*app.state::<mpsc::Sender<SpawnRequest>>()).clone();
 -	let _ = initialise_plugin(config_dir().join("plugins").join(&id), tx).await;
 +	let _ = initialise_plugin(plugin.path, tx).await;
  
  	let locks = acquire_locks().await;
  	let all = locks.profile_stores.all_from_plugin(&id);
+@@ -171,6 +216,7 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
+ 
+ 	if let Some(window) = app.get_webview_window("main") {
+ 		let _ = window.emit("plugin_reloaded", &id);
++		let _ = window.emit("plugins_changed", &id);
+ 	}
+ }
+ 
+diff --git a/src/components/ActionList.svelte b/src/components/ActionList.svelte
+--- a/src/components/ActionList.svelte
++++ b/src/components/ActionList.svelte
+@@ -10,6 +10,8 @@
+ 	import { PRODUCT_NAME } from "$lib/singletons";
+ 
+ 	import { invoke } from "@tauri-apps/api/core";
++	import { listen } from "@tauri-apps/api/event";
++	import { onMount } from "svelte";
+ 
+ 	let categories: { [name: string]: { icon?: string; actions: Action[] } } = {};
+ 	let plugins: any[] = [];
+@@ -19,6 +21,11 @@
+ 	}
+ 	reload();
+ 
++	onMount(() => {
++		const unlisten = listen("plugins_changed", () => { void reload(); });
++		return () => { void unlisten.then((dispose) => dispose()); };
++	});
++
+ 	let query: string = "";
+ 	let filteredCategories: [string, { icon?: string; actions: Action[] }][] = [];
+ 	$: {
 diff --git a/src-tauri/src/zip_extract.rs b/src-tauri/src/zip_extract.rs
 index 16d5a12..a9bea85 100644
 --- a/src-tauri/src/zip_extract.rs

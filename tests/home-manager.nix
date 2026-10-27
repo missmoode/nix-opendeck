@@ -55,6 +55,14 @@ let
     ];
   };
 
+  reloadDisabled = mkConfiguration {
+    enable = true;
+    installPackage = false;
+    package = core;
+    plugins = [ starterpack ];
+    reloadOnPluginChanges = false;
+  };
+
   restartEnabled = mkConfiguration {
     enable = true;
     installPackage = false;
@@ -93,13 +101,28 @@ assert lib.assertMsg (evaluationFails bundledConflict)
 assert lib.assertMsg (evaluationFails duplicatePlugins)
   "Duplicate plugin IDs should fail Home Manager evaluation";
 
+assert lib.assertMsg (lib.hasInfix "--reload-plugin" activationScript)
+  "Automatic reload should be enabled by default";
+
 assert lib.assertMsg (
   !lib.hasInfix "--restart-if-running" activationScript
 ) "Restart logic should be absent when disabled";
 
+assert lib.assertMsg (
+  !lib.hasInfix "--reload-plugin" reloadDisabled.config.home.activation.opendeckPlugins.data
+) "Reload logic should be absent when disabled";
+
+assert lib.assertMsg (
+  !lib.hasInfix "--restart-if-running" reloadDisabled.config.home.activation.opendeckPlugins.data
+) "Disabling reload should not enable restart";
+
 assert lib.assertMsg
   (lib.hasInfix "--restart-if-running" restartEnabled.config.home.activation.opendeckPlugins.data)
   "Restart logic should be present when enabled";
+
+assert lib.assertMsg (
+  !lib.hasInfix "--reload-plugin" restartEnabled.config.home.activation.opendeckPlugins.data
+) "Restart should take precedence over reload";
 
 # very unlikely for this to fail unless I do something very silly,
 # but it's cheap so why not include it.

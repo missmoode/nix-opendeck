@@ -58,7 +58,7 @@ let
     target="$pluginDir/$pluginId"
     temp="$pluginDir/.$pluginId.hm-tmp"
 
-    # Repeated activations must not restart OpenDeck when the store path is unchanged.
+    # Repeated activations should not reload unchanged plugin store paths.
     if [[ ! -L "$target" || "$(readlink "$target")" != "$source" ]]; then
       rm -f "$temp"
 
@@ -70,7 +70,7 @@ let
       # Home Manager-managed symlink.
       rm -f "$target"
       mv "$temp" "$target"
-      pluginsChanged=true
+      changedPlugins+=("$pluginId")
     fi
   '') externalPlugins;
 in
@@ -90,13 +90,24 @@ in
       description = "Whether or not this module should install OpenDeck for convenience.";
     };
 
+    reloadOnPluginChanges = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Reload individual declared plugins when Home Manager changes their
+        symlinks, without starting an inactive OpenDeck instance. Disable this
+        to apply changes only on the next normal launch. Ignored when
+        restartOnPluginChanges is enabled.
+      '';
+    };
+
     restartOnPluginChanges = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = ''
-        Restart a running OpenDeck instance when Home Manager adds, removes, or
-        changes a declared plugin. If disabled, changes take effect on the next
-        normal launch. An inactive OpenDeck instance is not started.
+        Restart an already-running OpenDeck instance once after Home Manager
+        adds, removes, or changes declared plugins, instead of reloading them
+        individually. Takes precedence over reloadOnPluginChanges.
       '';
     };
 
@@ -188,7 +199,7 @@ in
         stateTemp="$externallyManagedPluginsFile.hm-tmp"
         rm -f "$stateTemp"
         printf '%s' "$desiredState" > "$stateTemp"
-        pluginsChanged=false
+        changedPlugins=()
 
         # Remove plugins which were managed by the previous Home Manager
         # generation but are no longer declared.
@@ -204,7 +215,7 @@ in
 
             if isManagedPluginTarget "$pluginId"; then
               rm -f "$pluginDir/$pluginId"
-              pluginsChanged=true
+              changedPlugins+=("$pluginId")
             fi
           done <<<"$previousState"
         fi
@@ -213,10 +224,10 @@ in
 
         mv "$stateTemp" "$externallyManagedPluginsFile"
 
-        # Applying all symlink changes first allows one clean OpenDeck restart.
-        # Best effort: no instance should be started during activation.
-        ${lib.optionalString cfg.restartOnPluginChanges ''
-          if [[ "$pluginsChanged" == true ]]; then
+        # Reconcile every symlink first, then notify one running instance.
+        # Never start OpenDeck during Home Manager activation.
+        ${lib.optionalString (cfg.reloadOnPluginChanges || cfg.restartOnPluginChanges) ''
+          if (( ''${#changedPlugins[@]} )); then
             notify=true
             ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
               # Avoid launching a secondary Tauri process on Linux when OpenDeck
@@ -231,8 +242,15 @@ in
               fi
             ''}
             if [[ "$notify" == true ]]; then
-              ${cfg.package}/bin/opendeck --restart-if-running >/dev/null 2>&1 \
-                || verboseEcho "Could not restart OpenDeck; plugin changes will apply next time it starts"
+              ${if cfg.restartOnPluginChanges then ''
+                ${cfg.package}/bin/opendeck --restart-if-running >/dev/null 2>&1 \
+                  || verboseEcho "Could not restart OpenDeck; plugin changes will apply next time it starts"
+              '' else ''
+                for pluginId in "''${changedPlugins[@]}"; do
+                  ${cfg.package}/bin/opendeck --reload-plugin "$pluginId" >/dev/null 2>&1 \
+                    || verboseEcho "Could not reload OpenDeck plugin $pluginId; restart OpenDeck to apply the change"
+                done
+              ''}
             fi
           fi
         ''}
