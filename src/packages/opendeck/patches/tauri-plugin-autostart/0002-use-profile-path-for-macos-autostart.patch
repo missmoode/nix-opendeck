@@ -6,8 +6,7 @@ diff --git a/src/lib.rs b/src/lib.rs
                      // It must be: /Applications/Example.app
                      // If it didn't find exactly a single occurance of .app, it will default to
                      // exe path to not break it.
--                    let exe_path = current_exe.canonicalize()?.display().to_string();
-+                    let canonical_exe = current_exe.canonicalize()?;
+                     let exe_path = current_exe.canonicalize()?.display().to_string();
 +                    // A Nix profile is a stable symlink across upgrades. Prefer its
 +                    // executable only when it resolves to this running OpenDeck build.
 +                    let profile_exe = std::env::var_os("HOME")
@@ -28,10 +27,10 @@ diff --git a/src/lib.rs b/src/lib.rs
 +                                .into_iter()
 +                                .map(|profile| profile.join("Applications/OpenDeck.app/Contents/MacOS/opendeck"))
 +                                .find(|candidate| {
-+                                    candidate.canonicalize().is_ok_and(|path| path == canonical_exe)
++                                    candidate.canonicalize().is_ok_and(|path| path.as_path() == std::path::Path::new(&exe_path))
 +                                })
 +                        });
-+                    let exe_path = profile_exe.unwrap_or(canonical_exe).display().to_string();
++                    let exe_path = profile_exe.map(|path| path.display().to_string()).unwrap_or(exe_path);
                      let parts: Vec<&str> = exe_path.split(".app/").collect();
                      let app_path = if parts.len() == 2
                          && matches!(self.macos_launcher, MacosLauncher::AppleScript)

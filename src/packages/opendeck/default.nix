@@ -109,8 +109,8 @@ rustPlatform.buildRustPackage (
       # Keep the current HM links and ownership when restoring user data.
       ./patches/0008-protect-managed-plugin-restore.patch
 
-      # Allow Home Manager to restart an existing instance without opening one.
-      ./patches/0009-restart-if-running.patch
+      # Reload or restart a running instance without opening an inactive one.
+      ./patches/0009-running-instance-commands.patch
 
       # Preserve portable encoder resources when saving and loading profiles.
       ./patches/0010-persist-encoder-resource-paths.patch
