@@ -689,9 +689,9 @@ provided binary cache to miss, and require rebuilding locally.
 ## LLM Usage Disclosure
 
 I **used LLM assistance** while developing this project. The main uses were
-to navigate OpenDeck's code, work through Nix packaging from scratch,
-develop Rust patches (prior to this, my only experience with Rust was
-reading the book and playing with ESP32 systems), and conversationally
+to navigate OpenDeck's code, work through understanding Nix packaging from
+scratch, develop Rust patches (prior to this, my only experience with Rust
+was reading the book and playing with ESP32 systems), and conversationally
 review implementation decisions.
 
 Some parts of the project (the Home Manager module, and the
