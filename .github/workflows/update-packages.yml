@@ -32,6 +32,8 @@ jobs:
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Test package update orchestrator
         run: python3 -m unittest discover -s .github/ci -p 'test_package_updates.py'
+      - name: Test upstream compatibility routing
+        run: python3 -m unittest discover -s .github/ci -p 'test_upstream_compatibility.py'
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ github.token }}
@@ -333,6 +335,59 @@ jobs:
           cat "$RUNNER_TEMP/package-update-report.md" >> "$GITHUB_STEP_SUMMARY"
           echo "ready=$(jq -r '.ready' "$RUNNER_TEMP/package-update-state.json")" >> "$GITHUB_OUTPUT"
           echo "infrastructure_failure=$(jq -r '.infrastructureFailure' "$RUNNER_TEMP/package-update-state.json")" >> "$GITHUB_OUTPUT"
+      # Only accepted upstream version bumps of patched packages require manual
+      # review. Core + Starter Pack stay together if updated in the same run.
+      - name: Route accepted updates to auto-merge and manual-review PRs
+        id: audit-select
+        if: steps.finish.outputs.ready == 'true'
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.discover.outputs.base_sha }}
+          UPDATE_MAINTAINERS: ${{ vars.UPDATE_MAINTAINERS }}
+        run: |
+          set -euo pipefail
+          routes="$RUNNER_TEMP/upstream-audit-targets.json"
+          python3 .github/ci/upstream_compatibility.py select \
+            --base-sha "$BASE_SHA" \
+            --state "$RUNNER_TEMP/package-update-state.json" \
+            --output "$routes"
+          python3 .github/ci/upstream_compatibility.py pr-bodies \
+            --routes "$routes" \
+            --auto "$RUNNER_TEMP/package-update-auto-pr.md" \
+            --review "$RUNNER_TEMP/package-update-review-pr.md"
+          review_count=$(jq -r '.reviewPaths | length' "$routes")
+          auto_count=$(jq -r '.autoPaths | length' "$routes")
+          if [[ "$review_count" != 0 && -z "$(printf '%s' "$UPDATE_MAINTAINERS" | tr -d '[:space:],')" ]]; then
+            echo '::error::Set the existing UPDATE_MAINTAINERS repository variable to one or more GitHub usernames.'
+            exit 1
+          fi
+          {
+            echo "review_count=$review_count"
+            echo "auto_count=$auto_count"
+            echo "audit_count=$(jq -r '.auditTargets | length' "$routes")"
+            echo 'review_paths<<END_REVIEW_PATHS'
+            jq -r '.reviewPaths[]' "$routes"
+            echo 'END_REVIEW_PATHS'
+            echo 'auto_paths<<END_AUTO_PATHS'
+            jq -r '.autoPaths[]' "$routes"
+            echo 'END_AUTO_PATHS'
+          } >> "$GITHUB_OUTPUT"
+          # create-pull-request's add-paths must start with an unstaged tree,
+          # otherwise the first PR can accidentally include the other group.
+          git reset --quiet
+
+      # AI cannot execute commands or decide whether a reviewed update merges.
+      # The only credential here is a Gemini API environment secret.
+      - name: Review patched upstream updates with Gemini
+        if: steps.audit-select.outcome == 'success' && steps.audit-select.outputs.audit_count != '0'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 .github/ci/upstream_compatibility.py review \
+            --targets "$RUNNER_TEMP/upstream-audit-targets.json" \
+            --output "$RUNNER_TEMP/upstream-compatibility.md"
       - name: Report infrastructure failure
         if: >-
           always() &&
@@ -376,9 +431,57 @@ jobs:
           permission-pull-requests: write
           permission-issues: write
 
-      - name: Create or update PR containing validated sources
+      # Separate manually reviewed upstream updates from ordinary auto-updates.
+      - name: Create or update patched-package manual review PR
+        id: review-pr
+        if: steps.audit-select.outcome == 'success' && steps.audit-select.outputs.review_count != '0'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
+          base: ${{ github.ref_name }}
+          branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/patched-package-updates' || format('automated/patched-package-updates-{0}', github.ref_name) }}
+          delete-branch: true
+          add-paths: ${{ steps.audit-select.outputs.review_paths }}
+          title: 'chore: review patched OpenDeck package updates'
+          commit-message: 'chore: update patched OpenDeck packages'
+          body-path: ${{ runner.temp }}/package-update-review-pr.md
+          assignees: ${{ vars.UPDATE_MAINTAINERS }}
+          labels: |
+            updates
+            upstream
+            ready for merge
+
+      # Reuse the existing App token; keep one bot-owned compatibility comment.
+      - name: Publish upstream compatibility review
+        if: steps.review-pr.outputs.pull-request-number != ''
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
+          PR_NUMBER: ${{ steps.review-pr.outputs.pull-request-number }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/upstream-compatibility.md"
+          if [[ ! -s "$report" ]]; then
+            python3 .github/ci/upstream_compatibility.py unavailable \
+              --targets "$RUNNER_TEMP/upstream-audit-targets.json" \
+              --output "$report"
+          fi
+          existing=$(gh api --paginate "repos/$GH_REPO/issues/$PR_NUMBER/comments" \
+            | jq -r --arg bot "$APP_BOT_LOGIN" '.[] | select(.user.login == $bot and (.body | contains("<!-- nix-opendeck-upstream-audit -->"))) | .id' \
+            | tail -n 1)
+          if [[ -n "$existing" ]]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$existing" -F "body=@$report" >/dev/null
+          else
+            gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" -F "body=@$report" >/dev/null
+          fi
+
+      - name: Create or update PR containing ordinary validated sources
         id: pr
-        if: steps.finish.outputs.ready == 'true'
+        if: steps.audit-select.outcome == 'success' && steps.audit-select.outputs.auto_count != '0'
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ steps.app-token.outputs.token }}
@@ -386,9 +489,10 @@ jobs:
           base: ${{ github.ref_name }}
           branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/package-updates' || format('automated/package-updates-{0}', github.ref_name) }}
           delete-branch: true
+          add-paths: ${{ steps.audit-select.outputs.auto_paths }}
           title: 'chore: update OpenDeck packages'
           commit-message: 'chore: update OpenDeck packages'
-          body-path: ${{ runner.temp }}/package-update-pr.md
+          body-path: ${{ runner.temp }}/package-update-auto-pr.md
           labels: |
             updates
             upstream
@@ -475,14 +579,21 @@ jobs:
           needs.prepare-builds.result != 'success' ||
           steps.finish.outcome != 'success' ||
           steps.finish.outputs.infrastructure_failure != 'false' ||
+          (steps.finish.outputs.ready == 'true' && steps.audit-select.outcome != 'success') ||
+          steps.review-pr.outcome == 'failure' ||
           steps.app-token.outcome != 'success' ||
           (github.ref_name == github.event.repository.default_branch &&
            steps.issues.outcome != 'success') ||
           steps.pr.outcome == 'failure' ||
-          (steps.finish.outputs.ready == 'true' &&
+          (steps.audit-select.outcome == 'success' &&
+           steps.audit-select.outputs.auto_count != '0' &&
            steps.pr.outputs.pull-request-number == '') ||
+          (steps.audit-select.outcome == 'success' &&
+           steps.audit-select.outputs.review_count != '0' &&
+           steps.review-pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
-           steps.finish.outputs.ready == 'true' &&
+           steps.audit-select.outcome == 'success' &&
+           steps.audit-select.outputs.auto_count != '0' &&
            steps.merge.outcome != 'success')
           )
         run: exit 1
