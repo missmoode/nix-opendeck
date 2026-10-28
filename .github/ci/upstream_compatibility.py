@@ -260,7 +260,7 @@ def ask_gemini(prompt):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 8192},
+        "generationConfig": {"maxOutputTokens": 8192},
     }
     req = Request(url, data=json.dumps(payload).encode(), method="POST", headers={
         "Content-Type": "application/json",
