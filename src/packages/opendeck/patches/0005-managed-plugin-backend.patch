@@ -10,14 +10,11 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  use crate::plugins::{SpawnRequest, deactivate_plugin, initialise_plugin};
  use crate::shared::{config_dir, log_dir};
  use crate::store::profiles::{acquire_locks, get_instance};
-@@ -94,10 +95,15 @@ pub async fn install_plugin
+@@ -94,10 +95,12 @@ pub async fn install_plugin
  		},
  	};
  
 +	sources::ensure_gui_managed(&id)?;
-+	// Only extract the guarded plugin, never a second ID hidden in the archive.
-+	crate::zip_extract::validate_plugin_archive(std::io::Cursor::new(&bytes), &id)
-+		.map_err(anyhow::Error::from)?;
 +
  	let _ = deactivate_plugin(&app, &id).await;
  
@@ -27,7 +24,7 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  
  	if actual.exists() {
  		let _ = fs::create_dir_all(config_dir.join("temp")).await;
-@@ -109,14 +115,25 @@ pub async fn install_plugin
+@@ -109,14 +112,25 @@ pub async fn install_plugin
  	if let Err(error) = crate::zip_extract::extract(std::io::Cursor::new(bytes), &config_dir.join("plugins")) {
  		log::error!("Failed to unzip file: {}", error);
  		let _ = fs::rename(&temp, &actual).await;
@@ -56,7 +53,7 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  		return Err(error.into());
  	}
  	let _ = fs::remove_dir_all(config_dir.join("temp")).await;
-@@ -129,8 +146,13 @@ pub async fn remove_plugin
+@@ -129,8 +143,13 @@ pub async fn remove_plugin
  
  #[command]
  pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
@@ -71,7 +68,7 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  	drop(locks);
  
  	for context in all {
-@@ -138,7 +160,7 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
+@@ -138,7 +157,7 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
  	}
  
  	deactivate_plugin(&app, &id).await?;
@@ -80,7 +77,7 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  		return Err(anyhow::Error::from(error).into());
  	}
  
-@@ -147,7 +169,12 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
+@@ -147,7 +166,12 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
  		category.actions.retain(|v| v.plugin != id);
  	}
  	categories.retain(|_, v| !v.actions.is_empty());
@@ -93,7 +90,7 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  	let _ = fs::remove_file(log_dir().join("plugins").join(format!("{id}.log"))).await;
  	let _ = fs::remove_file(config_dir().join("settings").join(format!("{id}.json"))).await;
  
-@@ -156,9 +183,27 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
+@@ -156,9 +180,27 @@ pub async fn remove_plugin(app: AppHandle, id: String) -> Result<(), Error> {
  
  #[command]
  pub async fn reload_plugin(app: AppHandle, id: String) {
@@ -122,7 +119,7 @@ diff --git a/src-tauri/src/events/frontend/plugins.rs b/src-tauri/src/events/fro
  
  	let locks = acquire_locks().await;
  	let all = locks.profile_stores.all_from_plugin(&id);
-@@ -171,6 +216,7 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
+@@ -171,6 +213,7 @@ pub async fn reload_plugin(app: AppHandle, id: String) {
  
  	if let Some(window) = app.get_webview_window("main") {
  		let _ = window.emit("plugin_reloaded", &id);
@@ -154,103 +151,3 @@ diff --git a/src/components/ActionList.svelte b/src/components/ActionList.svelte
  	let query: string = "";
  	let filteredCategories: [string, { icon?: string; actions: Action[] }][] = [];
  	$: {
-diff --git a/src-tauri/src/zip_extract.rs b/src-tauri/src/zip_extract.rs
-index 16d5a12..a9bea85 100644
---- a/src-tauri/src/zip_extract.rs
-+++ b/src-tauri/src/zip_extract.rs
-@@ -56,6 +56,95 @@ pub fn dir_name<S: Read + Seek>(source: S) -> Result<String, ZipExtractError> {
- 	Err(ZipExtractError::Zip(zip::result::ZipError::FileNotFound))
- }
- 
-+/// Verify that installation can only write beneath the ID whose ownership was checked.
-+/// Keep the nested-archive handling used by `dir_name` and `extract`.
-+pub fn validate_plugin_archive<S: Read + Seek>(source: S, id: &str) -> Result<(), ZipExtractError> {
-+	let mut archive = zip::ZipArchive::new(source)?;
-+	if archive.len() == 1 {
-+		let file = archive.by_index(0)?;
-+		if file.is_file() {
-+			return validate_plugin_archive(Cursor::new(BufReader::new(file).bytes().flatten().collect::<Vec<u8>>()), id);
-+		}
-+	}
-+
-+	for index in 0..archive.len() {
-+		let file = archive.by_index(index)?;
-+		let name = file.name().replace('\\', "/");
-+		let path = Path::new(&name);
-+		let mut components = path.components().filter(|component| !matches!(component, std::path::Component::CurDir));
-+		let root_matches = matches!(components.next(), Some(std::path::Component::Normal(root)) if root == id);
-+		if !root_matches || components.any(|component| !matches!(component, std::path::Component::Normal(_))) {
-+			return Err(io::Error::new(io::ErrorKind::InvalidData, "Plugin archive contains paths outside the selected plugin directory").into());
-+		}
-+	}
-+	Ok(())
-+}
-+
-+
-+#[cfg(test)]
-+mod validation_tests {
-+	use super::*;
-+	use std::io::Write;
-+
-+	const ID: &str = "com.example.test.sdPlugin";
-+
-+	fn archive(files: &[(&str, &[u8])]) -> Vec<u8> {
-+		let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
-+		for &(name, data) in files {
-+			writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
-+			writer.write_all(data).unwrap();
-+		}
-+		writer.finish().unwrap().into_inner()
-+	}
-+
-+	#[test]
-+	fn accepts_regular_plugin_archives() {
-+		let contents = archive(&[
-+			("com.example.test.sdPlugin/manifest.json", b"{}"),
-+			("com.example.test.sdPlugin/plugin.js", b"test"),
-+		]);
-+		assert!(validate_plugin_archive(Cursor::new(contents), ID).is_ok());
-+	}
-+
-+	#[test]
-+	fn rejects_unrelated_plugin_files_and_root_files() {
-+		for extra in ["another.sdPlugin/manifest.json", "README.md"] {
-+			let contents = archive(&[
-+				("com.example.test.sdPlugin/manifest.json", b"{}"),
-+				(extra, b"unexpected"),
-+			]);
-+			assert!(validate_plugin_archive(Cursor::new(contents), ID).is_err(), "accepted {extra}");
-+		}
-+	}
-+
-+	#[test]
-+	fn rejects_parent_traversal_and_windows_separators() {
-+		for extra in ["com.example.test.sdPlugin/../escape.txt", "com.example.test.sdPlugin\\..\\escape.txt"] {
-+			let contents = archive(&[
-+				("com.example.test.sdPlugin/manifest.json", b"{}"),
-+				(extra, b"unexpected"),
-+			]);
-+			assert!(validate_plugin_archive(Cursor::new(contents), ID).is_err(), "accepted {extra}");
-+		}
-+	}
-+
-+	#[test]
-+	fn validates_nested_plugin_archives() {
-+		let inner = archive(&[
-+			("com.example.test.sdPlugin/manifest.json", b"{}"),
-+			("com.example.test.sdPlugin/plugin.js", b"test"),
-+		]);
-+		let outer = archive(&[("nested.streamdeckplugin", inner.as_slice())]);
-+		assert!(validate_plugin_archive(Cursor::new(outer), ID).is_ok());
-+
-+		let bad_inner = archive(&[
-+			("com.example.test.sdPlugin/manifest.json", b"{}"),
-+			("other.sdPlugin/plugin.js", b"bad"),
-+		]);
-+		let bad_outer = archive(&[("nested.streamdeckplugin", bad_inner.as_slice())]);
-+		assert!(validate_plugin_archive(Cursor::new(bad_outer), ID).is_err());
-+	}
-+}
- pub fn extract<S: Read + Seek>(source: S, target_dir: &Path) -> Result<(), ZipExtractError> {
- 	if !target_dir.exists() {
- 		fs::create_dir(target_dir)?;
