@@ -36,14 +36,43 @@ body:
       label: Architecture
       placeholder: e.g. x86_64-linux
   - type: dropdown
-    id: installation
+    id: installation-method
     attributes:
       label: Installation method
+      description: How is OpenDeck installed and configured?
       options:
-        - Home Manager
-        - Bundled OpenDeck package
-        - Standalone Nix package
+        - Home Manager module
+        - NixOS / nix-darwin / standalone Nix (without Home Manager module)
         - Other / not sure
+    validations:
+      required: false
+  - type: dropdown
+    id: opendeck-package
+    attributes:
+      label: OpenDeck package
+      description: The Home Manager module uses the default package unless overridden.
+      options:
+        - Default opendeck (StarterPack bundled)
+        - opendeck-with-plugins (all eligible plugins bundled)
+        - Custom wrapOpenDeck bundle
+        - opendeck-core (no bundled plugins)
+        - Other / not sure
+    validations:
+      required: false
+  - type: textarea
+    id: plugin-configuration
+    attributes:
+      label: Additional plugins (if relevant)
+      description: >
+        If the issue isn't related to a specific plugin,
+        List any additional plugins bundled through wrapOpenDeck
+        or managed separately through programs.opendeck.plugins.
+        Include relevant configuration snippets if useful.
+      placeholder: |
+        Bundled plugins:
+        Home Manager plugins:
+    validations:
+      required: false
   - type: input
     id: revision
     attributes:
