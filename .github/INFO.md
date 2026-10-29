@@ -90,19 +90,31 @@ of an invalidated combined update. Infrastructure failures or incomplete
 reports **must not** turn into accepted source edits. A known package failure
 should not suppress unrelated valid updates.
 
+Updates are grouped **by review policy, not by package**: a run can create
+one ordinary auto-merge PR and one manual-review PR, each containing several
+accepted packages. All qualifying patched-package version updates go into the
+same manual-review PR. Gemini reviews each eligible package separately, then
+places the reports under package headings in **one bot-owned PR comment**.
+The manual-review PR is never approved or merged by Gemini. If one package
+needs a repair but another is ready to merge, separate their changes manually;
+the updater does not create a PR for every package.
+
 The updater separates three kinds of information:
 
 - **Updater results:** one isolated attempt per package, including an
   optional proposed patch and its SHA-256.
 - **Native build reports:** status, identity, optional source edits, and an
-  error excerpt on failure. The full output stays in Actions logs.
+  error excerpt on failure. Normal `nix build` output is streamed to Actions;
+  failures from captured Nix/dependency-update commands also retain bounded
+  stdout/stderr excerpts. The full output of streamed commands stays in Actions logs.
 - **Finalization state:** accepted packages, known package failures,
   infrastructure errors, and failure diagnostics. This is consumed by the
   workflow; the package-failure issue is a notification, not an approval.
 
 See `ci/package_updates.py` for the actual JSON field names and validation.
 Do not infer accepted updates from the presence of staged files or from a
-Gemini response.
+Gemini response. A successful no-change update run normally creates no PR;
+look at the finalization summary before treating that as a failure.
 
 ### Repairing downstream patches for new upstream versions
 
@@ -190,6 +202,13 @@ same contents on `main`**. If the repair further modified one of those files,
 this conservative check will leave the bot PR open: close it manually after
 confirming it is obsolete.
 
+Cleanup considers only the two known updater branches, verifies the PR's bot
+identity and current head, and is **best effort**. If the GitHub API or deletion
+fails, the workflow summary warns but valid package updates are not blocked.
+A green updater workflow therefore does not prove that a superseded PR was
+closed. Inspect the PR and close it manually if its remaining changes are
+obsolete; do not infer redundancy just from matching version numbers.
+
 You can close the bot PR manually at any time. You can also push to its branch
 if you have permission, but it is **owned by the updater**: a later accepted
 update in the same category can rewrite it and discard manual commits.
@@ -220,6 +239,13 @@ and downstream patch contents, not volatile build logs or run IDs. Thus the
 next scheduled attempt does not request the same analysis again—even if the
 model timed out. A materially new source/patch combination can be analysed.
 
+Each eligible failed package receives its own diagnosis comment in the shared
+failure issue. If a later reservation request fails, already saved reservations
+can still be reviewed and published; unavailable analyses get an explicit
+fallback rather than being mistaken for a successful diagnosis. A reservation
+or publication failure should be investigated in that workflow run, not treated
+as a package-build failure.
+
 A reserved marker is **not evidence that the diagnosis succeeded**. The
 original build failure and its logs remain authoritative.
 
@@ -236,6 +262,27 @@ The package-update, nixpkgs-update and spot-check workflows share a maintenance
 concurrency group so their proposed changes do not race. PR verification uses
 separate per-PR groups with cancellation enabled; the trusted reporter must
 still handle overlapping events safely.
+
+## Operational configuration and diagnosis
+
+The `trusted-automation` environment limits trusted jobs. Repository variable
+`AUTOMATION_APP_CLIENT_ID` and secret `AUTOMATION_APP_PRIVATE_KEY` provide the
+App's short-lived credentials for PR/issue operations and trusted commit
+statuses. `UPDATE_MAINTAINERS` supplies assignees and is required when the
+updater proposes manual-review packages. `GEMINI_API_KEY` enables advisory
+analyses but does not grant GitHub write access or determine merge approval.
+`CACHIX_AUTH_TOKEN` is needed for binary publication, not for unprivileged
+PR checks. Do not move these credentials into code or jobs running PR content.
+
+For an unexpected updater outcome, start with the **Update packages** run
+summary and the corresponding job: `discover` (target evaluation), `update`
+(source/version proposal), `prepare-builds` (build matrix), native `plugins`/
+`opendeck` builds, then `finalize` (accepted changes and reporting). A known
+package failure appears in the persistent failure issue; missing or invalid
+reports are infrastructure failures and must not publish partial updates.
+Inspect the run artifacts and full logs when bounded excerpts are insufficient.
+A failed obsolete-PR cleanup is reported as a warning; inspect the PR separately
+rather than rerunning native package builds just to troubleshoot GitHub closure.
 
 ## Making changes safely
 
