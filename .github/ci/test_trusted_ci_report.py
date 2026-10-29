@@ -48,6 +48,7 @@ class FakeAPI:
         self.pr = pr
         self.changed = set()
         self.newer = False
+        self.recent = []
         self.jobs = [{"name": next(job for name, job, _ in reporter.WORKFLOWS.values() if name == kind),
                       "conclusion": "success"}]
         self.published = []
@@ -62,6 +63,7 @@ class FakeAPI:
         if path.startswith("/actions/workflows/"):
             if self.newer:
                 yield {"id": 43, "display_title": f"Checks PR #39 merge {MERGE}"}
+            yield from self.recent
         elif path.startswith("/actions/runs/"):
             yield from self.jobs
         else:
@@ -126,6 +128,46 @@ class ReporterTests(unittest.TestCase):
         self.assertIsNone(reporter.assess(event, api))
         api.newer = False
         event["workflow_run"]["conclusion"] = "cancelled"
+        self.assertIsNone(reporter.assess(event, api))
+
+    def test_cancelled_newer_run_does_not_hide_success(self):
+        event, _, api = self.setup_case()
+        api.recent = [{
+            "id": 43, "display_title": f"Checks PR #39 merge {MERGE}",
+            "status": "completed", "conclusion": "cancelled",
+        }]
+        self.assertEqual(reporter.assess(event, api)["state"], "success")
+
+    def test_cancelled_run_reconsiders_earlier_completion(self):
+        event, _, api = self.setup_case()
+        event["workflow_run"]["id"] = 43
+        event["workflow_run"]["conclusion"] = "cancelled"
+        api.recent = [{
+            "id": 42, "display_title": f"Checks PR #39 merge {MERGE}",
+            "head_sha": HEAD, "status": "completed", "conclusion": "success",
+            "html_url": "https://github.com/example/run/42",
+        }]
+        result = reporter.assess(event, api)
+        self.assertEqual(result["state"], "success")
+        self.assertEqual(result["url"], "https://github.com/example/run/42")
+
+    def test_cancelled_run_does_not_recover_running_or_obsolete_results(self):
+        event, _, api = self.setup_case()
+        event["workflow_run"]["id"] = 43
+        event["workflow_run"]["conclusion"] = "cancelled"
+        prior = {
+            "id": 42, "display_title": f"Checks PR #39 merge {MERGE}",
+            "head_sha": HEAD, "status": "completed", "conclusion": "success",
+            "html_url": "https://github.com/example/run/42",
+        }
+        api.recent = [{**prior, "status": "in_progress"}]
+        self.assertIsNone(reporter.assess(event, api))
+        api.recent = [{**prior, "head_sha": "d" * 40}]
+        self.assertIsNone(reporter.assess(event, api))
+        api.recent = [prior, {
+            "id": 44, "display_title": f"Checks PR #39 merge {MERGE}",
+            "status": "in_progress", "conclusion": None,
+        }]
         self.assertIsNone(reporter.assess(event, api))
 
     def test_both_verifications_require_label(self):

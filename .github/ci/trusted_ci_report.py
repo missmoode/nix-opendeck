@@ -82,8 +82,6 @@ def assess(event, api):
     path = (run.get("path") or "").split("@", 1)[0]
     if run.get("event") != "pull_request" or path not in WORKFLOWS:
         return None
-    if (run.get("status"), run.get("conclusion")) == ("completed", "cancelled"):
-        return None
     if run.get("status") != "completed" or run.get("repository", {}).get("full_name") != api.repo:
         return None
 
@@ -109,13 +107,33 @@ def assess(event, api):
 
     # A newer run for the same PR merge takes precedence, even if it has not
     # finished yet (e.g. after adding/removing the ready-for-merge label).
+    # Cancelled runs are not authoritative: an overlapping PR event can cancel
+    # a newer run while leaving an earlier successful verification usable.
     expected_title = f"{kind} PR #{pr_number} merge {merge_sha}"
-    recent = api.pages(
+    recent = list(api.pages(
         f"/actions/workflows/{path.rsplit('/', 1)[-1]}/runs"
         f"?event=pull_request&head_sha={head_sha}", key="workflow_runs"
-    )
+    ))
+    if run.get("conclusion") == "cancelled":
+        # The earlier completion event may already have been ignored while
+        # this run was pending. Reconsider it now that this run is cancelled.
+        previous = [
+            other for other in recent
+            if other["id"] < run["id"]
+            and other.get("display_title") == expected_title
+            and other.get("head_sha") == head_sha
+            and other.get("status") == "completed"
+            and other.get("conclusion") != "cancelled"
+        ]
+        if not previous:
+            return None
+        run = max(previous, key=lambda other: other["id"])
     if any(
         other["id"] > run["id"] and other.get("display_title") == expected_title
+        and other.get("conclusion") != "cancelled"
+        # The triggering cancellation can precede the list API's update.
+        and not (other["id"] == event["workflow_run"]["id"]
+                 and event["workflow_run"].get("conclusion") == "cancelled")
         for other in recent
     ):
         print("Superseded by a newer run; ignoring", file=sys.stderr)
