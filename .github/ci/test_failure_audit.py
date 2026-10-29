@@ -8,6 +8,8 @@ import io
 import sys
 from pathlib import Path
 import tempfile
+import subprocess
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -144,6 +146,39 @@ patches = [
             self.assertEqual(json.loads(out.read_text()), [])
         self.assertEqual(len(posts), 1)
 
+    def test_partial_reservations_can_be_published_after_later_failure(self):
+        first = self.select('Hunk #1 FAILED')[0]
+        second = first | {"fingerprint": "different-fingerprint"}
+        candidates = self.root / "candidates.json"
+        reservations = self.root / "reservations.json"
+        candidates.write_text(json.dumps([first, second]))
+
+        published = []
+
+        def fake_gh(*args):
+            if "--paginate" in args:
+                return ""
+            if "POST" in args:
+                if audit.marker(first["fingerprint"]) in args[-1]:
+                    return json.dumps({"id": 99})
+                raise subprocess.CalledProcessError(1, args)
+            if "PATCH" in args:
+                published.append(args)
+                return "{}"
+            raise AssertionError(args)
+
+        with patch.object(audit, "gh", side_effect=fake_gh), patch.dict(os.environ, {
+            "GH_REPO": "example/nix-opendeck", "APP_BOT_LOGIN": "bot[bot]", "ISSUE_NUMBER": "12",
+        }):
+            with self.assertRaises(subprocess.CalledProcessError):
+                audit.reserve(candidates, reservations)
+            saved = json.loads(reservations.read_text())
+            self.assertEqual([item["comment_id"] for item in saved], [99])
+            # The workflow's always() guarded publication can finish this
+            # reservation even though the following POST failed.
+            audit.publish(reservations, self.root / "missing-reviews.json")
+        self.assertEqual(len(published), 1)
+
 
 class DiagnosticCaptureTests(unittest.TestCase):
     def test_failed_updater_retains_diagnostic_excerpt(self):
@@ -160,6 +195,24 @@ class DiagnosticCaptureTests(unittest.TestCase):
         self.assertIn("Hunk #1 FAILED", excerpt)
         self.assertNotIn("\x1b", excerpt)
         self.assertLessEqual(len(excerpt), 10000)
+
+    def test_platform_dependency_failure_preserves_captured_stderr(self):
+        target = {"id": "example", "label": "example", "system": "x86_64-linux",
+                  "attr": "packages.x86_64-linux.example", "patches": []}
+        error = subprocess.CalledProcessError(
+            1, ["nix", "eval"], output=b"evaluation output",
+            stderr=b"\x1b[31merror: dependency updater failed\x1b[0m",
+        )
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ, {"TARGET": json.dumps(target)}
+        ), patch.object(package_updates, "update_platform_deps", side_effect=error):
+            result = Path(temp) / "result.json"
+            code = package_updates.build(SimpleNamespace(updates=temp, output=result))
+            report = json.loads(result.read_text())
+        self.assertEqual(code, 1)
+        self.assertEqual(report["phase"], "platform-dependencies")
+        self.assertIn("dependency updater failed", report["errorExcerpt"])
+        self.assertNotIn("\x1b", report["errorExcerpt"])
 
     def test_issue_always_includes_excerpt(self):
         with tempfile.TemporaryDirectory() as temp:

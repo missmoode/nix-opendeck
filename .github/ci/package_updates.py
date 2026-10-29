@@ -303,6 +303,15 @@ def build(args):
         if code:
             result["error"] = f"nix build exited with {code}"
             result["errorExcerpt"] = excerpt
+    except subprocess.CalledProcessError as exc:
+        result["status"] = "failed"
+        result["error"] = str(exc)
+        captured = "\n".join(
+            part.decode("utf-8", "replace") if isinstance(part, bytes) else part
+            for part in (exc.stdout, exc.stderr) if part
+        )
+        captured = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", captured)
+        result["errorExcerpt"] = captured[-10000:] or str(exc)
     except Exception as exc:
         result["status"] = "failed"
         result["error"] = str(exc)
