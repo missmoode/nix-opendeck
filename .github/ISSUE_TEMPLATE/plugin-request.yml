@@ -1,0 +1,40 @@
+name: Plugin packaging request
+description: Suggest another OpenDeck plugin to package for Nix
+labels: ["plugin request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You don't need to know anything about Nix packaging. Include whatever
+        information you have; licensing and redistribution will be checked before packaging.
+  - type: input
+    id: plugin-name
+    attributes:
+      label: Plugin name
+    validations:
+      required: true
+  - type: input
+    id: upstream
+    attributes:
+      label: Upstream repository or download link
+      description: If you know where its source or releases are published.
+  - type: textarea
+    id: purpose
+    attributes:
+      label: What does it do?
+      description: Briefly describe the plugin.
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: Upstream license (if known)
+  - type: input
+    id: license-link
+    attributes:
+      label: Link to license (if known)
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Known platform limitations, runtime requirements, or compatibility problems.
