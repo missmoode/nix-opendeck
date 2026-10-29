@@ -8,8 +8,7 @@ body:
       value: |
         Put the name of the plugin in the title above.
 
-        You don't need to know anything about Nix packaging. Include whatever
-        information you have; licensing and redistribution will be checked before packaging.
+        You don't need to know anything about Nix packaging. Include whatever information you have; licensing and redistribution will be checked before packaging.
   - type: input
     id: upstream
     attributes:
