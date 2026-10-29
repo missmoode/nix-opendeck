@@ -582,33 +582,43 @@ jobs:
 
       # Only Gemini's secret is available to this step, not the GitHub App token.
       - name: Diagnose newly failed downstream patches with Gemini
-        if: steps.failure-reserve.outcome == 'success' && steps.failure-reserve.outputs.count != '0'
+        if: >-
+          always() && steps.failure-select.outcome == 'success' &&
+          (steps.failure-reserve.outcome == 'success' || steps.failure-reserve.outcome == 'failure')
         continue-on-error: true
         timeout-minutes: 10
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          python3 .github/ci/failure_audit.py review \
-            --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
-            --output "$RUNNER_TEMP/failure-audit-reviews.json"
+          if [[ -s "$RUNNER_TEMP/failure-audit-reservations.json" ]]; then
+            python3 .github/ci/failure_audit.py review \
+              --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
+              --output "$RUNNER_TEMP/failure-audit-reviews.json"
+          fi
 
+      # Finish any reservations that were saved before a later reservation failed.
       # Even a timed-out or unavailable model gets a clear final issue comment.
       - name: Publish failure diagnoses
         id: failure-publish
-        if: always() && steps.failure-reserve.outcome == 'success' && steps.failure-reserve.outputs.count != '0'
+        if: >-
+          always() && steps.failure-select.outcome == 'success' &&
+          (steps.failure-reserve.outcome == 'success' || steps.failure-reserve.outcome == 'failure')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          python3 .github/ci/failure_audit.py publish \
-            --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
-            --reviews "$RUNNER_TEMP/failure-audit-reviews.json"
+          if [[ -s "$RUNNER_TEMP/failure-audit-reservations.json" ]]; then
+            python3 .github/ci/failure_audit.py publish \
+              --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
+              --reviews "$RUNNER_TEMP/failure-audit-reviews.json"
+          fi
 
       # A separate combined repair PR may have incorporated an updater PR's
       # source changes. Reconcile this even when today's updater finds nothing;
       # never close a partially superseded PR or an unrelated user PR.
       - name: Close obsolete updater PRs
+        id: cleanup
         if: steps.app-token.outcome == 'success' && github.ref_name == github.event.repository.default_branch
         continue-on-error: true
         env:
@@ -617,6 +627,12 @@ jobs:
           APP_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: python3 .github/ci/reconcile_update_prs.py
+
+      - name: Report updater PR cleanup failure
+        if: always() && steps.cleanup.outcome == 'failure'
+        run: |
+          echo '::warning::Could not reconcile obsolete updater PRs; inspect this run and close stale PRs manually.'
+          echo 'Updater PR cleanup failed; stale updater PRs may need manual closure.' >> "$GITHUB_STEP_SUMMARY"
 
       # A failed package does not prevent merging other validated updates.
       - name: Enable auto-merge for validated updates

@@ -17,7 +17,7 @@ class SourceRedundancyTests(unittest.TestCase):
         self.previous = Path.cwd()
         os.chdir(self.tmp.name)
         self.addCleanup(os.chdir, self.previous)
-        for argv in (("init", "-q"), ("config", "user.name", "Test"),
+        for argv in (("init", "-q", "-b", "main"), ("config", "user.name", "Test"),
                      ("config", "user.email", "test@example.invalid")):
             self.git(*argv)
         self.write("src/plugin.nix", 'version = "1";\n')
@@ -45,37 +45,37 @@ class SourceRedundancyTests(unittest.TestCase):
         for path, body in changes.items():
             self.write(path, body)
         self.commit("proposed updater changes")
-        self.git("switch", "-q", "master")
+        self.git("switch", "-q", "main")
 
     def test_unmerged_update_is_preserved(self):
         self.propose({"src/plugin.nix": 'version = "2";\n'})
-        self.assertFalse(cleanup.redundant_source_changes("master", "automated/test"))
+        self.assertFalse(cleanup.redundant_source_changes("main", "automated/test"))
 
     def test_combined_repair_on_main_makes_update_redundant(self):
         self.propose({"src/plugin.nix": 'version = "2";\n'})
         self.write("src/plugin.nix", 'version = "2";\n')
         self.write("src/patches/fix.patch", "new patch for v2\n")
         self.commit("merged version and patch repair")
-        self.assertTrue(cleanup.redundant_source_changes("master", "automated/test"))
+        self.assertTrue(cleanup.redundant_source_changes("main", "automated/test"))
 
     def test_partially_integrated_update_stays_open(self):
         self.propose({"src/plugin.nix": 'version = "2";\n',
                       "src/another.nix": 'version = "2";\n'})
         self.write("src/plugin.nix", 'version = "2";\n')
         self.commit("merged first package only")
-        self.assertFalse(cleanup.redundant_source_changes("master", "automated/test"))
+        self.assertFalse(cleanup.redundant_source_changes("main", "automated/test"))
 
     def test_modified_derivation_not_equivalent_is_preserved(self):
         self.propose({"src/plugin.nix": 'version = "2";\n'})
         self.write("src/plugin.nix", 'version = "2";\n# different repair edits\n')
         self.commit("different file content")
-        self.assertFalse(cleanup.redundant_source_changes("master", "automated/test"))
+        self.assertFalse(cleanup.redundant_source_changes("main", "automated/test"))
 
     def test_non_source_edit_is_not_auto_closed(self):
         self.propose({".github/workflows/update-packages.yml": "changed workflow\n"})
         self.write(".github/workflows/update-packages.yml", "changed workflow\n")
         self.commit("same workflow on main")
-        self.assertFalse(cleanup.redundant_source_changes("master", "automated/test"))
+        self.assertFalse(cleanup.redundant_source_changes("main", "automated/test"))
 
 
 class MatchingPRTests(unittest.TestCase):
