@@ -531,8 +531,8 @@ plugin through nix-opendeck rather than the graphical store may resolve these
 issues.
 
 However, Nix-packaged plugins can also encounter problems due to immutable
-store paths, missing runtime dependencies, system configuration, or downstream
-OpenDeck patches.
+store paths, missing runtime dependencies, system configuration, or nix-opendeck’s
+downstream patches.
 
 If you encounter a problem, the following sections may help identify its cause:
 
@@ -557,6 +557,10 @@ Be certain before contacting the upstream devs!
 
 nix-opendeck is a personal packaging project maintained on a best-effort
 basis. I can't promise compatibility with every plugin, nor ongoing support.
+
+You can [report an issue](https://github.com/missmoode/nix-opendeck/issues/new?template=bug-report.yml)
+on nix-opendeck’s tracker if you’re sure it’s within this project’s remit,
+but I’m not comfortable assuring guaranteed action in response.
 
 ### Bundled Plugins
 
