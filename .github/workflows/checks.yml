@@ -31,11 +31,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Test package updater
+      - name: Test CI Python components
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest discover -s .github/ci -p 'test_package_updates.py'
+          python3 -m unittest discover -s .github/ci -p 'test_*.py'
 
       - uses: cachix/install-nix-action@v31
 

@@ -30,12 +30,8 @@ jobs:
       - name: Record source revision
         id: base
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Test package update orchestrator
-        run: python3 -m unittest discover -s .github/ci -p 'test_package_updates.py'
-      - name: Test upstream compatibility routing
-        run: python3 -m unittest discover -s .github/ci -p 'test_upstream_compatibility.py'
-      - name: Test failed-update diagnostics and deduplication
-        run: python3 -m unittest discover -s .github/ci -p 'test_failure_audit.py'
+      - name: Test all CI Python components
+        run: python3 -m unittest discover -s .github/ci -p 'test_*.py'
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ github.token }}

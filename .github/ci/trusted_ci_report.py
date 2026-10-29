@@ -76,6 +76,47 @@ class GitHub:
         )
 
 
+def select_authoritative_run(event_run, recent, expected_title, head_sha):
+    """Select a completed run for one exact head/merge pair.
+
+    A cancellation event may recover a prior completed run if it was previously
+    superseded. Never accept a different commit or let a cancelled newer run
+    invalidate an otherwise authoritative success. Called only after PR identity
+    and current-revision validation.
+    """
+    # A newer run for the same PR merge takes precedence, even if it has not
+    # finished yet (e.g. after adding/removing the ready-for-merge label).
+    # Cancelled runs are not authoritative: an overlapping PR event can cancel
+    # a newer run while leaving an earlier successful verification usable.
+    run = event_run
+    if run.get("conclusion") == "cancelled":
+        # The earlier completion event may already have been ignored while
+        # this run was pending. Reconsider it now that this run is cancelled.
+        previous = [
+            other for other in recent
+            if other["id"] < run["id"]
+            and other.get("display_title") == expected_title
+            and other.get("head_sha") == head_sha
+            and other.get("status") == "completed"
+            and other.get("conclusion") != "cancelled"
+        ]
+        if not previous:
+            return None
+        run = max(previous, key=lambda other: other["id"])
+    if any(
+        other["id"] > run["id"] and other.get("display_title") == expected_title
+        and other.get("conclusion") != "cancelled"
+        # The triggering cancellation can precede the list API's update.
+        and not (other["id"] == event_run["id"]
+                 and event_run.get("conclusion") == "cancelled")
+        for other in recent
+    ):
+        print("Superseded by a newer run; ignoring", file=sys.stderr)
+        return None
+
+    return run
+
+
 def assess(event, api):
     """None means an irrelevant/obsolete run; otherwise return a checked verdict."""
     run = event["workflow_run"]
@@ -105,40 +146,16 @@ def assess(event, api):
     if run.get("pull_requests") and pr_number not in [p["number"] for p in run["pull_requests"]]:
         return None
 
-    # A newer run for the same PR merge takes precedence, even if it has not
-    # finished yet (e.g. after adding/removing the ready-for-merge label).
-    # Cancelled runs are not authoritative: an overlapping PR event can cancel
-    # a newer run while leaving an earlier successful verification usable.
+    # Runs are evaluated only for the current PR head and merge commit. Run
+    # selection does not itself certify any job or produce a GitHub status.
     expected_title = f"{kind} PR #{pr_number} merge {merge_sha}"
     recent = list(api.pages(
         f"/actions/workflows/{path.rsplit('/', 1)[-1]}/runs"
         f"?event=pull_request&head_sha={head_sha}", key="workflow_runs"
     ))
-    if run.get("conclusion") == "cancelled":
-        # The earlier completion event may already have been ignored while
-        # this run was pending. Reconsider it now that this run is cancelled.
-        previous = [
-            other for other in recent
-            if other["id"] < run["id"]
-            and other.get("display_title") == expected_title
-            and other.get("head_sha") == head_sha
-            and other.get("status") == "completed"
-            and other.get("conclusion") != "cancelled"
-        ]
-        if not previous:
-            return None
-        run = max(previous, key=lambda other: other["id"])
-    if any(
-        other["id"] > run["id"] and other.get("display_title") == expected_title
-        and other.get("conclusion") != "cancelled"
-        # The triggering cancellation can precede the list API's update.
-        and not (other["id"] == event["workflow_run"]["id"]
-                 and event["workflow_run"].get("conclusion") == "cancelled")
-        for other in recent
-    ):
-        print("Superseded by a newer run; ignoring", file=sys.stderr)
+    run = select_authoritative_run(run, recent, expected_title, head_sha)
+    if run is None:
         return None
-
     # PR-authored changes to verification policy cannot produce App success.
     protected = (path, *REPORTER_PATHS)
     if kind == "Reproducibility":
@@ -175,6 +192,7 @@ def assess(event, api):
             and pr["head"]["ref"] in ("automated/package-updates", "automated/nixpkgs-update")
         ),
     }
+
 
 
 def notify(api, result):

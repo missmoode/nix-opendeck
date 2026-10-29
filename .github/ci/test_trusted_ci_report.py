@@ -1,7 +1,7 @@
 """Focused tests for the privileged reporter's trust boundary.
 
-Run manually when changing trusted_ci_report.py. These are mocked unit tests,
-not a substitute for a live GitHub Actions integration test.
+Included in the PR and updater Python test suites. These are mocked unit
+tests, not a substitute for a live GitHub Actions integration test.
 """
 
 import importlib.util
@@ -167,6 +167,33 @@ class ReporterTests(unittest.TestCase):
         api.recent = [prior, {
             "id": 44, "display_title": f"Checks PR #39 merge {MERGE}",
             "status": "in_progress", "conclusion": None,
+        }]
+        self.assertIsNone(reporter.assess(event, api))
+
+    def test_cancelled_new_commit_cannot_reuse_old_success(self):
+        """A cancellation must never certify a different commit or merge tree."""
+        for kind in ("Checks", "Reproducibility"):
+            with self.subTest(kind=kind):
+                event, pr, api = self.setup_case(kind)
+                event["workflow_run"]["id"] = 43
+                event["workflow_run"]["conclusion"] = "cancelled"
+                # Run 42 passed, but for the previous PR head/merge revision.
+                api.recent = [{
+                    "id": 42, "display_title": event["workflow_run"]["display_title"],
+                    "head_sha": "d" * 40, "status": "completed",
+                    "conclusion": "success", "html_url": "https://github.com/example/run/42",
+                }]
+                self.assertIsNone(reporter.assess(event, api))
+                # Even a valid prior run becomes obsolete after a new push.
+                api.recent[0]["head_sha"] = HEAD
+                pr["head"]["sha"] = "d" * 40
+                self.assertIsNone(reporter.assess(event, api))
+
+    def test_newer_failed_run_is_authoritative_over_older_success(self):
+        event, _, api = self.setup_case()
+        api.recent = [{
+            "id": 43, "display_title": f"Checks PR #39 merge {MERGE}",
+            "head_sha": HEAD, "status": "completed", "conclusion": "failure",
         }]
         self.assertIsNone(reporter.assess(event, api))
 
