@@ -424,14 +424,22 @@ def render_failure_issue(state_file, output):
         "Not every update failure is caused by a downstream patch. "
         "Check the diagnostic excerpts and workflow logs first.",
         "",
-        "If a patch must be adapted to a newer upstream version, create "
-        "a repair branch from `main` and commit the patch change there. "
-        "Manually run **Update packages** against that branch, then merge "
-        "the resulting validated update PR into the repair branch. "
-        "Finally, open a PR containing both the patch fix and upstream "
-        "version update against `main`.",
+        "If an upstream update breaks a downstream patch, repair the **new "
+        "version and the patch together** in a branch; don't merge a "
+        "version-dependent fix by itself. Download the `updates-<system>` "
+        "artifact from the linked workflow run to recover the updater's "
+        "proposed version/hash changes (even if the build failed). Apply "
+        "the affected package diff, adapt the downstream patch, test, and "
+        "open **one PR against `main`** with the `run checks` label. "
+        "Already committed the updated version and hashes? Keep them; "
+        "you don't need to rerun the updater.",
         "",
-        "A successful run on a repair branch does not close this issue. "
+        "[Repair procedure and commands](" +
+        os.environ.get("GITHUB_SERVER_URL", "https://github.com") + "/" +
+        os.environ.get("GITHUB_REPOSITORY", "missmoode/nix-opendeck") +
+        "/blob/main/.github/INFO.md#repairing-downstream-patches-for-new-upstream-versions).",
+        "",
+        "Merging a repair PR does not close this issue automatically. "
         "The normal updater on `main` reconciles outstanding failures.",
     ])
     lines.extend(["", "### Diagnostic excerpts", "",

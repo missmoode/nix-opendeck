@@ -195,17 +195,29 @@ def pr_bodies(routes_file, auto_file, review_file):
             "",
             "### If a downstream patch needs adapting",
             "",
-            "If a patch fix only works with the new upstream version, do not "
-            "merge it into `main` separately. Create a repair branch from `main`, "
-            "commit the patch fix there, and manually run **Update packages** "
-            "against that branch.",
+            "If the compatibility fix requires this upstream version, do not "
+            "merge the patch fix alone. Check out this PR's **already updated "
+            "source** into a separate repair branch (`gh pr checkout "
+            "PR_NUMBER --detach`, then `git switch -c repair/PACKAGE`), "
+            "keeping the relevant version and hash changes.",
             "",
-            "Merge the resulting automated update PR into the repair branch, "
-            "then open a PR containing both changes against `main`.",
+            "Adapt the downstream patch, test and commit the combined "
+            "source changes. Open **one PR from the repair branch into `main`** "
+            "and add the `run checks` label. Do not push changes to the "
+            "bot-maintained branch because later updates may overwrite manual "
+            "commits. No new updater run or intermediate PR is needed. "
+            "Exclude unrelated package updates.",
             "",
-            "The intermediate PR must be reviewed manually; trusted CI statuses "
-            "are only issued for PRs targeting `main`. Keep unrelated package "
-            "updates out of the final PR.",
+            "If you merge a combined repair PR, the next updater run will "
+            "close this PR only when all its proposed source files match "
+            "`main`. Otherwise, close this PR manually once it is obsolete. "
+            "You can push directly to this bot branch, but a future update "
+            "may overwrite those commits.",
+            "",
+            "[Repair procedure and commands](" +
+            os.getenv("GITHUB_SERVER_URL", "https://github.com") + "/" +
+            os.getenv("GITHUB_REPOSITORY", "missmoode/nix-opendeck") +
+            "/blob/main/.github/INFO.md#repairing-downstream-patches-for-new-upstream-versions).",
         ]
         Path(review_file).write_text("\n".join(rows))
 

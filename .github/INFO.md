@@ -19,6 +19,7 @@ behaviour for cases that have not occurred. Preserve the difference between an
 | `ci/package_updates.py` | Discover updater targets, isolate proposed source edits, validate native builds, compose accepted updates and render diagnostic excerpts |
 | `ci/upstream_compatibility.py` | Identify accepted updates with downstream patches, split manual-review/ordinary PRs, and provide the bounded static Gemini compatibility review |
 | `ci/failure_audit.py` | Select patch-relevant failed builds, deduplicate requests using persistent issue comments, and obtain/publish optional Gemini diagnoses |
+| `ci/reconcile_update_prs.py` | Close only bot-authored updater PRs whose source changes are already identical on `main`; do not infer supersession from version numbers alone |
 | `workflows/checks.yml` | Unprivileged PR unit tests and Nix evaluation/build checks |
 | `workflows/pr-reproducibility.yml` | Unprivileged native verification of changed output paths, including independent rebuilds |
 | `workflows/trusted-ci-report.yml` and `ci/trusted_ci_report.py` | Default-branch, privileged verification of PR run provenance and publication of required App commit statuses |
@@ -77,7 +78,9 @@ Discover flake targets
   -> finalize: accept only validated changes, reject failures
       -> unpatched accepted sources: ordinary PR / auto-merge after required checks
       -> patched accepted sources: manual-review PR + static Gemini comment
+           -> maintainer can branch from that exact updated source to repair it
       -> rejected package: persistent failure issue + bounded log excerpts
+           -> original updater source diff remains available as a run artifact
            -> optional, selectively triggered failure diagnosis
 ```
 
@@ -103,33 +106,100 @@ Gemini response.
 
 ### Repairing downstream patches for new upstream versions
 
-When an upstream update breaks a downstream patch, the repair may be incompatible with the version currently packaged on `main`. Do not merge such a patch independently: it could break the existing package before the version update is applied.
+A downstream patch fix may require a newer upstream release; separately merging
+that fix while `main` still uses the old release could break the current build.
+**Keep the upstream version/hash changes and downstream patch changes together
+in one repair branch and merge them into `main` in one PR.** You can edit and
+commit any of these files in any order while developing. The updater does not
+need to run again once the desired version and hashes are already committed.
 
-The updater supports manual execution against non-default branches, allowing the patch repair and upstream version update to be validated together without modifying `main`.
+Start from the **broken updated source**, not necessarily from the old
+`main` package. How you get it depends on whether a bot PR exists:
 
-1. **Create a repair branch from `main`.** Modify the existing downstream patch and commit the repair. It does not need to build against the old upstream version if the fix specifically targets the new release.
+**If an update built successfully but needs a downstream compatibility fix:**
 
-2. **Run the updater against the repair branch.** Push the branch, then dispatch the existing workflow:
+1. Open the updater's manual-review PR. Check out its proposed source changes
+   into a **separate local repair branch**, not the bot-maintained branch:
 
-   ```bash
-   gh workflow run update-packages.yml --ref fix/example-patch
+   ```sh
+   gh pr checkout PR_NUMBER --detach
+   git switch -c repair/opendeck-core
    ```
 
-3. **Review the generated update PR.** The updater uses the repair branch as its base, attempts the usual package updates, and validates them using the repaired patch. Successfully validated downstream-patched updates are proposed in a manual-review PR targeting the repair branch, not `main`.
+   Keep only the package update(s) relevant to the repair if the bot PR
+   includes unrelated packages. Do not push repairs to an `automated/` branch;
+   the daily updater may replace its contents.
 
-4. **Merge the generated PR into the repair branch.** Verify that it contains the intended version update. The updater may also propose unrelated package updates; exclude those from the final repair where possible.
+2. Modify the existing downstream patch(es) and any version, source hash,
+   dependency lock, or dependency hash values needed. Commit the combined
+   changes to the repair branch.
 
-5. **Open a final PR against `main`.** This PR should contain both the downstream patch repair and the upstream version update. Run the normal required checks and review the combined change before merging.
+**If the update failed its native build and no update PR was created:**
 
-**Important considerations:**
+1. Start with a clean branch from `main`:
 
-- The updater does not automatically merge PRs when dispatched against non-default branches.
-- The trusted CI reporter only certifies PRs targeting `main`. Intermediate updater PRs therefore do not receive its required App statuses; review and merge them manually.
-- The `trusted-automation` GitHub environment must permit execution from the selected repair branch.
-- Failed updates remain recorded in the persistent failure issue until a subsequent run on `main` reconciles them.
-- If the repaired patch also works with the currently packaged version, it can be merged independently before rerunning the updater on `main`. A separate repair branch is only necessary when the patch and upstream version must change together.
+   ```sh
+   git switch main
+   git pull --ff-only
+   git switch -c repair/opendeck-core
+   ```
 
-This procedure uses the existing updater's branch support. Do not introduce automatic patch ingestion, additional reconciliation machinery, or exceptions to the normal validation rules merely to support patch repairs.
+2. Open the **Automated package update failures** issue and follow its workflow
+   run link. Download the corresponding `updates-<system>` artifact (for example
+   `updates-x86_64-linux`), which was uploaded **even when the native build
+   failed**. The artifact contains the updater's proposed source diff, including
+   version and source-hash edits where the updater produced them:
+
+   ```sh
+   gh run download RUN_ID -n updates-x86_64-linux -D /tmp/opendeck-update
+   find /tmp/opendeck-update -type f -name '*.patch' -print
+   git apply --check /tmp/opendeck-update/updates-x86_64-linux/patches/core.patch
+   git apply /tmp/opendeck-update/updates-x86_64-linux/patches/core.patch
+   ```
+
+   Use the patch corresponding to your package; `core.patch` is for
+   `opendeck-core`. If several packages changed, do not indiscriminately apply
+   all their diffs. Downloaded artifacts expire after seven days, and an
+   updater failure may mean no proposed source patch exists. In either case,
+   edit/update the version and hashes locally instead.
+
+3. Treat the source diff as **proposed, not validated**: this run failed its
+   build. The `build-<target>-<system>` artifact and workflow logs may also
+   contain `sourceEdits` from native dependency updating that are not part of
+   the updater's source patch; inspect and incorporate relevant changes.
+   Repair the existing downstream patch(es) until the new version builds.
+
+**Then, for either starting point:**
+
+1. Test locally as appropriate, for example `nix build .#opendeck -L` for a
+   core change, and `nix flake check --no-build --all-systems`. Record all
+   intended version, hash, lock and patch changes in Git. There is no need to
+   discard an already-updated version/hash or rerun the updater on this branch.
+2. Push the repair branch, open **one PR targeting `main`**, and add the
+   `run checks` label. The existing unprivileged PR checks and native
+   reproducibility jobs will evaluate/build the **combined committed state**;
+   the trusted reporter checks PRs targeting `main`.
+3. Review those checks and the complete diff before merging. Do not merge a
+   version-dependent patch fix by itself. The next scheduled updater run on
+   `main` will reconcile any persistent update-failure issue.
+
+If a separate combined repair supersedes an existing bot update PR, the next
+scheduled run on `main` also attempts to close that PR and delete its branch.
+It does so **only when every source file changed by the bot PR has exactly the
+same contents on `main`**. If the repair further modified one of those files,
+this conservative check will leave the bot PR open: close it manually after
+confirming it is obsolete.
+
+You can close the bot PR manually at any time. You can also push to its branch
+if you have permission, but it is **owned by the updater**: a later accepted
+update in the same category can rewrite it and discard manual commits.
+Prefer a separate repair branch for fixes. Closing the PR before the updated
+version reaches `main` may result in the updater proposing it again.
+
+This process **does not require dispatching Update packages on a repair
+branch**, changing the `trusted-automation` environment, or creating an
+intermediate update PR. For a package whose patch fix also works with the
+current release, an independent patch PR remains an option.
 
 ### AI reviews are advisory, not CI gates
 
