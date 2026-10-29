@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 MARKER = "<!-- nix-opendeck-upstream-audit -->"
-MODEL = "gemini-3.8-flash"
+MODEL = "gemini-3.6-flash"
 MAX_INPUT_CHARS = 260_000
 MAX_OUTPUT_CHARS = 12_000
 VERSION_RE = re.compile(r'^\s*version\s*=\s*"([A-Za-z0-9][A-Za-z0-9._+-]*)"\s*;', re.MULTILINE)
@@ -246,6 +246,17 @@ Write a concise Markdown report with these categories only when applicable:
 - Confirmed incompatibility (include exact changed code and mechanism)
 - Plausible regression requiring verification (include concrete test)
 - No issue identified in the supplied changes
+
+Begin the response immediately with the first applicable finding heading.
+Do not include a preamble, introduction, or summary before the findings.
+
+Use exactly these Markdown headings, with four hash marks:
+#### Confirmed incompatibility
+#### Plausible regression requiring verification
+#### No issue identified in the supplied changes
+
+Include only applicable headings. Do not vary their wording or
+heading level. Use paragraphs and bullet points beneath each heading.
 
 Classify an incompatibility as confirmed only when the supplied code
 directly demonstrates the conflicting behaviour.

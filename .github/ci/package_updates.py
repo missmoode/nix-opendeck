@@ -6,6 +6,7 @@ information; this module does not maintain a second list of supported plugins.
 """
 
 import argparse
+from collections import deque
 import hashlib
 import json
 import os
@@ -28,8 +29,32 @@ def save(path, value):
 
 
 def run(*argv, check=True, **kwargs):
+    if argv and argv[0] == "nix-update" and not kwargs:
+        code, excerpt = logged_build(*argv)
+        result = subprocess.CompletedProcess(argv, code)
+        result.errorExcerpt = excerpt
+        if check and code:
+            raise subprocess.CalledProcessError(code, argv)
+        return result
     print("+", " ".join(str(part) for part in argv), flush=True)
     return subprocess.run(list(map(str, argv)), check=check, **kwargs)
+
+
+def logged_build(*argv):
+    """Stream output to Actions while retaining only a bounded diagnostic tail."""
+    print("+", " ".join(map(str, argv)), flush=True)
+    last_lines = deque(maxlen=120)
+    with subprocess.Popen(list(map(str, argv)), stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, text=True, errors="replace",
+                          bufsize=1) as process:
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            last_lines.append(line[-1200:])
+        code = process.wait()
+    excerpt = "".join(last_lines)
+    excerpt = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", excerpt)
+    return code, excerpt[-10000:].strip()
 
 
 def identifier(label):
@@ -96,6 +121,7 @@ def update(args):
             clean_tree(base)
             proc = run("nix-update", pkg["attr"], "--flake", "--use-update-script", check=False)
             if proc.returncode:
+                record["errorExcerpt"] = getattr(proc, "errorExcerpt", "")
                 raise RuntimeError(f"nix-update exited with {proc.returncode}")
             current = run("git", "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
             if current != base:
@@ -266,16 +292,21 @@ def build(args):
     output = Path(args.output)
     result = {k: target[k] for k in ("id", "label", "system", "attr")}
     try:
+        result["phase"] = "apply-update-patch"
         for pkg in target["patches"]:
             apply_patch(pkg, args.updates)
+        result["phase"] = "platform-dependencies"
         result["sourceEdits"] = update_platform_deps(target, output)
-        proc = run("nix", "build", "--no-link", "-L", ".#" + target["attr"], check=False)
-        result["status"] = "success" if proc.returncode == 0 else "failed"
-        if proc.returncode:
-            result["error"] = f"nix build exited with {proc.returncode}"
+        result["phase"] = "nix-build"
+        code, excerpt = logged_build("nix", "build", "--no-link", "-L", ".#" + target["attr"])
+        result["status"] = "success" if code == 0 else "failed"
+        if code:
+            result["error"] = f"nix build exited with {code}"
+            result["errorExcerpt"] = excerpt
     except Exception as exc:
         result["status"] = "failed"
         result["error"] = str(exc)
+        result.setdefault("errorExcerpt", str(exc))
     save(output, result)
     if result["status"] == "failed":
         print(f"::error::{target['label']} ({target['system']}): {result['error']}")
@@ -346,6 +377,63 @@ def apply_source_edits(accepted, prepared, build_root):
         touched.add(path)
     if touched:
         run("git", "add", "--", *sorted(touched))
+
+
+def collect_failure_diagnostics(prepared, build_root):
+    diagnostics = []
+    for record in prepared["updateResults"]:
+        if record.get("status") == "failed":
+            diagnostics.append({"label": record["label"], "system": record["system"],
+                                "phase": "updater", "error": record.get("error", "updater failed"),
+                                "excerpt": record.get("errorExcerpt", "")})
+    for target in prepared["plugins"] + prepared["opendeck"]:
+        path = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
+        if not path.is_file():
+            continue
+        try:
+            report = load(path)
+        except (ValueError, OSError):
+            continue
+        if report.get("status") != "failed" or any(
+            report.get(k) != target[k] for k in ("id", "label", "system", "attr")
+        ):
+            continue
+        diagnostics.append({
+            "label": target["label"], "system": target["system"],
+            "phase": report.get("phase", "unknown"),
+            "error": report.get("error", "build failed"),
+            "excerpt": report.get("errorExcerpt", ""),
+        })
+    return diagnostics
+
+
+def render_failure_issue(state_file, output):
+    state = load(state_file)
+    diagnostics = state.get("failureDiagnostics", [])
+    payload = {"failures": sorted(state["packageFailures"]), "diagnostics": diagnostics}
+    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    lines = [f"<!-- nix-opendeck-package-update-failures:{fingerprint} -->",
+             "## Outstanding package update failures", "",
+             "The automated updater could not validate the following updates. "
+             "Successfully validated updates are proposed separately.", ""]
+    lines.extend(f"- {failure.replace('@', '@​')}" for failure in state["packageFailures"])
+    lines.extend(["", "### Diagnostic excerpts", "",
+                  "The complete build output remains in the linked workflow logs. "
+                  "These excerpts are captured even when no AI diagnosis is requested.", ""])
+    remaining = 46000
+    for item in diagnostics:
+        if remaining <= 0:
+            lines.append("Additional excerpts omitted; consult the workflow logs.")
+            break
+        heading = f"**{item['label']}** (`{item['system']}`, {item['phase']}): {item['error']}"
+        excerpt = item.get("excerpt", "").strip() or "No additional output captured."
+        excerpt = excerpt.replace("```", "[code fence]").replace("@", "@​")
+        excerpt = excerpt[-min(3500, remaining):]
+        remaining -= len(excerpt)
+        lines.extend([heading.replace("@", "@​"), "", "```text", excerpt, "```", ""])
+    lines.append(f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+                 f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')})")
+    Path(output).write_text("\n".join(lines) + "\n")
 
 
 def finalize(args):
@@ -450,6 +538,7 @@ def finalize(args):
         "infrastructureFailure": bool(infrastructure_errors),
         "infrastructureErrors": infrastructure_errors,
         "packageFailures": package_failures,
+        "failureDiagnostics": collect_failure_diagnostics(prepared, args.builds),
         "accepted": [p["label"] for p in accepted],
     })
     print("\n".join(report))
@@ -484,8 +573,12 @@ def main():
     f.add_argument("--report", required=True)
     f.add_argument("--pr-report", required=True)
     f.add_argument("--state", required=True)
+    i = commands.add_parser("failure-issue")
+    i.add_argument("--state", required=True)
+    i.add_argument("--output", required=True)
     args = parser.parse_args()
-    return {"discover": discover, "update": update, "prepare": prepare, "build": build, "finalize": finalize}[args.command](args) or 0
+    return {"discover": discover, "update": update, "prepare": prepare, "build": build,
+            "finalize": finalize, "failure-issue": lambda a: render_failure_issue(a.state, a.output)}[args.command](args) or 0
 
 
 if __name__ == "__main__":
