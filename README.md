@@ -604,6 +604,9 @@ the plugin listing, but are not checked or provided by nix-opendeck.
 Below is a list of the plugins where a derivation is included in this repo.
 You can check their upstream sources for more information.
 
+If you want me to consider packaging a new plugin, you can [send a request](https://github.com/missmoode/nix-opendeck/issues/new?template=plugin-request.yml).
+Make sure to check if somebody else has already requested it first, though!
+
 ### Action & Integration Plugins
 
 Not every plugin is available on every platform. The flake filters the
