@@ -1,18 +1,15 @@
 name: Plugin packaging request
 description: Suggest another OpenDeck plugin to package for Nix
+title: "Plugin request: author/someplugin"
 labels: ["plugin request"]
 body:
   - type: markdown
     attributes:
       value: |
+        Put the name of the plugin in the title above.
+
         You don't need to know anything about Nix packaging. Include whatever
         information you have; licensing and redistribution will be checked before packaging.
-  - type: input
-    id: plugin-name
-    attributes:
-      label: Plugin name
-    validations:
-      required: true
   - type: input
     id: upstream
     attributes:
@@ -37,4 +34,4 @@ body:
     id: context
     attributes:
       label: Additional context
-      description: Known platform limitations, runtime requirements, or compatibility problems.
+      description: (Optional, but appreciated) Known platform limitations, runtime requirements, or compatibility problems if you anticipate any.
