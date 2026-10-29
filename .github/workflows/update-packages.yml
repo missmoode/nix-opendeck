@@ -34,6 +34,8 @@ jobs:
         run: python3 -m unittest discover -s .github/ci -p 'test_package_updates.py'
       - name: Test upstream compatibility routing
         run: python3 -m unittest discover -s .github/ci -p 'test_upstream_compatibility.py'
+      - name: Test failed-update diagnostics and deduplication
+        run: python3 -m unittest discover -s .github/ci -p 'test_failure_audit.py'
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ github.token }}
@@ -522,22 +524,13 @@ jobs:
           status=$(jq -r '.state // empty' <<< "$issue")
 
           if jq -e '.packageFailures | length > 0' "$state" > /dev/null; then
-            fingerprint=$(jq -c '.packageFailures | sort' "$state" | sha256sum | cut -d' ' -f1)
-            marker="<!-- nix-opendeck-package-update-failures:$fingerprint -->"
             body="$RUNNER_TEMP/package-update-issue.md"
-            {
-              printf '%s\n' "$marker"
-              echo '## Outstanding package update failures'
-              echo
-              echo 'The automated updater could not validate the following updates. Successfully validated updates are proposed separately.'
-              echo
-              jq -r '.packageFailures[] | "- " + .' "$state"
-              echo
-              echo "[Workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
-            } > "$body"
+            python3 .github/ci/package_updates.py failure-issue --state "$state" --output "$body"
+            marker=$(head -n 1 "$body")
 
             if [[ -z "$number" ]]; then
-              gh issue create --title "$title" --body-file "$body"
+              created=$(gh issue create --title "$title" --body-file "$body")
+              number=${created##*/}
             else
               existing_body=$(gh issue view "$number" --json body --jq .body)
               if [[ "$status" == CLOSED ]]; then
@@ -547,9 +540,69 @@ jobs:
                 gh issue edit "$number" --body-file "$body"
               fi
             fi
+            echo "number=$number" >> "$GITHUB_OUTPUT"
           elif [[ -n "$number" && "$status" == OPEN ]]; then
             gh issue close "$number" --reason completed
           fi
+
+      # Only changed-version builds with concrete patch-related diagnostics
+      # warrant an AI diagnosis. Selection has no API credentials or side effects.
+      - name: Select patch-related failed updates
+        id: failure-select
+        if: steps.issues.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/ci/failure_audit.py select \
+            --prepared "$RUNNER_TEMP/build-plan/prepared.json" \
+            --updates "$RUNNER_TEMP/updates" \
+            --builds "$RUNNER_TEMP/builds" \
+            --output "$RUNNER_TEMP/failure-audit-candidates.json"
+          echo "count=$(jq length "$RUNNER_TEMP/failure-audit-candidates.json")" >> "$GITHUB_OUTPUT"
+
+      # Reserve before using Gemini, so later scheduled runs cannot re-submit
+      # exactly the same upstream update and downstream patch combination.
+      - name: Reserve new failure diagnoses in existing issue
+        id: failure-reserve
+        if: steps.failure-select.outcome == 'success' && steps.failure-select.outputs.count != '0'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
+          ISSUE_NUMBER: ${{ steps.issues.outputs.number }}
+        run: |
+          set -euo pipefail
+          python3 .github/ci/failure_audit.py reserve \
+            --candidates "$RUNNER_TEMP/failure-audit-candidates.json" \
+            --output "$RUNNER_TEMP/failure-audit-reservations.json"
+          echo "count=$(jq length "$RUNNER_TEMP/failure-audit-reservations.json")" >> "$GITHUB_OUTPUT"
+
+      # Only Gemini's secret is available to this step, not the GitHub App token.
+      - name: Diagnose newly failed downstream patches with Gemini
+        if: steps.failure-reserve.outcome == 'success' && steps.failure-reserve.outputs.count != '0'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 .github/ci/failure_audit.py review \
+            --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
+            --output "$RUNNER_TEMP/failure-audit-reviews.json"
+
+      # Even a timed-out or unavailable model gets a clear final issue comment.
+      - name: Publish failure diagnoses
+        id: failure-publish
+        if: always() && steps.failure-reserve.outcome == 'success' && steps.failure-reserve.outputs.count != '0'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 .github/ci/failure_audit.py publish \
+            --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
+            --reviews "$RUNNER_TEMP/failure-audit-reviews.json"
 
       # A failed package does not prevent merging other validated updates.
       - name: Enable auto-merge for validated updates
@@ -584,6 +637,9 @@ jobs:
           steps.app-token.outcome != 'success' ||
           (github.ref_name == github.event.repository.default_branch &&
            steps.issues.outcome != 'success') ||
+          steps.failure-select.outcome == 'failure' ||
+          steps.failure-reserve.outcome == 'failure' ||
+          steps.failure-publish.outcome == 'failure' ||
           steps.pr.outcome == 'failure' ||
           (steps.audit-select.outcome == 'success' &&
            steps.audit-select.outputs.auto_count != '0' &&
