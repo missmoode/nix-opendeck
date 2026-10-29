@@ -417,6 +417,23 @@ def render_failure_issue(state_file, output):
              "The automated updater could not validate the following updates. "
              "Successfully validated updates are proposed separately.", ""]
     lines.extend(f"- {failure.replace('@', '@​')}" for failure in state["packageFailures"])
+    lines.extend([
+        "",
+        "### Resolving downstream patch failures",
+        "",
+        "Not every update failure is caused by a downstream patch. "
+        "Check the diagnostic excerpts and workflow logs first.",
+        "",
+        "If a patch must be adapted to a newer upstream version, create "
+        "a repair branch from `main` and commit the patch change there. "
+        "Manually run **Update packages** against that branch, then merge "
+        "the resulting validated update PR into the repair branch. "
+        "Finally, open a PR containing both the patch fix and upstream "
+        "version update against `main`.",
+        "",
+        "A successful run on a repair branch does not close this issue. "
+        "The normal updater on `main` reconciles outstanding failures.",
+    ])
     lines.extend(["", "### Diagnostic excerpts", "",
                   "The complete build output remains in the linked workflow logs. "
                   "These excerpts are captured even when no AI diagnosis is requested.", ""])

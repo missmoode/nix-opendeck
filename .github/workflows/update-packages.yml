@@ -530,7 +530,7 @@ jobs:
               created=$(gh issue create \
                 --title "$title" \
                 --body-file "$body" \
-                --label updates,automatically generated,automated failure report)
+                --label "updates,automatically generated,automated failure report")
               number=${created##*/}
             else
               existing_body=$(gh issue view "$number" --json body --jq .body)

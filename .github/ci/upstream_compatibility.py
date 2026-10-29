@@ -191,6 +191,22 @@ def pr_bodies(routes_file, auto_file, review_file):
         rows += ["This PR is deliberately **not auto-merged**. An AI-assisted upstream compatibility review is added as a comment when available. Its verdict is not an approval.", "", "### Packages", ""]
         rows += [f"- `{name}`" for name in data["reviewPackages"]]
         rows += ["", f"[Updater validation run]({link})", ""]
+        rows += [
+            "",
+            "### If a downstream patch needs adapting",
+            "",
+            "If a patch fix only works with the new upstream version, do not "
+            "merge it into `main` separately. Create a repair branch from `main`, "
+            "commit the patch fix there, and manually run **Update packages** "
+            "against that branch.",
+            "",
+            "Merge the resulting automated update PR into the repair branch, "
+            "then open a PR containing both changes against `main`.",
+            "",
+            "The intermediate PR must be reviewed manually; trusted CI statuses "
+            "are only issued for PRs targeting `main`. Keep unrelated package "
+            "updates out of the final PR.",
+        ]
         Path(review_file).write_text("\n".join(rows))
 
 

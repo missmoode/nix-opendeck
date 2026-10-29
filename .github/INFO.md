@@ -101,6 +101,36 @@ See `ci/package_updates.py` for the actual JSON field names and validation.
 Do not infer accepted updates from the presence of staged files or from a
 Gemini response.
 
+### Repairing downstream patches for new upstream versions
+
+When an upstream update breaks a downstream patch, the repair may be incompatible with the version currently packaged on `main`. Do not merge such a patch independently: it could break the existing package before the version update is applied.
+
+The updater supports manual execution against non-default branches, allowing the patch repair and upstream version update to be validated together without modifying `main`.
+
+1. **Create a repair branch from `main`.** Modify the existing downstream patch and commit the repair. It does not need to build against the old upstream version if the fix specifically targets the new release.
+
+2. **Run the updater against the repair branch.** Push the branch, then dispatch the existing workflow:
+
+   ```bash
+   gh workflow run update-packages.yml --ref fix/example-patch
+   ```
+
+3. **Review the generated update PR.** The updater uses the repair branch as its base, attempts the usual package updates, and validates them using the repaired patch. Successfully validated downstream-patched updates are proposed in a manual-review PR targeting the repair branch, not `main`.
+
+4. **Merge the generated PR into the repair branch.** Verify that it contains the intended version update. The updater may also propose unrelated package updates; exclude those from the final repair where possible.
+
+5. **Open a final PR against `main`.** This PR should contain both the downstream patch repair and the upstream version update. Run the normal required checks and review the combined change before merging.
+
+**Important considerations:**
+
+- The updater does not automatically merge PRs when dispatched against non-default branches.
+- The trusted CI reporter only certifies PRs targeting `main`. Intermediate updater PRs therefore do not receive its required App statuses; review and merge them manually.
+- The `trusted-automation` GitHub environment must permit execution from the selected repair branch.
+- Failed updates remain recorded in the persistent failure issue until a subsequent run on `main` reconciles them.
+- If the repaired patch also works with the currently packaged version, it can be merged independently before rerunning the updater on `main`. A separate repair branch is only necessary when the patch and upstream version must change together.
+
+This procedure uses the existing updater's branch support. Do not introduce automatic patch ingestion, additional reconciliation machinery, or exceptions to the normal validation rules merely to support patch repairs.
+
 ### AI reviews are advisory, not CI gates
 
 The **successful-build compatibility audit** in `ci/upstream_compatibility.py`
