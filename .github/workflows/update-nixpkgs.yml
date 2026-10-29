@@ -104,7 +104,8 @@ jobs:
           labels: |
             updates
             nixpkgs
-            ready for merge
+            automatically generated
+            run checks
 
       # GitHub, not this job, decides when the required PR checks have passed.
       - name: Enable auto-merge

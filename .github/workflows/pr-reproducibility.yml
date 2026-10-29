@@ -18,7 +18,7 @@ concurrency:
 jobs:
   discover:
     name: Discover changed packages
-    if: contains(github.event.pull_request.labels.*.name, 'ready for merge')
+    if: contains(github.event.pull_request.labels.*.name, 'run checks')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
@@ -357,7 +357,7 @@ jobs:
     needs: [discover, check]
     if: >-
       always() &&
-      contains(github.event.pull_request.labels.*.name, 'ready for merge')
+      contains(github.event.pull_request.labels.*.name, 'run checks')
     runs-on: ubuntu-24.04
     steps:
       - name: Verify all selected targets

@@ -169,12 +169,12 @@ def assess(event, api):
     job_pass = len(matching) == 1 and matching[0]["conclusion"] == "success"
     # Both checks require an actively labelled PR. A skipped Actions job
     # counts as success to GitHub, so the App status must enforce the gate.
-    requested = any(label["name"] == "ready for merge" for label in pr["labels"])
+    requested = any(label["name"] == "run checks" for label in pr["labels"])
     passed = unchanged and requested and run["conclusion"] == "success" and job_pass
     if not unchanged:
         description = "PR changed CI policy; trusted verification unavailable"
     elif not requested:
-        description = "Add 'ready for merge' to request verification"
+        description = "Add 'run checks' to request verification"
     elif passed:
         description = "Verified by trusted CI reporter"
     else:

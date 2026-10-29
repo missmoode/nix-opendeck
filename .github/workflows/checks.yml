@@ -21,7 +21,7 @@ jobs:
     # checks the current PR label before issuing its required status.
     if: >-
       github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'ready for merge')
+      contains(github.event.pull_request.labels.*.name, 'run checks')
     name: Tests and evaluation
     runs-on: ubuntu-24.04
     timeout-minutes: 30

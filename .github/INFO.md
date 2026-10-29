@@ -45,7 +45,7 @@ The trusted reporter (`ci/trusted_ci_report.py`) must:
 4. Compare the relevant workflow file and the trusted reporter files against
    the base revision. Reproducibility also protects `ci/targets.nix`.
 5. Require the expected job to pass exactly once and the PR to carry the
-   `ready for merge` label before publishing App success.
+   `run checks` label before publishing App success.
 6. Publish `nix-opendeck/tests` or `nix-opendeck/reproducibility` on the
    **PR head SHA**, not the synthetic merge SHA. Optional comments/assignment
    must never determine whether the status was written.

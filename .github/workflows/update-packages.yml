@@ -441,14 +441,15 @@ jobs:
           branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/patched-package-updates' || format('automated/patched-package-updates-{0}', github.ref_name) }}
           delete-branch: true
           add-paths: ${{ steps.audit-select.outputs.review_paths }}
-          title: 'chore: review patched OpenDeck package updates'
-          commit-message: 'chore: update patched OpenDeck packages'
+          title: 'chore: review downstream-patched package updates'
+          commit-message: 'chore: update downstream-patched packages'
           body-path: ${{ runner.temp }}/package-update-review-pr.md
           assignees: ${{ vars.UPDATE_MAINTAINERS }}
           labels: |
             updates
             upstream
-            ready for merge
+            automatically generated
+            run checks
 
       # Reuse the existing App token; keep one bot-owned compatibility comment.
       - name: Publish upstream compatibility review
@@ -488,13 +489,14 @@ jobs:
           branch: ${{ github.ref_name == github.event.repository.default_branch && 'automated/package-updates' || format('automated/package-updates-{0}', github.ref_name) }}
           delete-branch: true
           add-paths: ${{ steps.audit-select.outputs.auto_paths }}
-          title: 'chore: update OpenDeck packages'
-          commit-message: 'chore: update OpenDeck packages'
+          title: 'chore: update packages'
+          commit-message: 'chore: update packages'
           body-path: ${{ runner.temp }}/package-update-auto-pr.md
           labels: |
             updates
             upstream
-            ready for merge
+            automatically generated
+            run checks
 
       # One persistent issue tracks known package failures. Do not treat missing
       # or corrupt validation reports as recoverable package failures.
@@ -525,7 +527,10 @@ jobs:
             marker=$(head -n 1 "$body")
 
             if [[ -z "$number" ]]; then
-              created=$(gh issue create --title "$title" --body-file "$body")
+              created=$(gh issue create \
+                --title "$title" \
+                --body-file "$body" \
+                --label updates,automatically generated,automated failure report)
               number=${created##*/}
             else
               existing_body=$(gh issue view "$number" --json body --jq .body)

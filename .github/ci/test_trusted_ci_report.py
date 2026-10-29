@@ -36,7 +36,7 @@ def fixture(kind="Checks"):
         "state": "open", "merge_commit_sha": MERGE,
         "base": {"ref": "main", "sha": BASE, "repo": {"full_name": REPO}},
         "head": {"sha": HEAD, "ref": "feature", "repo": {"full_name": REPO}},
-        "labels": [{"name": "ready for merge"}], "user": {"login": "contributor"},
+        "labels": [{"name": "run checks"}], "user": {"login": "contributor"},
     }
     return event, pr
 
