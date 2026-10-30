@@ -5,7 +5,8 @@ selection of plugins for Nix, with patches to support immutable plugins in the
 Nix store. It provides declarative plugin management through both custom
 bundled packages and Home Manager.
 
-This is useful on NixOS, where plugins installed through OpenDeck's GUI may fail because they expect a conventional Linux environment. On other platforms,
+This is useful on NixOS, where plugins installed through OpenDeck's GUI may
+fail because they expect a conventional Linux environment. On other platforms,
 nix-opendeck still provides declarative plugin management.
 
 This is my first attempt at packaging software for Nix, made out of a personal
@@ -17,7 +18,8 @@ As this began as both a personal tool and a learning exercise, I [made use of
 LLM assistance during development](#llm-usage-disclosure).
 
 > [!WARNING]
-> Breaking changes may still happen for a little while, but I think it's unlikely at this point. This README will remain up-to-date.
+> Breaking changes may still happen for a little while, but I think it's very
+> unlikely at this point. This README will remain an up-to-date source of truth.
 
 <div align="center">
 
