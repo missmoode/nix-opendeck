@@ -167,14 +167,15 @@ def assess(event, api):
     jobs = list(api.pages(f"/actions/runs/{run['id']}/jobs", key="jobs"))
     matching = [job for job in jobs if job["name"] == job_name]
     job_pass = len(matching) == 1 and matching[0]["conclusion"] == "success"
-    # Both checks require an actively labelled PR. A skipped Actions job
-    # counts as success to GitHub, so the App status must enforce the gate.
-    requested = any(label["name"] == "run checks" for label in pr["labels"])
-    passed = unchanged and requested and run["conclusion"] == "success" and job_pass
+    # Draft jobs can be skipped but still look successful to GitHub.
+    # Only the current, explicitly non-draft PR may be certified;
+    # absent/malformed draft state fails closed.
+    ready = pr.get("draft") is False
+    passed = unchanged and ready and run["conclusion"] == "success" and job_pass
     if not unchanged:
         description = "PR changed CI policy; trusted verification unavailable"
-    elif not requested:
-        description = "Add 'run checks' to request verification"
+    elif not ready:
+        description = "Mark PR ready for review to request verification"
     elif passed:
         description = "Verified by trusted CI reporter"
     else:
@@ -182,9 +183,9 @@ def assess(event, api):
     return {
         "pr": pr_number, "head": head_sha, "merge": merge_sha,
         "kind": kind, "context": context,
-        "state": "pending" if not requested else ("success" if passed else "failure"), "description": description,
+        "state": "pending" if not ready else ("success" if passed else "failure"), "description": description,
         "url": run["html_url"],
-        "report_failure": unchanged and requested and not passed,
+        "report_failure": unchanged and ready and not passed,
         "automated": (
             kind == "Reproducibility"
             and pr["user"]["login"] == os.environ.get("APP_BOT_LOGIN")

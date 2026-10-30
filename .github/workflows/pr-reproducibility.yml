@@ -6,7 +6,7 @@ run-name: "Reproducibility PR #${{ github.event.pull_request.number }} merge ${{
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, edited]
 
 permissions:
   contents: read
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   discover:
     name: Discover changed packages
-    if: contains(github.event.pull_request.labels.*.name, 'run checks')
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
@@ -357,7 +357,7 @@ jobs:
     needs: [discover, check]
     if: >-
       always() &&
-      contains(github.event.pull_request.labels.*.name, 'run checks')
+      github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     steps:
       - name: Verify all selected targets
@@ -369,7 +369,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$DISCOVER_RESULT" == success ]] || {
-            echo 'Discovery failed or verification was not requested.' >&2
+            echo 'Discovery failed for a ready-for-review PR.' >&2
             exit 1
           }
           [[ "$TARGETS" == '[]' ]] && exit 0

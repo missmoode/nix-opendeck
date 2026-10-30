@@ -449,7 +449,6 @@ jobs:
             updates
             upstream
             automatically generated
-            run checks
 
       # Reuse the existing App token; keep one bot-owned compatibility comment.
       - name: Publish upstream compatibility review
@@ -496,7 +495,6 @@ jobs:
             updates
             upstream
             automatically generated
-            run checks
 
       # One persistent issue tracks known package failures. Do not treat missing
       # or corrupt validation reports as recoverable package failures.

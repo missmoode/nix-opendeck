@@ -45,8 +45,9 @@ The trusted reporter (`ci/trusted_ci_report.py`) must:
    recovery of an older completed run **for the identical revision only**.
 4. Compare the relevant workflow file and the trusted reporter files against
    the base revision. Reproducibility also protects `ci/targets.nix`.
-5. Require the expected job to pass exactly once and the PR to carry the
-   `run checks` label before publishing App success.
+5. Require the expected job to pass exactly once and the PR to be
+   **currently non-draft** before publishing App success. Missing draft
+   state is not accepted.
 6. Publish `nix-opendeck/tests` or `nix-opendeck/reproducibility` on the
    **PR head SHA**, not the synthetic merge SHA. Optional comments/assignment
    must never determine whether the status was written.
@@ -65,9 +66,45 @@ for convenience**.
 When a PR is stuck with a pending required status, check the status on the
 *head commit* as well as the Actions run outcome. A green Actions run is not
 proof that the trusted App published its status. Inspect the subsequent
-`Trusted CI report` run. Overlapping `opened`/`labeled` events can cancel one
-another; review `ci/trusted_ci_report.py` run-selection tests before changing
+`Trusted CI report` run. Overlapping PR events can cancel one another; review
+`ci/trusted_ci_report.py` run-selection tests before changing
 concurrency behaviour.
+
+## PR readiness and workflow approvals
+
+Both `Checks` and `Reproducibility` trigger on PR open/reopen, new commits,
+`ready_for_review`, `converted_to_draft`, and edits (including base
+retargeting). They do **not** trigger on labels. A draft skips the
+unprivileged build jobs, including the reproducibility result gate.
+A conversion to draft cancels any running verification through the
+existing per-PR concurrency groups. GitHub itself prevents merging
+draft PRs. On ready-for-review, the workflows rerun for that revision.
+
+The trusted reporter fetches the PR's **current** `draft` state from
+the API and only publishes success when it is explicitly `false`, in
+addition to the existing head/merge SHA, workflow-file, and job
+verification rules. Skipped jobs and draft PRs cannot obtain App
+success; drafts receive `pending` when a suitable completed run
+reaches the reporter. GitHub statuses belong to commit SHAs and may
+persist across draft transitions; draft PRs cannot merge, and making
+one ready triggers new checks. Keep required statuses and up-to-date
+merge protection enabled. This is not a general revocation service.
+
+For **public fork PRs**, configure GitHub at repository **Settings →
+Actions → General → Approval for running fork pull request workflows
+from contributors → Require approval for all external contributors**.
+This is a GitHub repository setting, not a YAML workflow option.
+A maintainer with write access must approve eligible external-fork
+workflow runs. It does not gate PRs originating in the same repo
+from users with write access, nor does draft status authorize work.
+
+The updater workflows no longer add `run checks`; ordinary ready
+PRs verify automatically. Keep the trusted reporter on the default
+branch, with App tokens out of all untrusted PR jobs. The reporter
+is self-protecting: changes to its own code or workflow and the
+verification workflows must be reviewed and deployed using the
+documented trusted-maintenance/default-branch procedure. Do not
+temporarily bypass its policy in the PR to make it self-certify.
 
 ## Package update path
 
@@ -187,10 +224,11 @@ Start from the **broken updated source**, not necessarily from the old
    core change, and `nix flake check --no-build --all-systems`. Record all
    intended version, hash, lock and patch changes in Git. There is no need to
    discard an already-updated version/hash or rerun the updater on this branch.
-2. Push the repair branch, open **one PR targeting `main`**, and add the
-   `run checks` label. The existing unprivileged PR checks and native
-   reproducibility jobs will evaluate/build the **combined committed state**;
-   the trusted reporter checks PRs targeting `main`.
+2. Push the repair branch and open **one non-draft PR targeting `main`**.
+   The unprivileged PR checks and native reproducibility jobs run
+   automatically and evaluate/build the **combined committed state**;
+   the trusted reporter checks PRs targeting `main`. External-fork
+   contributors may require GitHub workflow-run approval.
 3. Review those checks and the complete diff before merging. Do not merge a
    version-dependent patch fix by itself. The next scheduled updater run on
    `main` will reconcile any persistent update-failure issue.

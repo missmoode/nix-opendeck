@@ -36,7 +36,7 @@ def fixture(kind="Checks"):
         "state": "open", "merge_commit_sha": MERGE,
         "base": {"ref": "main", "sha": BASE, "repo": {"full_name": REPO}},
         "head": {"sha": HEAD, "ref": "feature", "repo": {"full_name": REPO}},
-        "labels": [{"name": "run checks"}], "user": {"login": "contributor"},
+        "draft": False, "labels": [], "user": {"login": "contributor"},
     }
     return event, pr
 
@@ -197,12 +197,32 @@ class ReporterTests(unittest.TestCase):
         }]
         self.assertIsNone(reporter.assess(event, api))
 
-    def test_both_verifications_require_label(self):
+    def test_both_verifications_require_current_non_draft_pr(self):
         for kind in ("Checks", "Reproducibility"):
-            with self.subTest(kind=kind):
-                event, pr, api = self.setup_case(kind)
-                pr["labels"] = []
-                self.assertEqual(reporter.assess(event, api)["state"], "pending")
+            for draft in (True, None):
+                with self.subTest(kind=kind, draft=draft):
+                    event, pr, api = self.setup_case(kind)
+                    pr["draft"] = draft
+                    result = reporter.assess(event, api)
+                    self.assertEqual(result["state"], "pending")
+                    self.assertFalse(result["report_failure"])
+
+    def test_labels_do_not_change_verification_eligibility(self):
+        for kind in ("Checks", "Reproducibility"):
+            event, pr, api = self.setup_case(kind)
+            pr["labels"] = [{"name": "some unrelated label"}]
+            self.assertEqual(reporter.assess(event, api)["state"], "success")
+
+    def test_draft_transition_rechecks_current_readiness(self):
+        for kind in ("Checks", "Reproducibility"):
+            event, pr, api = self.setup_case(kind)
+            pr["draft"] = True
+            self.assertEqual(reporter.assess(event, api)["state"], "pending")
+            pr["draft"] = False
+            self.assertEqual(reporter.assess(event, api)["state"], "success")
+            # A draft-skipped job must not be certified after the PR becomes ready.
+            api.jobs[0]["conclusion"] = "skipped"
+            self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
     def test_required_job_must_pass_exactly_once(self):
         for conclusions in ([], ["failure"], ["success", "success"]):
