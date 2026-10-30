@@ -85,7 +85,7 @@ def select_authoritative_run(event_run, recent, expected_title, head_sha):
     and current-revision validation.
     """
     # A newer run for the same PR merge takes precedence, even if it has not
-    # finished yet (e.g. after adding/removing the ready-for-merge label).
+    # finished yet (e.g. after a draft-to-ready transition).
     # Cancelled runs are not authoritative: an overlapping PR event can cancel
     # a newer run while leaving an earlier successful verification usable.
     run = event_run
@@ -167,15 +167,24 @@ def assess(event, api):
     jobs = list(api.pages(f"/actions/runs/{run['id']}/jobs", key="jobs"))
     matching = [job for job in jobs if job["name"] == job_name]
     job_pass = len(matching) == 1 and matching[0]["conclusion"] == "success"
+    # A skipped draft run can finish after the PR becomes ready again.
+    # Keep its status pending, never success; do not mask real failures.
+    skipped = run["conclusion"] == "skipped" or (
+        run["conclusion"] == "success"
+        and len(matching) == 1 and matching[0]["conclusion"] == "skipped"
+    )
     # Draft jobs can be skipped but still look successful to GitHub.
     # Only the current, explicitly non-draft PR may be certified;
     # absent/malformed draft state fails closed.
     ready = pr.get("draft") is False
     passed = unchanged and ready and run["conclusion"] == "success" and job_pass
+    pending = not ready or (unchanged and skipped)
     if not unchanged:
         description = "PR changed CI policy; trusted verification unavailable"
     elif not ready:
         description = "Mark PR ready for review to request verification"
+    elif skipped:
+        description = "Verification skipped; awaiting completed checks"
     elif passed:
         description = "Verified by trusted CI reporter"
     else:
@@ -183,9 +192,9 @@ def assess(event, api):
     return {
         "pr": pr_number, "head": head_sha, "merge": merge_sha,
         "kind": kind, "context": context,
-        "state": "pending" if not ready else ("success" if passed else "failure"), "description": description,
+        "state": "pending" if pending else ("success" if passed else "failure"), "description": description,
         "url": run["html_url"],
-        "report_failure": unchanged and ready and not passed,
+        "report_failure": unchanged and ready and not passed and not skipped,
         "automated": (
             kind == "Reproducibility"
             and pr["user"]["login"] == os.environ.get("APP_BOT_LOGIN")

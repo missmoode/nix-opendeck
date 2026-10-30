@@ -192,6 +192,8 @@ src = fetchFromGitHub {{
         self.assertIn("Auto-merge eligible", Path("auto.md").read_text())
         self.assertIn("manual review required", Path("review.md").read_text())
         self.assertIn(DESKTOP, Path("review.md").read_text())
+        self.assertIn("non-draft PR", Path("review.md").read_text())
+        self.assertNotIn("run checks", Path("review.md").read_text())
         self.assertNotIn(DESKTOP, Path("auto.md").read_text())
 
     def test_unattributed_shared_file_fails_closed(self):

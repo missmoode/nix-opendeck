@@ -84,8 +84,11 @@ The trusted reporter fetches the PR's **current** `draft` state from
 the API and only publishes success when it is explicitly `false`, in
 addition to the existing head/merge SHA, workflow-file, and job
 verification rules. Skipped jobs and draft PRs cannot obtain App
-success; drafts receive `pending` when a suitable completed run
-reaches the reporter. GitHub statuses belong to commit SHAs and may
+success; skipped verification receives `pending` even if a draft
+run finishes after the PR becomes ready. This replaces stale App
+success without reporting a false failure, but does not certify
+the skipped run. Real failed verification still reports `failure`.
+GitHub statuses belong to commit SHAs and may
 persist across draft transitions; draft PRs cannot merge, and making
 one ready triggers new checks. Keep required statuses and up-to-date
 merge protection enabled. This is not a general revocation service.

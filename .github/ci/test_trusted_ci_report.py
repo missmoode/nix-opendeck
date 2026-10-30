@@ -220,9 +220,56 @@ class ReporterTests(unittest.TestCase):
             self.assertEqual(reporter.assess(event, api)["state"], "pending")
             pr["draft"] = False
             self.assertEqual(reporter.assess(event, api)["state"], "success")
-            # A draft-skipped job must not be certified after the PR becomes ready.
+            # A draft-skipped job cannot be certified after the PR becomes ready.
             api.jobs[0]["conclusion"] = "skipped"
-            self.assertEqual(reporter.assess(event, api)["state"], "failure")
+            self.assertEqual(reporter.assess(event, api)["state"], "pending")
+
+    def test_skipped_run_during_draft_to_ready_race_stays_pending(self):
+        for kind in ("Checks", "Reproducibility"):
+            with self.subTest(kind=kind):
+                event, pr, api = self.setup_case(kind)
+                # A successful run published an App status before drafting.
+                api.status(reporter.assess(event, api))
+                self.assertEqual(api.published[-1][2], "success")
+                # Its successor was skipped while draft. The completion
+                # reporter starts only after the PR is ready again.
+                event["workflow_run"]["id"] = 43
+                event["workflow_run"]["conclusion"] = "skipped"
+                api.jobs[0]["conclusion"] = "skipped"
+                pr["draft"] = False
+                result = reporter.assess(event, api)
+                self.assertEqual(result["state"], "pending")
+                self.assertFalse(result["report_failure"])
+                api.status(result)
+                self.assertEqual(api.published[-1][2], "pending")
+                # A subsequent real verification can resolve pending.
+                event["workflow_run"]["id"] = 44
+                event["workflow_run"]["conclusion"] = "success"
+                api.jobs[0]["conclusion"] = "success"
+                api.status(reporter.assess(event, api))
+                self.assertEqual(api.published[-1][2], "success")
+
+    def test_skipped_gate_does_not_hide_other_workflow_failures(self):
+        for kind in ("Checks", "Reproducibility"):
+            with self.subTest(kind=kind):
+                event, _, api = self.setup_case(kind)
+                api.jobs[0]["conclusion"] = "skipped"
+                self.assertEqual(reporter.assess(event, api)["state"], "pending")
+                event["workflow_run"]["conclusion"] = "failure"
+                result = reporter.assess(event, api)
+                self.assertEqual(result["state"], "failure")
+                self.assertTrue(result["report_failure"])
+
+    def test_skipped_run_does_not_hide_modified_ci_policy(self):
+        for kind in ("Checks", "Reproducibility"):
+            with self.subTest(kind=kind):
+                event, _, api = self.setup_case(kind)
+                event["workflow_run"]["conclusion"] = "skipped"
+                api.jobs[0]["conclusion"] = "skipped"
+                api.changed = {(event["workflow_run"]["path"], MERGE)}
+                result = reporter.assess(event, api)
+                self.assertEqual(result["state"], "failure")
+                self.assertFalse(result["report_failure"])
 
     def test_required_job_must_pass_exactly_once(self):
         for conclusions in ([], ["failure"], ["success", "success"]):

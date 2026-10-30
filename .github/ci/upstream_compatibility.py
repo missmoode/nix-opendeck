@@ -202,8 +202,8 @@ def pr_bodies(routes_file, auto_file, review_file):
             "keeping the relevant version and hash changes.",
             "",
             "Adapt the downstream patch, test and commit the combined "
-            "source changes. Open **one PR from the repair branch into `main`** "
-            "and add the `run checks` label. Do not push changes to the "
+            "source changes. Open **one non-draft PR from the repair branch "
+            "into `main`**. Do not push changes to the "
             "bot-maintained branch because later updates may overwrite manual "
             "commits. No new updater run or intermediate PR is needed. "
             "Exclude unrelated package updates.",
