@@ -396,10 +396,15 @@ There are two ways to recover the intended update.
 
 #### Option A: Run nix-update locally
 
-For a package with a working update script, run the same updater command
-used by CI from the repository root.
+Enter the repository's development shell from the repository root:
 
-For example, on x86_64 Linux:
+```sh
+nix develop
+```
+
+The shell provides `nix-update` from the flake-locked nixpkgs and sets
+`NIX_PATH` to the same nixpkgs checkout as the CI updater. Run the same
+package update command as CI, for example on x86_64 Linux:
 
 ```sh
 nix-update packages.x86_64-linux.opendeck-core \
@@ -417,18 +422,12 @@ nix-update \
 Replace the system, owner, and package name with the appropriate exported
 flake attribute. Use the native system appropriate to the package.
 
-If `nix-update` is not installed, it can be run from the repository's pinned
-nixpkgs input:
+To update without entering an interactive shell, use `nix develop -c`:
 
 ```sh
-nix run --inputs-from . nixpkgs#nix-update -- \
-  packages.x86_64-linux.opendeck-core \
+nix develop -c nix-update packages.x86_64-linux.opendeck-core \
   --flake --use-update-script
 ```
-
-The CI environment also sets `NIX_PATH` to the repository's locked nixpkgs
-checkout. Reproduce that setting when investigating discrepancies between
-local and CI updater behaviour.
 
 Inspect the changes with `git diff` before proceeding.
 
