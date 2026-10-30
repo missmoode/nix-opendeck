@@ -446,7 +446,7 @@ def render_failure_issue(state_file, output):
         "[Repair procedure and commands](" +
         os.environ.get("GITHUB_SERVER_URL", "https://github.com") + "/" +
         os.environ.get("GITHUB_REPOSITORY", "missmoode/nix-opendeck") +
-        "/blob/main/.github/INFO.md#repairing-downstream-patches-for-new-upstream-versions).",
+        "/blob/main/.github/MAINTAINER_GUIDE.md#repairing-downstream-patches-for-new-upstream-versions).",
         "",
         "Merging a repair PR does not close this issue automatically. "
         "The normal updater on `main` reconciles outstanding failures.",
