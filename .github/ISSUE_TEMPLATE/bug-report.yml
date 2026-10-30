@@ -7,6 +7,20 @@ body:
       value: |
         Include what you know; reproduction steps and upstream testing are not required.
         Remove secrets and private information from logs before posting.
+  - type: checkboxes
+    id: project-scope
+    attributes:
+      label: Project scope
+      description: >
+        nix-opendeck handles Nix packaging, modules, integration,
+        and downstream compatibility patches. Bugs affecting
+        OpenDeck or individual plugins independently of nix-opendeck
+        should generally be reported to their respective upstream projects.
+      options:
+        - label: >
+            To the best of my knowledge, this issue concerns
+            nix-opendeck rather than solely an upstream project.
+          required: true
   - type: textarea
     id: problem
     attributes:
