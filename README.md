@@ -714,6 +714,9 @@ or room for improvement. I'd very much welcome contributions or corrections.
 
 ## Reproducibility
 
+
+TEST
+
 The `opendeck` package and plugins get tested for reproducibility across their
 supported platforms when their output paths change in a pull request. The
 checks independently rebuild the affected derivations and compare their outputs
