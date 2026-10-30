@@ -49,7 +49,7 @@
           pkgs,
           ...
         }:
-        import ./src/packages {
+        (import ./src/packages {
           inherit
             inputs
             final
@@ -57,6 +57,12 @@
             pkgs
             ;
           pluginLib = (import ./src/lib/plugins) final;
+        })
+        // {
+          devShells.default = pkgs.mkShellNoCC {
+            packages = [ pkgs.nix-update ];
+            NIX_PATH = "nixpkgs=${inputs.nixpkgs.outPath}";
+          };
         };
 
       flake = {
