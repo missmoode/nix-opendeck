@@ -25,6 +25,10 @@ mkNpmOpenDeckPlugin (finalAttrs: {
 
   licenseFiles = [ "LICENSE" ];
 
+  preBuild = ''
+    source ${../fix-sdk-logging.sh}
+  '';
+
   meta = {
     description = "System monitoring, timers, and OBS health displays for OpenDeck";
     homepage = "https://github.com/danmaxis/hyprstream";

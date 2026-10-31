@@ -25,6 +25,10 @@ mkNpmOpenDeckPlugin (finalAttrs: {
 
   licenseFiles = [ "LICENSE" ];
 
+  preBuild = ''
+    source ${../fix-sdk-logging.sh}
+  '';
+
   meta = {
     description = "MPRIS media controls and OBS integrations for OpenDeck";
     homepage = "https://github.com/danmaxis/hyprstream";
