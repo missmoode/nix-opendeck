@@ -623,12 +623,16 @@ macOS.
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugins.openactionplugins.mpris` | MPRIS-compatible player | - |
 | [System Information](https://github.com/OpenActionPlugins/system) | `opendeck-plugins.openactionplugins.system` | - | - |
 | [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugins.cgiesche.homeassistant` | Home Assistant server | - |
+| [Hyprstream](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream` | Hyprland | Action-dependent: `grim`, `slurp`, `wl-copy`, `wf-recorder`, `makoctl` / `dunstctl` |
+| [Hyprstream Media](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream-media` | MPRIS / OBS Studio | `playerctl` (media actions) |
+| [Hyprstream Monitors](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream-monitors` | Linux system metrics / OBS Studio | - |
 | [Linux Uinput Simulation](https://github.com/Havner/uinput-simulation) | `opendeck-plugins.havner.uinput-simulation` | Linux uinput enabled (`.udev` rules included) | - |
 | [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugins.theca11.multi-obs-controller` | OBS Studio | - |
 | [OBS Tools](https://github.com/FeloDeck/obs-tools) | `opendeck-plugins.felodeck.obs-tools` | OBS Studio | - |
 | [On Air Clock](https://github.com/wortkrieg/streamdeck-onairclock) | `opendeck-plugins.wortkrieg.onairclock` | - | - |
 | [PipeWire Audio Control (Native)](https://github.com/sjourdois/opendeck-pipewire) | `opendeck-plugins.sjourdois.pipewire` | PipeWire | - |
 | [PipeWire Audio Control](https://github.com/CronusAK/Pulse-Audio-Stream-Deck-Plugin) | `opendeck-plugins.cronusak.pipewire-audio` | PipeWire / WirePlumber | `wpctl`, `pw-dump`, `pactl` |
+| [PWSoundDeck](https://github.com/biviale/pwsounddeck) | `opendeck-plugins.biviale.pwsounddeck` | PipeWire / PulseAudio | `pactl` |
 | [Redline Monitor](https://github.com/kahikara/opendeck-redline-monitor) | `opendeck-plugins.kahikara.redline-monitor` | See upstream | - |
 | [Rotary Generic Command](https://github.com/babs/opendeck-plugins-rotary-command) | `opendeck-plugins.babs.rotary-command` | Rotary Encoder | - |
 | [TikClock](https://github.com/GDWhisper/opendeck-tikclock) | `opendeck-plugins.gdwhisper.tikclock` | - | - |
@@ -654,6 +658,7 @@ See [Device Access on NixOS](#device-access-on-nixos) for configuration instruct
 | --- | --- | --- | --- |
 | [Ajazz AKP03 / Mirabox N3](https://github.com/4ndv/opendeck-akp03) | `opendeck-plugins."4ndv".akp03` | AKP03, Mirabox N3 and compatible devices | Udev rules (Linux) |
 | [Ajazz AKP153 / Mirabox HSV293S](https://github.com/4ndv/opendeck-akp153) | `opendeck-plugins."4ndv".akp153` | AKP153, Mirabox HSV293S and compatible devices | Udev rules (Linux) |
+| [Ajazz AKP05 / Mirabox N4](https://github.com/ambiso/opendeck-akp05) | `opendeck-plugins.ambiso.akp05` | AKP05, Mirabox N4 and compatible devices | Udev rules (Linux) |
 
 ## Plugin packaging and contributions
 
