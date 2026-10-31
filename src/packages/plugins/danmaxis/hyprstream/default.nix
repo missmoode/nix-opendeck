@@ -25,6 +25,10 @@ mkNpmOpenDeckPlugin (finalAttrs: {
 
   licenseFiles = [ "LICENSE" ];
 
+  preBuild = ''
+    source ${../fix-sdk-logging.sh}
+  '';
+
   meta = {
     description = "Hyprland workspace, window, and compositor controls for OpenDeck";
     homepage = "https://github.com/danmaxis/hyprstream";
