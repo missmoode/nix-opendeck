@@ -207,7 +207,8 @@ class DiagnosticCaptureTests(unittest.TestCase):
             os.environ, {"TARGET": json.dumps(target)}
         ), patch.object(package_updates, "update_platform_deps", side_effect=error):
             result = Path(temp) / "result.json"
-            code = package_updates.build(SimpleNamespace(updates=temp, output=result))
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = package_updates.build(SimpleNamespace(updates=temp, output=result))
             report = json.loads(result.read_text())
         self.assertEqual(code, 1)
         self.assertEqual(report["phase"], "platform-dependencies")
