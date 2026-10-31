@@ -606,9 +606,6 @@ the plugin listing, but are not checked or provided by nix-opendeck.
 Below is a list of the plugins where a derivation is included in this repo.
 You can check their upstream sources for more information.
 
-If you want me to consider packaging a new plugin, you can [send a request](https://github.com/missmoode/nix-opendeck/issues/new?template=plugin-request.yml).
-Make sure to check if somebody else has already requested it first, though!
-
 ### Action & Integration Plugins
 
 Not every plugin is available on every platform. The flake filters the
@@ -657,6 +654,26 @@ See [Device Access on NixOS](#device-access-on-nixos) for configuration instruct
 | --- | --- | --- | --- |
 | [Ajazz AKP03 / Mirabox N3](https://github.com/4ndv/opendeck-akp03) | `opendeck-plugins."4ndv".akp03` | AKP03, Mirabox N3 and compatible devices | Udev rules (Linux) |
 | [Ajazz AKP153 / Mirabox HSV293S](https://github.com/4ndv/opendeck-akp153) | `opendeck-plugins."4ndv".akp153` | AKP153, Mirabox HSV293S and compatible devices | Udev rules (Linux) |
+
+## Plugin packaging and contributions
+
+nix-opendeck maintains a curated selection of plugins rather than attempting to package the entire OpenDeck ecosystem.
+
+I generally consider plugins for inclusion if I use them myself, they provide broadly
+useful functionality, are particularly popular, or support commonly used hardware.
+
+Contributions of new plugin packages are welcome, but inclusion in this repository
+is at my discretion. In particular, packages that require substantial ongoing
+maintenance or extensive downstream compatibility patches may be better maintained
+independently.
+
+Developers are encouraged to publish their own plugin derivations using
+nix-opendeck's exported packaging helpers, although using these helpers is not
+required. Independently packaged plugins can be used with the Home Manager module
+or `wrapOpenDeck` without being included in this repository.
+
+See [Plugin Packaging Guide](./PLUGIN-PACKAGING.md) for instructions on
+independently packaging and distributing plugins.
 
 ## Source Code and Licenses
 nix-opendeck, via the binary cache, distributes builds of third-party

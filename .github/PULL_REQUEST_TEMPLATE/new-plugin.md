@@ -1,9 +1,19 @@
 ## New plugin
 
+nix-opendeck maintains a curated selection of plugins rather than attempting to package the entire OpenDeck ecosystem. Independent packaging is generally preferred; see the [Plugin Packaging Guide](/PLUGIN-PACKAGING.md).
+
+Please explain why this plugin would be a useful addition to the main repository.
+
 **Plugin:**  
 **Upstream repository:**  
 **Upstream version/tag:**  
 **Packaging helper:** `mkRustOpenDeckPlugin` / `mkNpmOpenDeckPlugin` / other
+
+**Reason for inclusion:**
+
+Why should this plugin be maintained in nix-opendeck rather
+than independently? Consider its general usefulness, popularity
+or support for commonly used hardware.
 
 ### Implementation
 
@@ -14,8 +24,7 @@ Briefly describe the packaging approach and anything unusual about this plugin.
 - [ ] Configured release updates where appropriate
 - [ ] Documented required commands, services or udev rules, if applicable
 - [ ] Any downstream patches are necessary, minimal and documented
-- [ ] Preserved upstream behaviour, defaults and policy except where strictly
-  necessary for compatibility
+- [ ] Avoided unrelated changes to upstream behaviour and defaults
 
 ### Licensing and redistribution
 
@@ -29,9 +38,10 @@ Briefly describe the packaging approach and anything unusual about this plugin.
 
 **Licensing concerns or redistribution restrictions:**
 
-### Manual verification (if applicable)
+### Manual verification
 
-Describe any functional testing performed beyond the automated CI checks.
+Describe any functional testing performed beyond the automated
+CI checks, or explain why testing wasn't possible.
 
 **Platform(s) tested on:**  
 **Limitations or untested behaviour:**
