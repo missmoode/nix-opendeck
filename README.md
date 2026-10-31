@@ -613,6 +613,12 @@ available plugins based on their supported systems, so for example plugins
 focused on Linux-specific integrations like PipeWire are not available on
 macOS.
 
+<!--
+| [Hyprstream](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream` | Hyprland | Action-dependent: `grim`, `slurp`, `wl-copy`, `wf-recorder`, `makoctl` / `dunstctl` |
+| [Hyprstream Media](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream-media` | MPRIS / OBS Studio | `playerctl` (media actions) |
+| [Hyprstream Monitors](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream-monitors` | Linux system metrics / OBS Studio | - |
+-->
+
 | Upstream plugin | Package name | External integrations | Required runtime commands |
 | --- | --- | --- | --- |
 | [Starterpack](https://github.com/nekename/OpenDeck/tree/main/plugins/com.amansprojects.starterpack.sdPlugin) | `opendeck-plugins.nekename.starterpack` | - | - |
@@ -623,9 +629,6 @@ macOS.
 | [MPRIS Media Controls](https://github.com/OpenActionPlugins/mpris) | `opendeck-plugins.openactionplugins.mpris` | MPRIS-compatible player | - |
 | [System Information](https://github.com/OpenActionPlugins/system) | `opendeck-plugins.openactionplugins.system` | - | - |
 | [Home Assistant](https://github.com/cgiesche/streamdeck-homeassistant) | `opendeck-plugins.cgiesche.homeassistant` | Home Assistant server | - |
-| [Hyprstream](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream` | Hyprland | Action-dependent: `grim`, `slurp`, `wl-copy`, `wf-recorder`, `makoctl` / `dunstctl` |
-| [Hyprstream Media](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream-media` | MPRIS / OBS Studio | `playerctl` (media actions) |
-| [Hyprstream Monitors](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream-monitors` | Linux system metrics / OBS Studio | - |
 | [Linux Uinput Simulation](https://github.com/Havner/uinput-simulation) | `opendeck-plugins.havner.uinput-simulation` | Linux uinput enabled (`.udev` rules included) | - |
 | [Multi OBS Controller](https://github.com/theca11/multi-obs-controller) | `opendeck-plugins.theca11.multi-obs-controller` | OBS Studio | - |
 | [OBS Tools](https://github.com/FeloDeck/obs-tools) | `opendeck-plugins.felodeck.obs-tools` | OBS Studio | - |
