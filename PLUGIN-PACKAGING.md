@@ -162,6 +162,7 @@ The same plugin derivation can also be passed to `wrapOpenDeck` when creating a
 bundled package. See [Custom bundled packages](./README.md#custom-bundled-packages).
 
 ## Runtime requirements and device permissions
+
 Packaging a plugin does not automatically provide external services or every
 executable it invokes. There are some recommended practices for dealing with
 your requirements:
@@ -216,6 +217,23 @@ executable behaviour on the relevant platform when possible.
   binary cache. For a small plugin package, manual updates may be sufficient. If
   maintenance becomes more involved, it might be a good idea to look into automation
   via GitHub workflows or similar.
+
+### Tracking updates
+
+For plugins maintained within nix-opendeck, verify that the package's update script
+follows upstream's actual release mechanism. The packaging helpers provide a default
+`nix-update` script, but this does not guarantee correct version discovery.
+
+Where upstream consistently publishes GitHub Releases, prefer the existing
+`nix-update-script` with `--use-github-releases`. For unusual
+release/versioning schemes, use the simplest reliable alternative. If
+automatic updates are not practical, explicitly set
+`passthru.updateScript = null;` and maintain the package manually.
+
+Test an updater with `nix-update ATTRIBUTE --flake --use-update-script`
+before relying on the repository's automated update workflow.
+
+### Inclusion in the nix-opendeck repo
 
 If you'd like to propose your plugin for inclusion in nix-opendeck's repo, see the
 [plugin listing](./README.md#plugin-listing),

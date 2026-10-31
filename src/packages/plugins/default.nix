@@ -16,14 +16,40 @@ let
       };
     };
 
+    ambiso = {
+      akp05 = pkgs.callPackage ./ambiso/akp05 {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
     babs = {
       rotary-command = pkgs.callPackage ./babs/rotary-command {
         inherit (pluginLib) mkRustOpenDeckPlugin;
       };
     };
 
+    biviale = {
+      pwsounddeck = pkgs.callPackage ./biviale/pwsounddeck {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
     cronusak = {
       pipewire-audio = pkgs.callPackage ./cronusak/pipewire-audio {
+        inherit (pluginLib) mkNpmOpenDeckPlugin;
+      };
+    };
+
+    danmaxis = {
+      hyprstream = pkgs.callPackage ./danmaxis/hyprstream {
+        inherit (pluginLib) mkNpmOpenDeckPlugin;
+      };
+
+      hyprstream-media = pkgs.callPackage ./danmaxis/hyprstream-media {
+        inherit (pluginLib) mkNpmOpenDeckPlugin;
+      };
+
+      hyprstream-monitors = pkgs.callPackage ./danmaxis/hyprstream-monitors {
         inherit (pluginLib) mkNpmOpenDeckPlugin;
       };
     };
