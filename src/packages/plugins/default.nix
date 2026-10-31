@@ -40,19 +40,22 @@ let
       };
     };
 
-    danmaxis = {
-      hyprstream = pkgs.callPackage ./danmaxis/hyprstream {
-        inherit (pluginLib) mkNpmOpenDeckPlugin;
-      };
+    # Temporarily disabled pending upstream logging improvements.
+    # See https://github.com/danmaxis/hyprstream/issues/1
+    #
+    # danmaxis = {
+    #   hyprstream = pkgs.callPackage ./danmaxis/hyprstream {
+    #     inherit (pluginLib) mkNpmOpenDeckPlugin;
+    #   };
 
-      hyprstream-media = pkgs.callPackage ./danmaxis/hyprstream-media {
-        inherit (pluginLib) mkNpmOpenDeckPlugin;
-      };
+    #   hyprstream-media = pkgs.callPackage ./danmaxis/hyprstream-media {
+    #     inherit (pluginLib) mkNpmOpenDeckPlugin;
+    #   };
 
-      hyprstream-monitors = pkgs.callPackage ./danmaxis/hyprstream-monitors {
-        inherit (pluginLib) mkNpmOpenDeckPlugin;
-      };
-    };
+    #   hyprstream-monitors = pkgs.callPackage ./danmaxis/hyprstream-monitors {
+    #     inherit (pluginLib) mkNpmOpenDeckPlugin;
+    #   };
+    # };
 
     elgato = {
       analogclock = pkgs.callPackage ./elgato/analogclock {
