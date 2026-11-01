@@ -52,6 +52,9 @@ separate Python tests. `nix flake check` runs the checks, and `nix develop`
 provides the root Nixpkgs tools `nix-update`, `nixfmt` and `NIX_PATH`.
 The test-only Home Manager source may need downloading on a first check run.
 
+You can get a new `narHash` for the home manager update pin via:
+`nix flake prefetch --json github:nix-community/home-manager/<revision>`
+
 ## Routine automation
 
 ### Package updates

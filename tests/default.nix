@@ -3,19 +3,20 @@
 let
   # Test-only Home Manager source, pinned independently of the public flake inputs.
   # Update rev and narHash together when updating the test dependency.
-  homeManagerSource = (builtins.fetchTree {
-    type = "github";
-    owner = "nix-community";
-    repo = "home-manager";
-    rev = "7db163b2aee7e410e396b48aed02f646d742b9b8";
-    narHash = "sha256-fXVURa0+CSCgaxLt8tmPNJq2U+fGYOwbk5j2YUe7kSc=";
-  }).outPath;
+  homeManagerSource =
+    (fetchTree {
+      type = "github";
+      owner = "nix-community";
+      repo = "home-manager";
+      rev = "7db163b2aee7e410e396b48aed02f646d742b9b8";
+      narHash = "sha256-fXVURa0+CSCgaxLt8tmPNJq2U+fGYOwbk5j2YUe7kSc=";
+    }).outPath;
 in
 {
   perSystem =
     {
+      config,
       pkgs,
-      system,
       ...
     }:
     {
@@ -29,16 +30,16 @@ in
           };
           module = self.homeManagerModules.default;
 
-          opendeck = self.packages.${system}.opendeck;
-          core = self.packages.${system}.opendeck-core;
-          starterpack = self.legacyPackages.${system}.opendeck-plugins.nekename.starterpack;
+          opendeck = config.packages.opendeck;
+          core = config.packages.opendeck-core;
+          starterpack = config.legacyPackages.opendeck-plugins.nekename.starterpack;
         };
       }
       // (
         let
           fixtures = import ./wrap-opendeck/fixtures.nix {
             inherit pkgs;
-            wrapOpenDeck = self.legacyPackages.${system}.wrapOpenDeck;
+            wrapOpenDeck = config.legacyPackages.wrapOpenDeck;
           };
         in
         {

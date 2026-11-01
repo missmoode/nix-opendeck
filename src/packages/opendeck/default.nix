@@ -126,8 +126,8 @@ rustPlatform.buildRustPackage (
     ];
 
     postPatch = ''
-      # No -q: grep must consume all of tr's output, or pipefail can trip on SIGPIPE.
       ${lib.optionalString stdenv.hostPlatform.isLinux ''
+        # No -q: grep must consume all of tr's output, or pipefail can trip on SIGPIPE.
         if ! tr -d '[:space:]' < src-tauri/src/main.rs \
             | grep -F '.dbus_id("me.amankhanna.opendeck")' >/dev/null; then
           echo "OpenDeck's single-instance D-Bus ID is no longer set explicitly to me.amankhanna.opendeck in src-tauri/src/main.rs." >&2
