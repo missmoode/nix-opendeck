@@ -750,7 +750,7 @@ bit-for-bit against a reference build. Passing is required before merging into
 `main`.
 
 The OpenDeck core build also runs Rust regression tests covering plugin source
-selection, saved resource paths, archive validation, and asset authorization.
+selection, saved resource paths, and asset authorization.
 
 This doesn't verify the entire dependency closure, or guarantee that everything
 operates at runtime. I don't have the hardware to test it all, though during
