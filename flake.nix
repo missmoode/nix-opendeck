@@ -21,11 +21,6 @@
     #
     # Do NOT use deno-nixpkgs.follows!
     deno-nixpkgs.url = "github:NixOS/nixpkgs/a7868a727837f3c09cee2ce0ca671c76b1589fed";
-
-    home-manager = {
-      url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
@@ -59,8 +54,13 @@
           pluginLib = (import ./src/lib/plugins) final;
         })
         // {
+          formatter = pkgs.nixfmt-tree;
+
           devShells.default = pkgs.mkShellNoCC {
-            packages = [ pkgs.nix-update ];
+            packages = [
+              pkgs.nix-update
+              pkgs.nixfmt
+            ];
             NIX_PATH = "nixpkgs=${inputs.nixpkgs.outPath}";
           };
         };

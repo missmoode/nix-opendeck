@@ -71,6 +71,11 @@ let
     restartOnPluginChanges = true;
   };
 
+  missingPluginId = mkConfiguration {
+    enable = true;
+    plugins = [ pkgs.hello ];
+  };
+
   evaluationFails = configuration: !(builtins.tryEval configuration.config.home.packages).success;
 
   activationScript = pluginsOnly.config.home.activation.opendeckPlugins.data;
@@ -129,6 +134,23 @@ assert lib.assertMsg (
 assert lib.assertMsg (
   !builtins.any (package: package.outPath == opendeck.outPath) disabled.config.home.packages
 ) "Disabled OpenDeck module should not install OpenDeck";
+
+assert lib.assertMsg (
+  pkgs.stdenv.hostPlatform.isLinux
+  -> lib.hasInfix "me.amankhanna.opendeck.SingleInstance" activationScript
+) "Linux reload should check OpenDeck's single-instance D-Bus name";
+
+assert lib.assertMsg (
+  pkgs.stdenv.hostPlatform.isLinux
+  -> lib.hasInfix "me.amankhanna.opendeck.SingleInstance" restartEnabled.config.home.activation.opendeckPlugins.data
+) "Linux restart should use the same D-Bus gate";
+
+assert lib.assertMsg (
+  !lib.hasInfix "NameHasOwner" reloadDisabled.config.home.activation.opendeckPlugins.data
+) "Disabling notifications should omit the D-Bus probe";
+
+assert lib.assertMsg (evaluationFails missingPluginId)
+  "Plugins without pluginId should fail evaluation";
 
 pkgs.runCommand "opendeck-home-manager-evaluation" { } ''
   touch "$out"

@@ -10,7 +10,8 @@
 let
   cfg = config.programs.opendeck;
 
-  pluginIds = map (plugin: plugin.pluginId) cfg.plugins;
+  pluginsWithIds = lib.filter (plugin: plugin ? pluginId) cfg.plugins;
+  pluginIds = map (plugin: plugin.pluginId) pluginsWithIds;
 
   duplicatePluginIds = lib.filter (pluginId: lib.count (id: id == pluginId) pluginIds > 1) (
     lib.unique pluginIds
@@ -19,7 +20,7 @@ let
   bundledPluginIds = cfg.package.bundledPluginIds or [ ];
 
   bundledPluginConflicts = lib.filter (pluginId: lib.elem pluginId bundledPluginIds) pluginIds;
-  externalPlugins = lib.filter (plugin: !(lib.elem plugin.pluginId bundledPluginIds)) cfg.plugins;
+  externalPlugins = lib.filter (plugin: !(lib.elem plugin.pluginId bundledPluginIds)) pluginsWithIds;
 
   desiredState = lib.concatMapStrings (plugin: "${plugin.pluginId}\n") externalPlugins;
 
@@ -67,9 +68,8 @@ let
       ln -s "$source" "$temp"
 
       # Preflight validation guarantees that an existing target is a
-      # Home Manager-managed symlink.
-      rm -f "$target"
-      mv "$temp" "$target"
+      # Home Manager-managed symlink. Replace it atomically.
+      ${lib.getExe' pkgs.coreutils "mv"} -Tf "$temp" "$target"
       changedPlugins+=("$pluginId")
     fi
   '') externalPlugins;
@@ -131,6 +131,14 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = lib.length pluginsWithIds == lib.length cfg.plugins;
+        message = ''
+          programs.opendeck.plugins contains packages without a pluginId
+          passthru attribute. Each declared plugin must provide pluginId.
+        '';
+      }
+
       {
         assertion = duplicatePluginIds == [ ];
         message = ''
@@ -222,7 +230,7 @@ in
 
         ${installPlugins}
 
-        mv "$stateTemp" "$externallyManagedPluginsFile"
+        ${lib.getExe' pkgs.coreutils "mv"} -Tf "$stateTemp" "$externallyManagedPluginsFile"
 
         # Reconcile every symlink first, then notify one running instance.
         # Never start OpenDeck during Home Manager activation.
@@ -230,10 +238,11 @@ in
           if (( ''${#changedPlugins[@]} )); then
             notify=true
             ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-              # Avoid launching a secondary Tauri process on Linux when OpenDeck
-              # does not own its single-instance D-Bus name.
+              # Do not launch a secondary Tauri process unless OpenDeck
+              # owns its single-instance D-Bus name.
+              # Upstream explicitly sets this ID via .dbus_id() in main.rs.
               notify=false
-              if ${pkgs.glib}/bin/gdbus call --session \
+              if ${lib.getExe' pkgs.glib "gdbus"} call --session \
                 --dest org.freedesktop.DBus \
                 --object-path /org/freedesktop/DBus \
                 --method org.freedesktop.DBus.NameHasOwner \
@@ -242,15 +251,20 @@ in
               fi
             ''}
             if [[ "$notify" == true ]]; then
-              ${if cfg.restartOnPluginChanges then ''
-                ${cfg.package}/bin/opendeck --restart-if-running >/dev/null 2>&1 \
-                  || verboseEcho "Could not restart OpenDeck; plugin changes will apply next time it starts"
-              '' else ''
-                for pluginId in "''${changedPlugins[@]}"; do
-                  ${cfg.package}/bin/opendeck --reload-plugin "$pluginId" >/dev/null 2>&1 \
-                    || verboseEcho "Could not reload OpenDeck plugin $pluginId; restart OpenDeck to apply the change"
-                done
-              ''}
+              ${
+                if cfg.restartOnPluginChanges then
+                  ''
+                    ${cfg.package}/bin/opendeck --restart-if-running >/dev/null 2>&1 \
+                      || verboseEcho "Could not restart OpenDeck; plugin changes will apply next time it starts"
+                  ''
+                else
+                  ''
+                    for pluginId in "''${changedPlugins[@]}"; do
+                      ${cfg.package}/bin/opendeck --reload-plugin "$pluginId" >/dev/null 2>&1 \
+                        || verboseEcho "Could not reload OpenDeck plugin $pluginId; restart OpenDeck to apply the change"
+                    done
+                  ''
+              }
             fi
           fi
         ''}
