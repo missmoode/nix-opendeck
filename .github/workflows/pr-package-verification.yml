@@ -1,8 +1,8 @@
 # Unprivileged PR builds; never access repository secrets here.
 # Trusted status publication happens only in trusted-ci-report.yml, which
 # refuses to endorse a PR that modifies this workflow's verification policy.
-name: Reproducibility
-run-name: "Reproducibility PR #${{ github.event.pull_request.number }} merge ${{ github.sha }}"
+name: Package verification
+run-name: "Package verification PR #${{ github.event.pull_request.number }} merge ${{ github.sha }}"
 
 on:
   pull_request:
@@ -78,12 +78,26 @@ jobs:
           # Missing targets must not silently count as "nothing changed".
           # Otherwise a PR could remove the exported package catalogue and
           # bypass the entire reproducibility job without a rebuild.
-          jq -e --slurpfile base "$RUNNER_TEMP/base-targets.json" '
+          removed="$(jq -c --slurpfile base "$RUNNER_TEMP/base-targets.json" '
             ([.[].attr]) as $prAttrs
             | [ $base[0][] | select(.attr as $attr | ($prAttrs | index($attr)) == null) | .attr ]
-            | if length == 0 then true
-              else error("PR removed published CI targets: " + join(", ")) end
-          ' "$RUNNER_TEMP/pr-targets.json" > /dev/null
+          ' "$RUNNER_TEMP/pr-targets.json")"
+          if [[ "$removed" != '[]' ]]; then
+            {
+              echo '## Published package targets removed'
+              echo
+              echo 'This PR removes package targets exported by main:'
+              echo
+              jq -r '.[] | "- `\(.)`"' <<< "$removed"
+              echo
+              echo 'CI blocks removal so packages cannot evade verification by disappearing.'
+              echo 'An intentional removal requires maintainer review and an authorised'
+              echo 'GitHub branch-protection/ruleset bypass, if available.'
+              echo 'Do not force-push or disable verification to clear this check.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo '::error title=Published package targets removed::Previously exported package targets are missing; see the discovery job summary.'
+            exit 1
+          fi
 
           # Each attr includes the system, making it a unique target key.
           # Missing (new) PR targets are selected automatically.
@@ -353,7 +367,7 @@ jobs:
   # This gate is unprivileged. The trusted reporter verifies its workflow
   # source was not changed by the PR before trusting the job conclusion.
   result:
-    name: Reproducibility gate
+    name: Package verification gate
     needs: [discover, check]
     if: >-
       always() &&

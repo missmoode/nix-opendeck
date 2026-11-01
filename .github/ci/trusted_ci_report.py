@@ -15,8 +15,8 @@ from urllib.request import Request, urlopen
 
 WORKFLOWS = {
     ".github/workflows/checks.yml": ("Checks", "Tests and evaluation", "nix-opendeck/tests"),
-    ".github/workflows/pr-reproducibility.yml": (
-        "Reproducibility", "Reproducibility gate", "nix-opendeck/reproducibility"
+    ".github/workflows/pr-package-verification.yml": (
+        "Package verification", "Package verification gate", "nix-opendeck/package-verification"
     ),
 }
 REPORTER_PATHS = (".github/workflows/trusted-ci-report.yml", ".github/ci/trusted_ci_report.py")
@@ -158,7 +158,7 @@ def assess(event, api):
         return None
     # PR-authored changes to verification policy cannot produce App success.
     protected = (path, *REPORTER_PATHS)
-    if kind == "Reproducibility":
+    if kind == "Package verification":
         protected += (".github/ci/targets.nix",)
     unchanged = all(
         api.content_sha(file, merge_sha) == api.content_sha(file, pr["base"]["sha"])
@@ -166,6 +166,14 @@ def assess(event, api):
     )
     jobs = list(api.pages(f"/actions/runs/{run['id']}/jobs", key="jobs"))
     matching = [job for job in jobs if job["name"] == job_name]
+    # Diagnostic only: the signed result still depends on the required gate.
+    discovery = [
+        job for job in jobs
+        if kind == "Package verification"
+        and job["name"] == "Discover changed packages"
+        and job["conclusion"] == "failure"
+        and isinstance(job.get("id"), int)
+    ]
     job_pass = len(matching) == 1 and matching[0]["conclusion"] == "success"
     # A skipped draft run can finish after the PR becomes ready again.
     # Keep its status pending, never success; do not mask real failures.
@@ -195,8 +203,9 @@ def assess(event, api):
         "state": "pending" if pending else ("success" if passed else "failure"), "description": description,
         "url": run["html_url"],
         "report_failure": unchanged and ready and not passed and not skipped,
+        "discovery_check_id": discovery[0]["id"] if len(discovery) == 1 else None,
         "automated": (
-            kind == "Reproducibility"
+            kind == "Package verification"
             and pr["user"]["login"] == os.environ.get("APP_BOT_LOGIN")
             and pr["head"]["repo"]["full_name"] == api.repo
             and pr["head"]["ref"] in ("automated/package-updates", "automated/nixpkgs-update")
@@ -207,7 +216,7 @@ def assess(event, api):
 
 def notify(api, result):
     """Optional, best-effort PR comment and automated-update assignment."""
-    if result["kind"] != "Reproducibility":
+    if result["kind"] != "Package verification":
         return
     if result["report_failure"] and result["automated"]:
         maintainers = [m.strip() for m in os.environ.get("UPDATE_MAINTAINERS", "").split(",") if m.strip()]
@@ -231,8 +240,32 @@ def notify(api, result):
         for comment in comments:
             api.request(f"/issues/comments/{comment['id']}", method="DELETE", app=True)
     else:
+        removal_note = ""
+        if result["discovery_check_id"] is not None:
+            try:
+                # Annotations affect only the optional comment, never status.
+                annotations = api.pages(
+                    f"/check-runs/{result['discovery_check_id']}/annotations"
+                )
+                if any(a.get("title") == "Published package targets removed"
+                       and a.get("annotation_level") == "failure"
+                       for a in annotations):
+                    removal_note = (
+                        "**Published package targets were removed.**\n\n"
+                        "The PR removes previously exported package outputs. "
+                        "CI blocks this to prevent bypassing package verification "
+                        "by deleting targets. See the discovery job summary for "
+                        "the affected targets.\n\n"
+                        "If intentional, a maintainer must review the removal "
+                        "and, **only if authorised**, use GitHub's branch-protection/"
+                        "ruleset bypass of required checks to merge. CI remains "
+                        "failed; do not force-push or disable verification.\n\n"
+                    )
+            except URLError as exc:
+                print(f"Optional annotation lookup failed: {exc}", file=sys.stderr)
         body = (
-            f"{COMMENT_MARKER}\n### Reproducibility verification failed\n\n"
+            f"{COMMENT_MARKER}\n### Package verification failed\n\n"
+            f"{removal_note}"
             f"[View failing verification run]({result['url']}).\n"
         )
         if comments:

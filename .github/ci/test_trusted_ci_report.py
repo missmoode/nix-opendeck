@@ -53,10 +53,16 @@ class FakeAPI:
                       "conclusion": "success"}]
         self.published = []
         self.fail_status = False
+        self.annotations = []
+        self.comments = []
+        self.writes = []
 
     def request(self, path, **kwargs):
         if path.startswith("/pulls/"):
             return self.pr
+        if path.startswith("/issues/"):
+            self.writes.append((path, kwargs))
+            return {"id": 123}
         raise AssertionError("Unexpected request: " + path)
 
     def pages(self, path, key=None):
@@ -66,6 +72,10 @@ class FakeAPI:
             yield from self.recent
         elif path.startswith("/actions/runs/"):
             yield from self.jobs
+        elif path.startswith("/check-runs/"):
+            yield from self.annotations
+        elif path.startswith("/issues/"):
+            yield from self.comments
         else:
             raise AssertionError("Unexpected pagination: " + path)
 
@@ -84,16 +94,16 @@ class ReporterTests(unittest.TestCase):
         return event, pr, FakeAPI(pr, kind)
 
     def test_realistic_run_is_accepted(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             with self.subTest(kind=kind):
                 event, _, api = self.setup_case(kind)
                 self.assertEqual(reporter.assess(event, api)["state"], "success")
 
     def test_modified_ci_policy_fails_closed(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             event, _, api = self.setup_case(kind)
             paths = [event["workflow_run"]["path"], *reporter.REPORTER_PATHS]
-            if kind == "Reproducibility":
+            if kind == "Package verification":
                 paths.append(".github/ci/targets.nix")
             for path in paths:
                 with self.subTest(kind=kind, path=path):
@@ -172,7 +182,7 @@ class ReporterTests(unittest.TestCase):
 
     def test_cancelled_new_commit_cannot_reuse_old_success(self):
         """A cancellation must never certify a different commit or merge tree."""
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             with self.subTest(kind=kind):
                 event, pr, api = self.setup_case(kind)
                 event["workflow_run"]["id"] = 43
@@ -198,7 +208,7 @@ class ReporterTests(unittest.TestCase):
         self.assertIsNone(reporter.assess(event, api))
 
     def test_both_verifications_require_current_non_draft_pr(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             for draft in (True, None):
                 with self.subTest(kind=kind, draft=draft):
                     event, pr, api = self.setup_case(kind)
@@ -208,13 +218,13 @@ class ReporterTests(unittest.TestCase):
                     self.assertFalse(result["report_failure"])
 
     def test_labels_do_not_change_verification_eligibility(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             event, pr, api = self.setup_case(kind)
             pr["labels"] = [{"name": "some unrelated label"}]
             self.assertEqual(reporter.assess(event, api)["state"], "success")
 
     def test_draft_transition_rechecks_current_readiness(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             event, pr, api = self.setup_case(kind)
             pr["draft"] = True
             self.assertEqual(reporter.assess(event, api)["state"], "pending")
@@ -225,7 +235,7 @@ class ReporterTests(unittest.TestCase):
             self.assertEqual(reporter.assess(event, api)["state"], "pending")
 
     def test_skipped_run_during_draft_to_ready_race_stays_pending(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             with self.subTest(kind=kind):
                 event, pr, api = self.setup_case(kind)
                 # A successful run published an App status before drafting.
@@ -250,7 +260,7 @@ class ReporterTests(unittest.TestCase):
                 self.assertEqual(api.published[-1][2], "success")
 
     def test_skipped_gate_does_not_hide_other_workflow_failures(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             with self.subTest(kind=kind):
                 event, _, api = self.setup_case(kind)
                 api.jobs[0]["conclusion"] = "skipped"
@@ -261,7 +271,7 @@ class ReporterTests(unittest.TestCase):
                 self.assertTrue(result["report_failure"])
 
     def test_skipped_run_does_not_hide_modified_ci_policy(self):
-        for kind in ("Checks", "Reproducibility"):
+        for kind in ("Checks", "Package verification"):
             with self.subTest(kind=kind):
                 event, _, api = self.setup_case(kind)
                 event["workflow_run"]["conclusion"] = "skipped"
@@ -290,7 +300,7 @@ class ReporterTests(unittest.TestCase):
         self.assertEqual(api.published, [(HEAD, "nix-opendeck/tests", "success")])
 
     def test_notification_error_does_not_undo_status(self):
-        event, _, api = self.setup_case("Reproducibility")
+        event, _, api = self.setup_case("Package verification")
         with TemporaryDirectory() as directory:
             event_file = Path(directory) / "event.json"
             event_file.write_text(json.dumps(event), encoding="utf-8")
@@ -300,7 +310,41 @@ class ReporterTests(unittest.TestCase):
                  patch.object(reporter, "GitHub", return_value=api), \
                  patch.object(reporter, "notify", side_effect=RuntimeError("comment failure")):
                 reporter.main()
-        self.assertEqual(api.published, [(HEAD, "nix-opendeck/reproducibility", "success")])
+        self.assertEqual(api.published, [(HEAD, "nix-opendeck/package-verification", "success")])
+
+    def test_removed_targets_comment(self):
+        event, _, api = self.setup_case("Package verification")
+        event["workflow_run"]["conclusion"] = "failure"
+        api.jobs[0]["conclusion"] = "failure"
+        api.jobs.append({"id": 177, "name": "Discover changed packages",
+                         "conclusion": "failure"})
+        api.annotations = [{"title": "Published package targets removed",
+                            "annotation_level": "failure"}]
+        result = reporter.assess(event, api)
+        self.assertEqual(result["state"], "failure")
+        self.assertEqual(result["discovery_check_id"], 177)
+        with patch.dict(os.environ, {"APP_BOT_LOGIN": "test[bot]"}):
+            reporter.notify(api, result)
+        body = api.writes[-1][1]["payload"]["body"]
+        self.assertIn("Published package targets were removed", body)
+        self.assertIn("only if authorised", body)
+        self.assertIn("bypass of required checks", body)
+
+    def test_other_discovery_failure_does_not_claim_removal(self):
+        event, _, api = self.setup_case("Package verification")
+        event["workflow_run"]["conclusion"] = "failure"
+        api.jobs[0]["conclusion"] = "failure"
+        api.jobs.append({"id": 177, "name": "Discover changed packages",
+                         "conclusion": "failure"})
+        api.annotations = [{"title": "Nix evaluation failed",
+                            "annotation_level": "failure"}]
+        result = reporter.assess(event, api)
+        with patch.dict(os.environ, {"APP_BOT_LOGIN": "test[bot]"}):
+            reporter.notify(api, result)
+        body = api.writes[-1][1]["payload"]["body"]
+        self.assertIn("Package verification failed", body)
+        self.assertNotIn("Published package targets were removed", body)
+        self.assertNotIn("bypass", body)
 
     def test_status_publication_error_is_not_suppressed(self):
         event, _, api = self.setup_case()

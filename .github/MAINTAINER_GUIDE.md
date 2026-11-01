@@ -28,7 +28,7 @@ Paths in this table are relative to `.github/`.
 | `ci/reconcile_update_prs.py` | Identify and close updater PRs whose proposed source changes are already present on `main` |
 | `workflows/update-nixpkgs.yml` | Update the nixpkgs flake input independently of package versions |
 | `workflows/checks.yml` | Run unprivileged PR tests and Nix checks |
-| `workflows/pr-reproducibility.yml` | Verify changed package outputs with native builds and independent rebuilds |
+| `workflows/pr-package-verification.yml` | Validate exported targets and independently rebuild changed packages |
 | `workflows/trusted-ci-report.yml` | Verify unprivileged workflow results and publish trusted commit statuses |
 | `ci/trusted_ci_report.py` | Implement trusted run identification, verification and status publication |
 | `workflows/cache.yml` | Build and publish missing redistributable outputs to Cachix |
@@ -66,12 +66,12 @@ requests automatic merging once the required PR checks pass.
 This workflow does not update OpenDeck or plugin versions. Those are handled
 by `Update packages`.
 
-The PR reproducibility workflow identifies which package outputs actually
+The PR package verification workflow identifies which package outputs actually
 change under the proposed nixpkgs revision and validates those outputs.
 
 ### Pull request verification
 
-Ready-for-review PRs trigger `Checks` and `Reproducibility`.
+Ready-for-review PRs trigger `Checks` and `Package verification`.
 
 Draft PRs do not execute the expensive verification jobs. Verification runs
 when a PR is opened ready for review, becomes ready for review, receives new
@@ -110,7 +110,7 @@ PR code executes in two unprivileged workflows:
 
 - `Checks`: Python regression tests, all-system Nix evaluation, and native
   `nix flake check`.
-- `Reproducibility`: discovery and native verification of package outputs
+- `Package verification`: discovery and native verification of package outputs
   affected by the PR.
 
 These workflows have read-only repository access and do not receive the
@@ -119,13 +119,13 @@ GitHub App credentials used to publish trusted commit statuses.
 Passing an ordinary GitHub Actions job does not, by itself, satisfy the
 repository's trusted verification requirements.
 
-### Reproducibility target selection
+### Package verification target selection
 
 `ci/targets.nix` derives targets directly from the flake, including
 `opendeck-core`, the default OpenDeck package, and exported plugins for
 supported systems.
 
-The PR reproducibility workflow evaluates the target catalogue at the PR's
+The PR package verification workflow evaluates the target catalogue at the PR's
 base revision and proposed merge revision using the trusted base catalogue.
 
 It compares evaluated Nix output paths:
@@ -133,7 +133,9 @@ It compares evaluated Nix output paths:
 - Changed or newly introduced targets are selected for verification.
 - Unchanged outputs are not unnecessarily rebuilt.
 - Removal of a previously published target is treated as an error, not as
-  an empty set of changes.
+  an empty set of changes. The discovery summary lists removed targets; an
+  intentional removal needs maintainer review and an authorised bypass of
+  required checks, where repository protection rules allow one.
 - Core and wrapper targets are grouped by platform, with core built first.
 - Changed plugins receive separate native build jobs.
 
@@ -150,7 +152,7 @@ Failures retain useful diagnostics. Redistributable differing outputs may be
 archived for inspection; non-redistributable outputs must not be published.
 
 A PR that changes no evaluated package outputs can still pass the
-reproducibility gate after successful target discovery.
+package verification gate after successful target discovery.
 
 ### Trusted status publication
 
@@ -161,7 +163,7 @@ Its implementation runs from the default branch, not from the PR under test.
 It uses a short-lived GitHub App token to publish the required commit statuses:
 
 - `nix-opendeck/tests`
-- `nix-opendeck/reproducibility`
+- `nix-opendeck/package-verification`
 
 `ci/trusted_ci_report.py` must:
 
@@ -172,7 +174,7 @@ It uses a short-lived GitHub App token to publish the required commit statuses:
 4. Select an authoritative run for that exact revision, accounting safely
    for overlapping or cancelled runs.
 5. Verify that the relevant verification workflow and trusted reporter files
-   match the base revision. Reproducibility also protects `ci/targets.nix`.
+   match the base revision. Package verification also protects `ci/targets.nix`.
 6. Require the expected verification job to have succeeded exactly once.
 7. Require the PR to be currently non-draft before publishing success.
 8. Publish the verified result against the PR head SHA, not the synthetic
@@ -233,7 +235,8 @@ itself through the ordinary PR checks.
 
 Changes to the trusted reporter, verification workflows, or protected target
 selection policy require explicit maintainer review and deployment through
-the repository's trusted-maintenance/default-branch procedure.
+the repository's trusted-maintenance/default-branch procedure. A workflow
+rename changes its trusted identity and cannot certify itself on the PR.
 
 Do not temporarily remove these protections to obtain a passing status.
 Review the change, run the applicable tests, and preserve the separation

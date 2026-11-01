@@ -14,7 +14,7 @@ EVENTS = (
 
 class PrReadinessWorkflowTests(unittest.TestCase):
     def test_both_pr_workflows_rely_on_readiness_not_labels(self):
-        for filename in ('checks.yml', 'pr-reproducibility.yml'):
+        for filename in ('checks.yml', 'pr-package-verification.yml'):
             with self.subTest(workflow=filename):
                 source = (ROOT / '.github/workflows' / filename).read_text()
                 self.assertIn('types: [' + ', '.join(EVENTS) + ']', source)

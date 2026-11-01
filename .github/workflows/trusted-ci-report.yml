@@ -3,11 +3,12 @@ name: Trusted CI report
 
 on:
   workflow_run:
-    workflows: [Checks, Reproducibility]
+    workflows: [Checks, Package verification]
     types: [completed]
 
 permissions:
   actions: read
+  checks: read
   contents: read
   pull-requests: read
 
