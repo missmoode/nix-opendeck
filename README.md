@@ -594,6 +594,7 @@ OpenDeck itself.
 You can also create your own [custom bundles](#custom-bundled-packages).
 
 ### Required runtime commands
+
 Some plugins invoke external commands at runtime. When nix-opendeck does not
 provide such a command as part of the plugin package, it is listed as a
 required runtime command and must be available in your `PATH`.
@@ -603,6 +604,7 @@ services, or another running application. These integrations are documented in
 the plugin listing, but are not checked or provided by nix-opendeck.
 
 ## Plugin Listing
+
 Below is a list of the plugins where a derivation is included in this repo.
 You can check their upstream sources for more information.
 
