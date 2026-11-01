@@ -39,6 +39,19 @@ The Python helpers use the standard library where practical. Their tests
 exercise decision logic but do not replace native builds or live GitHub Actions
 integration checks.
 
+## Developer inputs and checks
+
+The root `flake.lock` pins Nixpkgs for packages, checks and developer tools.
+The Home Manager source used only by the tests is pinned with a revision and
+NAR hash in `tests/default.nix`, without adding it to the public flake inputs.
+Update those values together when the test dependency needs updating.
+
+The checks import Home Manager's evaluation library using the main flake's
+`pkgs.lib`. `tests/` contains Nix checks; `.github/ci/test_*.py` remain
+separate Python tests. `nix flake check` runs the checks, and `nix develop`
+provides the root Nixpkgs tools `nix-update`, `nixfmt` and `NIX_PATH`.
+The test-only Home Manager source may need downloading on a first check run.
+
 ## Routine automation
 
 ### Package updates
