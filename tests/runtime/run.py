@@ -22,9 +22,10 @@ def main() -> int:
 
     def fail(name, error):
         print(f"FAIL: {name}: {error}", file=sys.stderr, flush=True)
-        failures.append(name)
+        reason = " ".join(str(error).splitlines())
+        failures.append((name, reason))
         if os.environ.get("GITHUB_ACTIONS") == "true":
-            print(f"::error title=OpenDeck runtime test::{name}", flush=True)
+            print(f"::error title=OpenDeck runtime test::{name}: {reason.replace('%', '%25')}", flush=True)
 
     def check(name, condition):
         try:
@@ -77,12 +78,28 @@ def main() -> int:
             unrelated = Path(os.environ["OPENDECK_TEST_UNRELATED_ASSET"])
             traversal = app.config / "plugins/../local.svg"
 
+            def expect_asset(path, expected_status):
+                status, body = app.request(path)
+                if status != expected_status:
+                    raise AssertionError(
+                        f"GET {path} (resolves to {path.resolve()}): "
+                        f"HTTP {status}, expected {expected_status}"
+                    )
+                if expected_status == 200:
+                    expected = path.read_bytes()
+                    if body != expected:
+                        raise AssertionError(
+                            f"GET {path}: response body differs "
+                            f"({len(body)} bytes received, {len(expected)} expected)"
+                        )
+                return True
+
             asset_checks = [
-                ("User-config asset allowed", lambda: app.request(allowed) == (200, allowed.read_bytes())),
-                ("Symlinked plugin asset allowed", lambda: app.request(symlinked) == (200, symlinked.read_bytes())),
-                ("Outside-config asset forbidden", lambda: app.request(forbidden)[0] == 403),
-                ("Unrelated Nix-store asset forbidden", lambda: app.request(unrelated)[0] == 403),
-                ("Parent-component traversal forbidden", lambda: app.request(traversal)[0] == 403),
+                ("User-config asset allowed", lambda: expect_asset(allowed, 200)),
+                ("Symlinked plugin asset allowed", lambda: expect_asset(symlinked, 200)),
+                ("Outside-config asset forbidden", lambda: expect_asset(forbidden, 403)),
+                ("Unrelated Nix-store asset forbidden", lambda: expect_asset(unrelated, 403)),
+                ("Parent-component traversal forbidden", lambda: expect_asset(traversal, 403)),
             ]
             if bundled:
                 package_asset = next(
@@ -92,7 +109,7 @@ def main() -> int:
                 )
                 asset_checks.insert(2, (
                     "Bundled plugin asset allowed",
-                    lambda: app.request(package_asset) == (200, package_asset.read_bytes()),
+                    lambda: expect_asset(package_asset, 200),
                 ))
             else:
                 skip("Bundled plugin asset allowed", "bundle manifest missing")
@@ -159,7 +176,7 @@ def main() -> int:
             f"{len(passed)} passed, {len(failures)} failed, {len(skipped)} skipped.",
         ]
         if failures:
-            lines += ["", "**Failed checks:**", *(f"- {name}" for name in failures)]
+            lines += ["", "**Failed checks:**", *(f"- **{name}**: {reason}" for name, reason in failures)]
         if skipped:
             lines += ["", "**Skipped checks:**", *(f"- {name}" for name in skipped)]
         try:

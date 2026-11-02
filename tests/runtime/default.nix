@@ -24,7 +24,8 @@ pkgs.writeShellApplication {
 
       # Start the bus after Xvfb so activated services see the test display.
       exec xvfb-run -a -s '-screen 0 1280x800x24 -nolisten tcp' \
-        dbus-run-session -- ${pkgs.python3}/bin/python3 ${./.}/run.py "$@"
+        dbus-run-session --config-file=${pkgs.dbus}/share/dbus-1/session.conf -- \
+          ${pkgs.python3}/bin/python3 ${./.}/run.py "$@"
     '' else ''
       exec ${pkgs.python3}/bin/python3 ${./.}/run.py "$@"
     ''}

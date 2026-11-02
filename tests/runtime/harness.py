@@ -31,7 +31,7 @@ class OpenDeckHarness:
         self.package = package.resolve()
         self.artifacts = artifacts
         self.temporary = tempfile.TemporaryDirectory(prefix="opendeck-runtime-")
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.home = self.root / "home"
         self.config_base = self.root / "config"
         self.config = (
