@@ -210,6 +210,8 @@ executable behaviour on the relevant platform when possible.
 - Respect upstream licenses, including requirements around redistribution and
   included license files. A successful local build does not by itself establish
   that you can redistribute the binary via a cache, legally speaking.
+  - If you're using the helpers, you need to explicitly declare `licenseFiles = null`
+    if you're not using the helper to include them.
 - Test both the Nix build and the actual plugin in OpenDeck. In particular, check
   icons/assets, plugin startup, its actions and any external integrations. **Make
   sure to check the plugin's logs for errors!**
