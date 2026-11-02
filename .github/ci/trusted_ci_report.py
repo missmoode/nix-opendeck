@@ -20,6 +20,13 @@ WORKFLOWS = {
     ),
 }
 REPORTER_PATHS = (".github/workflows/trusted-ci-report.yml", ".github/ci/trusted_ci_report.py")
+# Runtime assertions are verification policy: a PR must not weaken them while
+# still receiving an App-issued package-verification success.
+RUNTIME_POLICY_FILES = (
+    "tests/runtime/default.nix",
+    "tests/runtime/run.py",
+    "tests/runtime/harness.py",
+)
 COMMENT_MARKER = "<!-- nix-opendeck-reproducibility -->"
 SHA = r"[0-9a-f]{40}"
 
@@ -159,11 +166,18 @@ def assess(event, api):
     # PR-authored changes to verification policy cannot produce App success.
     protected = (path, *REPORTER_PATHS)
     if kind == "Package verification":
-        protected += (".github/ci/targets.nix",)
-    unchanged = all(
-        api.content_sha(file, merge_sha) == api.content_sha(file, pr["base"]["sha"])
-        for file in protected
-    )
+        protected += (".github/ci/targets.nix", *RUNTIME_POLICY_FILES)
+    try:
+        unchanged = all(
+            api.content_sha(file, merge_sha) == api.content_sha(file, pr["base"]["sha"])
+            for file in protected
+        )
+    except URLError as exc:
+        # New verification files do not exist on main during the introducing
+        # PR. Fail closed with an explicit status rather than crashing.
+        if getattr(exc, "code", None) != 404:
+            raise
+        unchanged = False
     jobs = list(api.pages(f"/actions/runs/{run['id']}/jobs", key="jobs"))
     matching = [job for job in jobs if job["name"] == job_name]
     # Diagnostic only: the signed result still depends on the required gate.

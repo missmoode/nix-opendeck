@@ -56,6 +56,12 @@
         // {
           formatter = pkgs.nixfmt-tree;
 
+          # Explicitly invoked integration suite; not part of nix flake check.
+          apps.opendeck-runtime-test = {
+            type = "app";
+            program = "${import ./tests/runtime { inherit pkgs; }}/bin/opendeck-runtime-test";
+          };
+
           devShells.default = pkgs.mkShellNoCC {
             packages = [
               pkgs.nix-update
