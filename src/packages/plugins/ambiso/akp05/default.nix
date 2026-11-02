@@ -68,7 +68,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/ambiso/opendeck-akp05";
     license = lib.licenses.gpl3Only;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-    authors = [ "ambiso" ];
   };
 
   passthru.updateScript = nix-update-script {

@@ -43,7 +43,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/FeloDeck/obs-tools";
     license = lib.licenses.gpl3Plus;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-    authors = [ "Felitendo" ];
   };
 
   passthru.updateScript = nix-update-script {

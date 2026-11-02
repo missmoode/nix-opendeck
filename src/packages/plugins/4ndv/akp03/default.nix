@@ -47,7 +47,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/4ndv/opendeck-akp03";
     license = lib.licenses.gpl3Only;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-    authors = [ "Andrey Viktorov" ];
   };
 
   passthru.updateScript = nix-update-script {

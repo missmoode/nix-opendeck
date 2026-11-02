@@ -36,7 +36,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/OpenActionPlugins/counter";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-    authors = [ "nekename" ];
   };
 
   passthru.updateScript = nix-update-script {

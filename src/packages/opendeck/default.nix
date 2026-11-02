@@ -263,10 +263,6 @@ rustPlatform.buildRustPackage (
       license = lib.licenses.gpl3Plus;
       platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
 
-      authors = [
-        "nekename"
-      ];
-
       mainProgram = "opendeck";
     };
 

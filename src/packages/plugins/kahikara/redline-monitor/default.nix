@@ -57,8 +57,5 @@ mkNpmOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/kahikara/opendeck-redline-monitor";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
-    authors = [
-      "kahikara"
-    ];
   };
 })

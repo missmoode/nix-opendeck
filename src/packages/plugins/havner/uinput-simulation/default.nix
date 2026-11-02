@@ -36,7 +36,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/Havner/uinput-simulation";
     license = lib.licenses.gpl3Plus;
     platforms = lib.platforms.linux;
-    authors = [ "Lukasz Pawelczyk" ];
   };
 
   passthru.updateScript = nix-update-script {

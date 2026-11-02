@@ -34,7 +34,6 @@ mkNpmOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/danmaxis/hyprstream";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
-    authors = [ "danmaxis" ];
   };
 
   passthru.updateScript = [

@@ -41,9 +41,5 @@ mkNpmOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/cgiesche/streamdeck-homeassistant";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-
-    authors = [
-      "Christoph Giesche"
-    ];
   };
 })

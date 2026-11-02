@@ -28,9 +28,5 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     homepage = "https://marc.fail/onairclock/";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-
-    authors = [
-      "wortkrieg"
-    ];
   };
 })

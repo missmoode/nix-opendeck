@@ -41,7 +41,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/jfms7s/opendeck-weather";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-    authors = [ "jfms7s" ];
   };
 
   passthru = {

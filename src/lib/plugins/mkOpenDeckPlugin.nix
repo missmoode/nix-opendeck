@@ -27,6 +27,11 @@
   # Optional udev rules: output filename -> source file.
   udevRules ? { },
 }:
+
+assert lib.assertMsg (
+  licenseFiles == null || (builtins.isList licenseFiles && licenseFiles != [ ])
+) "mkOpenDeckPlugin: licenseFiles must be a non-empty list or null";
+
 {
   installPhase = ''
     runHook preInstall
@@ -50,7 +55,7 @@
           ${source} \
           "$plugin"/${lib.escapeShellArg filename}
       ''
-    ) licenseFiles}
+    ) (if licenseFiles == null then [ ] else licenseFiles)}
 
     runHook postInstall
 

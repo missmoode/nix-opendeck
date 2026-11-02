@@ -48,14 +48,13 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     } "$plugin/LICENSE"
   '';
 
+  # The upstream license is installed separately in postInstall.
+  licenseFiles = null;
+
   meta = {
     description = "Send HTTP requests and WebSocket messages from OpenDeck";
     homepage = "https://github.com/data-enabler/streamdeck-web-requests";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-
-    authors = [
-      "data-enabler"
-    ];
   };
 })

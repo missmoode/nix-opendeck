@@ -52,9 +52,5 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/nekename/OpenDeck";
     license = lib.licenses.gpl3Plus;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-
-    authors = [
-      "nekename"
-    ];
   };
 })

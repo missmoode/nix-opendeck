@@ -25,10 +25,12 @@ mkRustOpenDeckPlugin (
         deno
       ];
 
-      outputHash = {
-        x86_64-linux = "sha256-gk0lz/CXwyc0o9Txggu3qSk/WTN3KlQDiOXEgCaKC2U=";
-        aarch64-linux = "sha256-nEZR6+3VDlDEvlUwfOi+qqROGRfgCDTOfhYPsTJOHSw=";
-      }.${stdenv.hostPlatform.system};
+      outputHash =
+        {
+          x86_64-linux = "sha256-gk0lz/CXwyc0o9Txggu3qSk/WTN3KlQDiOXEgCaKC2U=";
+          aarch64-linux = "sha256-nEZR6+3VDlDEvlUwfOi+qqROGRfgCDTOfhYPsTJOHSw=";
+        }
+        .${stdenv.hostPlatform.system};
       outputHashMode = "recursive";
 
       buildPhase = ''
@@ -78,13 +80,13 @@ mkRustOpenDeckPlugin (
     ];
 
     postPatch = ''
-      ln -s ${./Cargo.lock} Cargo.lock
-      ln -s ${./deno.lock} pi/deno.lock
+            ln -s ${./Cargo.lock} Cargo.lock
+            ln -s ${./deno.lock} pi/deno.lock
 
-			substituteInPlace pi/svelte.config.ts \
-			  --replace-fail \
-			  'adapter: adapter({ pages: "../assets/pi" }),' \
-			  'adapter: adapter({ pages: "../assets/pi" }), version: { name: "${finalAttrs.version}" },'
+      			substituteInPlace pi/svelte.config.ts \
+      			  --replace-fail \
+      			  'adapter: adapter({ pages: "../assets/pi" }),' \
+      			  'adapter: adapter({ pages: "../assets/pi" }), version: { name: "${finalAttrs.version}" },'
     '';
     nativeBuildInputs = [
       deno
@@ -118,10 +120,6 @@ mkRustOpenDeckPlugin (
       homepage = "https://github.com/OpenActionPlugins/desktopentry";
       license = lib.licenses.mit;
       platforms = lib.platforms.linux;
-
-      authors = [
-        "nekename"
-      ];
     };
 
     passthru = {
