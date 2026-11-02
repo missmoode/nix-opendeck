@@ -159,7 +159,7 @@ Then use the package with Home Manager:
 ```
 
 The same plugin derivation can also be passed to `wrapOpenDeck` when creating a
-bundled package. See [Custom bundled packages](./README.md#custom-bundled-packages).
+bundled package. See [Custom OpenDeck packages](./README.md#custom-opendeck-packages).
 
 ## Runtime requirements and device permissions
 

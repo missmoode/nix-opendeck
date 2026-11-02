@@ -23,19 +23,59 @@ LLM assistance during development](#llm-usage-disclosure).
 
 <div align="center">
 
-[Quick Start](#quick-start) | [Installation](#installation) | [Usage](#usage) | [Custom Bundles](#custom-bundled-packages) | [Plugin Listing](#plugin-listing)
+[Installation](#installation) | [Binary Cache](#binary-cache) | [Usage](#usage) |
+[Custom Packages](#custom-opendeck-packages) | [Plugin Listing](#plugin-listing)
 
 </div>
 
 ## Quick Start
 
-For NixOS with Home Manager, add nix-opendeck to your flake inputs:
+Add nix-opendeck to your flake inputs:
 
 ```nix
 opendeck.url = "github:missmoode/nix-opendeck";
 ```
 
-Import the Home Manager module and declare your plugins:
+> [!NOTE]
+> These examples assume your flake inputs are available to your NixOS or Home Manager
+> modules. If you haven't already configured this, pass `inputs` through NixOS's
+> `specialArgs` or Home Manager's `extraSpecialArgs`.
+
+### Installing OpenDeck with plugins
+
+The simplest way to install OpenDeck with your choice of plugins is to use
+`wrapOpenDeck`. It assembles OpenDeck and your selected plugins into a single
+Nix package, and works directly from the flake.
+
+For example, on NixOS:
+
+```nix
+{ inputs, pkgs, ... }:
+let
+  opendeck = inputs.opendeck.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+  customOpenDeck = opendeck.wrapOpenDeck {
+    plugins = with opendeck.opendeck-plugins; [
+      nekename.starterpack
+      openactionplugins.mpris
+      gallowaylabs.tomato-timer
+    ];
+  };
+in
+{
+  environment.systemPackages = [ customOpenDeck ];
+  services.udev.packages = [ customOpenDeck.udev ];
+}
+```
+
+The `wrapOpenDeck` helper also works with nix-darwin and standalone Nix
+installations. See [Custom OpenDeck packages](#custom-opendeck-packages)
+for other ways to use it.
+
+### Managing plugins with Home Manager
+
+If you'd prefer to manage plugins individually, the Home Manager module
+installs them into OpenDeck's plugin directory and can reload changed plugins
+without restarting the application.
 
 ```nix
 { inputs, pkgs, ... }:
@@ -67,16 +107,9 @@ On NixOS, also install the device-access rules in your NixOS configuration:
 }
 ```
 
-The Home Manager module installs OpenDeck by default; no overlay is required.
-Some [device-support plugins](#device-support-plugins) need additional udev rules.
-For prebuilt packages, see [Binary Cache](#binary-cache). Other installation methods
-and configuration options are documented below.
-
-**Using Nix without Home Manager, or prefer bundled plugins?**
-
-You can use `wrapOpenDeck` to create a custom OpenDeck package containing your chosen plugins, without recompiling the application. It works on NixOS, nix-darwin, and standalone Nix installations, with or without Home Manager.
-
-See [Custom bundled packages](#custom-bundled-packages) for examples.
+The Home Manager module installs OpenDeck by default, so you don't need to
+install it separately. Some [device-support plugins](#device-support-plugins)
+need additional udev rules.
 
 ## Packages and Scope
 
@@ -88,11 +121,12 @@ This flake provides three OpenDeck packages:
   that do not declare [required runtime commands](#required-runtime-commands) or
   additional udev rules.
 
-The plugin-containing packages are assembled from opendeck-core without recompiling the application. Custom plugin bundles can also be created using `wrapOpenDeck`.
+The plugin-containing packages are assembled from `opendeck-core` without recompiling the
+application. Custom plugin bundles can also be created using `wrapOpenDeck`.
 
 The `default` package output is an alias for `opendeck`.
 
-It also provides third-party plugin derivations, a Home Manager module, and udev
+nix-opendeck also provides third-party plugin derivations, a Home Manager module, and udev
 rules for supported hardware. See the [Plugin Listing](#plugin-listing) for available plugins.
 
 While the goal is to stay close to upstream OpenDeck, this repository includes downstream
@@ -120,9 +154,11 @@ standalone Nix installations on supported systems.
 > I don't have the hardware to check. If you're on Linux aarch64 or Apple Silicon and trying this
 > out, you're welcome to open an issue and let me know if it works!
 
-The Home Manager module supports both Linux and macOS.
+The Home Manager module is available on all supported platforms.
 
-On NixOS, device permissions are configured through the standard `services.udev.packages` option, using the udev rules packages provided by this flake.
+On Linux (including NixOS), OpenDeck requires setting appropriate permissions to access
+supported USB devices, normally provided through udev rules. See [Device Access](#device-access)
+for configuration instructions.
 
 ### Standalone OpenDeck
 If you just want the package, and don't care about the module or flake stuff:
@@ -131,8 +167,8 @@ If you just want the package, and don't care about the module or flake stuff:
 nix profile add github:missmoode/nix-opendeck#opendeck
 ```
 
-This won't automatically configure device permissions: you'll need to [do that
-yourself](#device-access-on-other-linux-distributions).
+On Linux, this won't automatically configure device permissions: you'll need to
+[configure device access](#device-access) yourself.
 
 ### Flakes
 
@@ -187,137 +223,36 @@ extra-trusted-public-keys = nix-opendeck.cachix.org-1:twvVjvv6Xm9H/m9sD2YQfIDoeU
 
 ## Usage
 
-### Device Access on NixOS
-
-OpenDeck requires udev rules to access supported USB devices. The OpenDeck
-packages expose a `.udev` attribute containing the core Stream Deck rules,
-along with any additional rules provided by bundled plugins.
-
-Install these rules through NixOS's standard `services.udev.packages` option:
-
-```nix
-{
-  inputs,
-  pkgs,
-  ...
-}:
-let
-  opendeck = inputs.opendeck.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
-  opendeck-plugins = inputs.opendeck.legacyPackages.${pkgs.stdenv.hostPlatform.system}.opendeck-plugins;
-in
-{
-  services.udev.packages = [
-    opendeck.udev
-    # To include the rules from a non-bundled hardware plugin:
-    # opendeck-plugins."4ndv".akp03.udev
-  ];
-
-  # This only installs the udev rules, not OpenDeck itself.
-  # If you're not using the Home Manager module, you can install it system-wide:
-  #
-  # environment.systemPackages = [ opendeck ];
-}
-```
-
-[Device support plugins](#device-support-plugins) installed separately,
-including through Home Manager, may expose their own `.udev` packages. If a
-plugin requires additional udev rules, add its `.udev` attribute to
-`services.udev.packages` as well.
-
-### Device access on other Linux distributions
-
-On Linux distributions other than NixOS, you'll need to install the required
-udev rules manually to allow OpenDeck to access your device.
-
-See the relevant step of OpenDeck's [Linux installation instructions](https://github.com/nekename/OpenDeck#linux).
-
-The udev rules for [device support plugins](#device-support-plugins) can
-usually be found in their upstream repo.
-
-### Home Manager Module
-
-The Home Manager module lets you declare plugins you'd like to use, and
-installs them into OpenDeck's plugin directory via symlinks from the Nix store.
-
-It can be used with standalone Home Manager, or as part of a NixOS or
-nix-darwin configuration. See [Quick Start](#quick-start) for an example.
-
-By default, the module installs this flake's `opendeck` package. You can change
-`programs.opendeck.package` to use something else, such as `opendeck-core`. If
-you do that and still want StarterPack, you'll need to declare
-`opendeck-plugins.nekename.starterpack` in `programs.opendeck.plugins`
-yourself.
-
-If `programs.opendeck.installPackage` is `false`, `programs.opendeck.package`
-should still match the OpenDeck package you installed elsewhere. The module
-uses it to check which plugins are already bundled and prevent accidental
-double-declarations, as well as to target the correct executable for
-plugin reloads or an optional restart.
-
-> [!IMPORTANT]
-> Plugins managed by the Home Manager module are marked as externally managed.
-> The OpenDeck package includes patches that prevent its plugin manager from
-> updating or removing them.
->
-> OpenDeck also skips automatic update checks for these plugins and for bundled
-> plugins, since their updates are managed outside the graphical store.
->
-> Plugins installed through the GUI are unaffected. The Home Manager module
-> will refuse to overwrite a plugin it doesn't already manage.
-
-Home Manager normally reloads individual plugins when their symlinks are added,
-removed or changed. The reload preserves saved settings and profile assignments
-without restarting OpenDeck. It does not reload plugins whose store paths are
-unchanged.
-
-Set `programs.opendeck.reloadOnPluginChanges = false` to defer changes until the
-next launch, or `programs.opendeck.restartOnPluginChanges = true` to request one
-restart instead of individual reloads. Restart takes precedence when both are
-enabled. These notifications do not detect changes to bundled plugins in
-`programs.opendeck.package`.
-
-### Usage without the Home Manager module
-
-#### Using the plugin derivations
-
-OpenDeck looks for plugins within its config directory:
-- Linux: `$XDG_CONFIG_HOME/opendeck/plugins/`
-- macOS: `~/Library/Application Support/opendeck/plugins/`
-
-You could symlink the plugins from the Nix store (or elsewhere) directly into
-there, and the patched `opendeck` should be able to use them. However, without
-the Home Manager module they will not be protected from modification through
-the GUI.
-
-If you manage plugin symlinks yourself, notify a running OpenDeck instance
-after changing or removing a plugin:
-
-```bash
-opendeck --reload-plugin com.example.plugin.sdPlugin
-```
-
-The command loads, reloads or unloads the selected plugin without deleting
-its saved settings or profile assignments. Use `opendeck --restart-if-running`
-to restart the whole application instead. Neither command starts an
-inactive OpenDeck instance.
-
-Alternatively, you can [bundle plugins](#custom-bundled-packages) into an
-OpenDeck package using `wrapOpenDeck`. This lets you select plugins
-declaratively without Home Manager, and without recompiling OpenDeck when the
-plugin selection changes.
-
-The `opendeck-with-plugins` package is also available as a convenience,
-bundling all plugins supported on the selected platform that do not declare
-additional runtime commands or udev rules.
-
-### Custom bundled packages
+### Custom OpenDeck packages
 
 The `wrapOpenDeck` helper creates an OpenDeck package containing your chosen
 plugins. It works independently of Home Manager and can be used with NixOS,
 nix-darwin, or standalone Nix installations.
 
-With either [overlay](#overlay) applied, you can use `pkgs.wrapOpenDeck`:
+You can use the helper directly from the flake:
+```nix
+{ inputs, pkgs, ... }:
+let
+  system = pkgs.stdenv.hostPlatform.system;
+  opendeck = inputs.opendeck;
+  plugins = opendeck.legacyPackages.${system}.opendeck-plugins;
 
+  customOpenDeck = opendeck.legacyPackages.${system}.wrapOpenDeck {
+    plugins = with plugins; [
+      nekename.starterpack
+      openactionplugins.mpris
+      gallowaylabs.tomato-timer
+    ];
+  };
+in
+{
+  environment.systemPackages = [ customOpenDeck ];
+  services.udev.packages = [ customOpenDeck.udev ];
+}
+```
+
+If you've applied an [overlay](#overlay), you can instead use
+`pkgs.wrapOpenDeck`:
 ```nix
 { pkgs, ... }:
 let
@@ -367,30 +302,6 @@ in
 }
 ```
 
-Alternatively, you can use the helper directly from the flake without an
-overlay or Home Manager:
-
-```nix
-{ inputs, pkgs, ... }:
-let
-  system = pkgs.stdenv.hostPlatform.system;
-  opendeck = inputs.opendeck;
-  plugins = opendeck.legacyPackages.${system}.opendeck-plugins;
-
-  customOpenDeck = opendeck.legacyPackages.${system}.wrapOpenDeck {
-    plugins = with plugins; [
-      nekename.starterpack
-      openactionplugins.mpris
-      gallowaylabs.tomato-timer
-    ];
-  };
-in
-{
-  environment.systemPackages = [ customOpenDeck ];
-  services.udev.packages = [ customOpenDeck.udev ];
-}
-```
-
 The examples using `environment.systemPackages` demonstrate NixOS
 installation, but `wrapOpenDeck` itself is also available on nix-darwin and
 standalone Nix installations.
@@ -409,6 +320,122 @@ attribute.
 
 Plugins may also depend on [runtime commands](#required-runtime-commands) or
 external services that the wrapper does not automatically configure.
+
+### Home Manager Module
+
+The Home Manager module lets you declare plugins you'd like to use, and
+installs them into OpenDeck's plugin directory via symlinks from the Nix store.
+
+It can be used with standalone Home Manager, or as part of a NixOS or
+nix-darwin configuration. See [Quick Start](#quick-start) for an example.
+
+By default, the module installs this flake's `opendeck` package. You can change
+`programs.opendeck.package` to use something else, such as `opendeck-core`. If
+you do that and still want StarterPack, you'll need to declare
+`opendeck-plugins.nekename.starterpack` in `programs.opendeck.plugins`
+yourself.
+
+If `programs.opendeck.installPackage` is `false`, `programs.opendeck.package`
+should still match the OpenDeck package you installed elsewhere. The module
+uses it to check which plugins are already bundled and prevent accidental
+double-declarations, as well as to target the correct executable for
+plugin reloads or an optional restart.
+
+> [!IMPORTANT]
+> Plugins managed by the Home Manager module are marked as externally managed.
+> The OpenDeck package includes patches that prevent its plugin manager from
+> updating or removing them.
+>
+> OpenDeck also skips automatic update checks for these plugins and for bundled
+> plugins, since their updates are managed outside the graphical store.
+>
+> Plugins installed through the GUI are unaffected. The Home Manager module
+> will refuse to overwrite a plugin it doesn't already manage.
+
+Home Manager normally reloads individual plugins when their symlinks are added,
+removed or changed. The reload preserves saved settings and profile assignments
+without restarting OpenDeck. It does not reload plugins whose store paths are
+unchanged.
+
+Set `programs.opendeck.reloadOnPluginChanges = false` to defer changes until the
+next launch, or `programs.opendeck.restartOnPluginChanges = true` to request one
+restart instead of individual reloads. Restart takes precedence when both are
+enabled. These notifications do not detect changes to bundled plugins in
+`programs.opendeck.package`.
+
+### Device Access
+#### udev rules on NixOS
+
+OpenDeck requires udev rules to access supported USB devices. The OpenDeck
+packages expose a `.udev` attribute containing the core Stream Deck rules,
+along with any additional rules provided by bundled plugins.
+
+Install these rules through NixOS's standard `services.udev.packages` option:
+
+```nix
+{
+  inputs,
+  pkgs,
+  ...
+}:
+let
+  opendeck = inputs.opendeck.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
+  opendeck-plugins = inputs.opendeck.legacyPackages.${pkgs.stdenv.hostPlatform.system}.opendeck-plugins;
+in
+{
+  services.udev.packages = [
+    opendeck.udev
+    # To include the rules from a non-bundled hardware plugin:
+    # opendeck-plugins."4ndv".akp03.udev
+  ];
+
+  # This only installs the udev rules, not OpenDeck itself.
+  # If you're not using the Home Manager module, you can install it system-wide:
+  #
+  # environment.systemPackages = [ opendeck ];
+}
+```
+
+[Device support plugins](#device-support-plugins) installed separately,
+including through Home Manager, may expose their own `.udev` packages. If a
+plugin requires additional udev rules, add its `.udev` attribute to
+`services.udev.packages` as well.
+
+#### udev rules on other Linux distributions
+
+On Linux distributions other than NixOS, you'll need to install the required
+udev rules manually to allow OpenDeck to access your device.
+
+See the relevant step of OpenDeck's [Linux installation instructions](https://github.com/nekename/OpenDeck#linux).
+
+The udev rules for [device support plugins](#device-support-plugins) can
+usually be found in their upstream repo.
+
+### Manual plugin installation
+
+OpenDeck looks for plugins within its config directory:
+- Linux: `$XDG_CONFIG_HOME/opendeck/plugins/`
+- macOS: `~/Library/Application Support/opendeck/plugins/`
+
+You could symlink the plugins from the Nix store (or elsewhere) directly into
+there, and the patched `opendeck` should be able to use them. However, without
+the Home Manager module they will not be protected from modification through
+the GUI.
+
+If you manage plugin symlinks yourself, notify a running OpenDeck instance
+after changing or removing a plugin:
+
+```bash
+opendeck --reload-plugin com.example.plugin.sdPlugin
+```
+
+The command loads, reloads or unloads the selected plugin without deleting
+its saved settings or profile assignments. Use `opendeck --restart-if-running`
+to restart the whole application instead. Neither command starts an
+inactive OpenDeck instance.
+
+If you would rather bundle your plugins than manage these symlinks,
+see [Custom OpenDeck packages](#custom-opendeck-packages).
 
 ### Overlay
 
@@ -542,8 +569,8 @@ If you encounter a problem, the following sections may help identify its cause:
   is available, along with its platform support and external requirements.
 - **[Required Runtime Commands](#required-runtime-commands)** — Some plugins
   depend on commands being available in OpenDeck's runtime environment.
-- **[Device Access on NixOS](#device-access-on-nixos)** — USB devices may
-  require additional udev rules. For other distributions, see [Device Access on Other Linux Distributions](#device-access-on-other-linux-distributions).
+- **[Device Access](#device-access)** — USB devices may
+  require additional udev rules.
 - **[Home Manager Module](#home-manager-module)** — Information about
   declaratively managed plugins, installation conflicts, and plugin updates.
 - **[Bundled Plugins](#bundled-plugins)** — How plugins bundled into OpenDeck
@@ -591,7 +618,7 @@ nix-opendeck assembles bundled packages from the same compiled `opendeck-core`
 derivation. This means you can change the bundled plugins without recompiling
 OpenDeck itself.
 
-You can also create your own [custom bundles](#custom-bundled-packages).
+You can also create your own [custom bundles](#custom-opendeck-packages).
 
 ### Required runtime commands
 
@@ -657,7 +684,7 @@ udev rules, its package exposes a `.udev` attribute that can be added to
 NixOS's `services.udev.packages`. Rules from bundled plugins are also included
 in the corresponding OpenDeck package's `.udev` attribute.
 
-See [Device Access on NixOS](#device-access-on-nixos) for configuration instructions.
+See [Device Access](#device-access) for more information on installing udev rules.
 
 | Upstream plugin | Package name | Supported devices | Additional setup |
 | --- | --- | --- | --- |
@@ -686,28 +713,30 @@ See [Plugin Packaging Guide](./PLUGIN-PACKAGING.md) for instructions on
 independently packaging and distributing plugins.
 
 ## Source Code and Licenses
-nix-opendeck, via the binary cache, distributes builds of third-party
-open-source software under their respective licenses. Additionally, the
-derivations ensure that upstream license files are added to the build output.
 
-The Nix derivations in this repository identify the upstream source revisions,
-dependencies, and build instructions used to produce these packages. Any
-downstream patches are also included in this repository.
+nix-opendeck distributes builds of third-party open-source software through its
+binary cache under their respective licenses, including required upstream
+license files in the package outputs.
 
-The source code for each package can be obtained through the upstream
-repositories referenced in its derivation, using the specified version or
-commit.
+The derivations identify upstream source revisions, dependencies, and build
+instructions, while downstream patches are included in this repository.
 
-For packages requiring corresponding source availability under licenses such
-as GPLv3 or MPL 2.0, please consult the relevant derivation and its upstream
-source. If any referenced source is unavailable, please open an issue so that
-the corresponding source can be provided.
+You can retrieve the original, unpatched OpenDeck source through Nix. For example,
+on `x86_64-linux`:
 
-The LICENSE file in the root of this repository applies to nix-opendeck's
-original packaging and integration code. Downstream patches to third-party
-projects are distributed in accordance with the applicable upstream licenses.
-In particular, the modified OpenDeck application is distributed under
-GPL-3.0-or-later.
+```bash
+nix build --no-link --print-out-paths \
+  'github:missmoode/nix-opendeck#packages.x86_64-linux.opendeck-core.src'
+```
+
+For individual plugins, consult their derivations for the corresponding source.
+Some plugins are packaged from prebuilt release archives rather than source code.
+For licenses requiring corresponding source availability, such as GPLv3 or MPL 2.0,
+please open an issue if any required source is unavailable.
+
+The root `LICENSE` applies to nix-opendeck's original packaging and integration
+code. Downstream patches are subject to their respective upstream licenses,
+and the modified OpenDeck application is distributed under GPL-3.0-or-later.
 
 ## Security and Updates
 
@@ -717,11 +746,11 @@ reproducibility for the entire package set is an expensive process, the
 revision is generally updated monthly. Automated updaters are defined for
 OpenDeck and most plugins, and are checked daily in CI.
 
-I may make Security-related updates outside of this schedule when relevant
+I may make security-related updates outside of this schedule when relevant
 vulnerabilities become known, but I haven’t implemented automatic alerts at
 this time. Timely security fixes are therefore not guaranteed.
 
-If you want to track a more recent Nixpkgs revision you can use
+If you want to track a more recent Nixpkgs revision, you can use
 [`overlays.default`](#overlay) or configure 
 `opendeck.inputs.nixpkgs.follows = "nixpkgs"`. This is likely to cause the
 provided binary cache to miss, and require rebuilding locally.
@@ -734,12 +763,13 @@ scratch, develop Rust patches (prior to this, my only experience with Rust
 was reading the book and playing with ESP32 systems), and conversationally
 review implementation decisions.
 
-Some parts of the project (the Home Manager module, and the
-GitHub workflow CI), were LLM-generated, with me directing development,
+Some parts of the project (including the Home Manager module and the GitHub
+Actions CI workflows) were LLM-generated, with me directing development,
 testing, and iterating on issues I found.
 
-I've tested the results where I can, but there might still be mistakes
-or room for improvement. I'd very much welcome contributions or corrections.
+I've reviewed and tested the results where I can, but there might still be
+mistakes or room for improvement. I'd very much welcome contributions or
+corrections.
 
 ## Reproducibility
 
