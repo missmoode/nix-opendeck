@@ -42,12 +42,14 @@ mkRustOpenDeckPlugin (finalAttrs: {
       --prefix PATH : "${lib.makeBinPath [ bash ]}"
   '';
 
+  # Upstream currently doesn't include a license.
+  licenseFiles = null;
+
   meta = {
     description = "Execute custom shell commands using Stream Deck rotary encoders";
     homepage = "https://github.com/babs/opendeck-plugins-rotary-command";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-    authors = [ "babs" ];
   };
 
   passthru.updateScript = nix-update-script {

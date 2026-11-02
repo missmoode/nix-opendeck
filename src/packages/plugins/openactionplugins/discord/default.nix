@@ -79,13 +79,13 @@ mkRustOpenDeckPlugin (
     };
 
     postPatch = ''
-      ln -s ${./Cargo.lock} Cargo.lock
-      ln -s ${./deno.lock} pi/deno.lock
+            ln -s ${./Cargo.lock} Cargo.lock
+            ln -s ${./deno.lock} pi/deno.lock
 
-			substituteInPlace pi/svelte.config.ts \
-			  --replace-fail \
-			  'adapter: adapter({ pages: "../assets/pi" }),' \
-			  'adapter: adapter({ pages: "../assets/pi" }), version: { name: "${finalAttrs.version}" },'
+      			substituteInPlace pi/svelte.config.ts \
+      			  --replace-fail \
+      			  'adapter: adapter({ pages: "../assets/pi" }),' \
+      			  'adapter: adapter({ pages: "../assets/pi" }), version: { name: "${finalAttrs.version}" },'
     '';
 
     nativeBuildInputs = [
@@ -119,10 +119,6 @@ mkRustOpenDeckPlugin (
       homepage = "https://github.com/OpenActionPlugins/discord";
       license = lib.licenses.gpl3Only;
       platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-
-      authors = [
-        "nekename"
-      ];
     };
 
     passthru = {

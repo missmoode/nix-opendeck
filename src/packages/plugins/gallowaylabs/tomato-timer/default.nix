@@ -28,9 +28,5 @@ mkPrebuiltOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/gallowaylabs/streamdeck-tomato-timer";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-
-    authors = [
-      "Matthew Galloway"
-    ];
   };
 })

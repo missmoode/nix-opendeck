@@ -60,7 +60,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/mdvictor/opendeck-volume-controller";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
-    authors = [ "mdvictor" ];
   };
 
   passthru = {

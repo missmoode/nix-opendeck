@@ -44,7 +44,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/biviale/pwsounddeck";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
-    authors = [ "biviale" ];
   };
 
   passthru.updateScript = nix-update-script {

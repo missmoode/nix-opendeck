@@ -48,6 +48,5 @@ mkNpmOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/CronusAK/Pulse-Audio-Stream-Deck-Plugin";
     license = lib.licenses.gpl3Only;
     platforms = lib.platforms.linux;
-    authors = [ "sfgrimes" ];
   };
 })

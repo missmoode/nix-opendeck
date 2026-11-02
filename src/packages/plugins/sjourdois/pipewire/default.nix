@@ -43,8 +43,5 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/sjourdois/opendeck-pipewire";
     license = lib.licenses.gpl3Plus;
     platforms = lib.platforms.linux;
-    authors = [
-      "sjourdois"
-    ];
   };
 })

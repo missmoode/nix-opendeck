@@ -30,11 +30,8 @@ mkYarnOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/KazWolfe/XIVDeck";
     license = lib.licenses.mpl20;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-
-    authors = [
-      "KazWolfe"
-    ];
   };
+
   passthru = {
     updateScript = nix-update-script {
       extraArgs = [

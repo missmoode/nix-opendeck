@@ -38,8 +38,5 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/GDWhisper/opendeck-tikclock";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
-    authors = [
-      "GDWhisper"
-    ];
   };
 })

@@ -54,10 +54,6 @@ mkRustOpenDeckPlugin (finalAttrs: {
     homepage = "https://github.com/OpenActionPlugins/mpris";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
-
-    authors = [
-      "nekename"
-    ];
   };
 
   passthru = {
