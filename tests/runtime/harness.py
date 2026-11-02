@@ -178,7 +178,21 @@ class OpenDeckHarness:
         return True
 
     def wait_bus_name(self):
-        return self.wait_until(self._owns_bus_name, "private D-Bus single-instance name")
+        try:
+            return self.wait_until(self._owns_bus_name, "private D-Bus single-instance name")
+        except AssertionError as error:
+            # A timeout alone cannot distinguish an unowned name from a failed
+            # query. Inspect the same private bus once, only on failure.
+            result = subprocess.run(
+                ["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus",
+                 "--object-path", "/org/freedesktop/DBus", "--method",
+                 "org.freedesktop.DBus.ListNames"],
+                capture_output=True, text=True, timeout=3, env=self.environ,
+            )
+            detail = result.stdout.strip() or result.stderr.strip()
+            raise AssertionError(
+                f"{error}; private bus ListNames (exit {result.returncode}): {detail}"
+            ) from error
 
     def is_running(self):
         return self.process is not None and self.process.poll() is None
