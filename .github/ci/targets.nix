@@ -20,7 +20,9 @@ let
     let
       licenses = lib.toList (drv.meta.license or [ ]);
     in
-    licenses != [ ] && lib.all (license: license.redistributable or false) licenses;
+    (drv.publishToCache or true)
+    && licenses != [ ]
+    && lib.all (license: license.redistributable or false) licenses;
 
   target = kind: attr: label: drv: {
     inherit

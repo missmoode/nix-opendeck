@@ -52,6 +52,8 @@ mkRustOpenDeckPlugin (finalAttrs: {
     platforms = lib.platforms.linux ++ [ "aarch64-darwin" ];
   };
 
+  passthru.publishToCache = false;
+
   passthru.updateScript = nix-update-script {
     extraArgs = [
       "--flake"
