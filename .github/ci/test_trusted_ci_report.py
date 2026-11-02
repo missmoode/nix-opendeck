@@ -104,7 +104,7 @@ class ReporterTests(unittest.TestCase):
             event, _, api = self.setup_case(kind)
             paths = [event["workflow_run"]["path"], *reporter.REPORTER_PATHS]
             if kind == "Package verification":
-                paths.append(".github/ci/targets.nix")
+                paths.extend((".github/ci/targets.nix", *reporter.RUNTIME_POLICY_FILES))
             for path in paths:
                 with self.subTest(kind=kind, path=path):
                     api.changed = {(path, MERGE)}

@@ -47,13 +47,26 @@ NAR hash in `tests/default.nix`, without adding it to the public flake inputs.
 Update those values together when the test dependency needs updating.
 
 The checks import Home Manager's evaluation library using the main flake's
-`pkgs.lib`. `tests/` contains Nix checks; `.github/ci/test_*.py` remain
-separate Python tests. `nix flake check` runs the checks, and `nix develop`
-provides the root Nixpkgs tools `nix-update`, `nixfmt` and `NIX_PATH`.
+`pkgs.lib`. `tests/default.nix` defines Nix checks;
+`.github/ci/test_*.py` contains separate Python tests. `nix flake check` runs
+the Nix checks, and `nix develop` provides the root Nixpkgs tools
+`nix-update`, `nixfmt` and `NIX_PATH`.
 The test-only Home Manager source may need downloading on a first check run.
 
 You can get a new `narHash` for the home manager update pin via:
 `nix flake prefetch --json github:nix-community/home-manager/<revision>`
+
+The packaged-application runtime checks in `tests/runtime/` are separate from
+`nix flake check`. To run them locally on Linux from the repository root:
+
+```sh
+PACKAGE=$(nix build --no-link --print-out-paths .#opendeck)
+nix run .#opendeck-runtime-test -- "$PACKAGE" --artifacts ./runtime-test-logs
+```
+
+The runner uses temporary application settings, disables hardware scanning, and
+starts an isolated Xvfb display and D-Bus session. Local macOS runs are
+intentionally restricted; macOS runtime checks target ephemeral CI runners.
 
 ## Routine automation
 
@@ -162,7 +175,14 @@ The rebuild checks reproducibility of that derivation; it does not imply that
 every dependency has independently been rebuilt.
 
 The workflow also validates the structure and signature of the macOS OpenDeck
-application bundle where applicable.
+application bundle where applicable. After successful reproducibility checks,
+selected wrapped OpenDeck targets run the `tests/runtime/` smoke tests for
+startup, bundled StarterPack registration, asset authorization, and
+running-instance commands. Plugin-only jobs do not run these checks.
+
+Changes under `tests/runtime/` select OpenDeck package verification jobs even
+when their evaluated package output paths are unchanged. The runtime suite is
+not included in `nix flake check`.
 
 Failures retain useful diagnostics. Redistributable differing outputs may be
 archived for inspection; non-redistributable outputs must not be published.
@@ -190,7 +210,8 @@ It uses a short-lived GitHub App token to publish the required commit statuses:
 4. Select an authoritative run for that exact revision, accounting safely
    for overlapping or cancelled runs.
 5. Verify that the relevant verification workflow and trusted reporter files
-   match the base revision. Package verification also protects `ci/targets.nix`.
+   match the base revision. Package verification also protects `ci/targets.nix`
+   and `tests/runtime/{default.nix,run.py,harness.py}`.
 6. Require the expected verification job to have succeeded exactly once.
 7. Require the PR to be currently non-draft before publishing success.
 8. Publish the verified result against the PR head SHA, not the synthetic
@@ -249,10 +270,12 @@ have not been modified by the PR being certified.
 Consequently, a PR changing protected verification policy cannot certify
 itself through the ordinary PR checks.
 
-Changes to the trusted reporter, verification workflows, or protected target
-selection policy require explicit maintainer review and deployment through
-the repository's trusted-maintenance/default-branch procedure. A workflow
-rename changes its trusted identity and cannot certify itself on the PR.
+Changes to the trusted reporter, verification workflows, protected target
+selection policy, or runtime test files in `tests/runtime/` require explicit
+maintainer review and deployment through the repository's
+trusted-maintenance/default-branch procedure. Even a passing runtime suite
+cannot certify a PR that changes its own protected tests. A workflow rename
+changes its trusted identity and cannot certify itself on the PR.
 
 Do not temporarily remove these protections to obtain a passing status.
 Review the change, run the applicable tests, and preserve the separation
@@ -681,6 +704,15 @@ source-update artifact, native build report, and full build logs.
 
 For an incomplete or missing report, investigate infrastructure and artifact
 handling before treating the package as broken.
+
+### Runtime integration checks
+
+For runtime failures, inspect the `opendeck.log` artifact from the package
+verification job (or `./runtime-test-logs/opendeck.log` from the local command
+above). Startup port discovery and plugin registration use upstream log
+messages, so a message change can fail the test without breaking OpenDeck.
+The runner reports independent failures and skips checks whose prerequisites
+failed; skipped checks are not evidence of working functionality.
 
 ### PR checks or auto-merge are stuck
 

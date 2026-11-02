@@ -217,7 +217,7 @@ def pr_bodies(routes_file, auto_file, review_file):
             "[Repair procedure and commands](" +
             os.getenv("GITHUB_SERVER_URL", "https://github.com") + "/" +
             os.getenv("GITHUB_REPOSITORY", "missmoode/nix-opendeck") +
-            "/blob/main/.github/INFO.md#repairing-downstream-patches-for-new-upstream-versions).",
+            "/blob/main/.github/MAINTAINER_GUIDE.md#manually-updating-and-repairing-packages).",
         ]
         Path(review_file).write_text("\n".join(rows))
 

@@ -99,12 +99,21 @@ jobs:
             exit 1
           fi
 
+          # Re-verify the packaged application on PRs changing the test suite,
+          # even if the evaluated package output paths themselves are unchanged.
+          runtime_paths="$(git diff --name-only "$BASE_SHA" HEAD -- tests/runtime/)"
+          force_runtime=false
+          if [[ -n "$runtime_paths" ]]; then
+            force_runtime=true
+          fi
+
           # Each attr includes the system, making it a unique target key.
           # Missing (new) PR targets are selected automatically.
-          jq -c --slurpfile base "$RUNNER_TEMP/base-targets.json" '
+          jq -c --argjson force_runtime "$force_runtime" --slurpfile base "$RUNNER_TEMP/base-targets.json" '
             ($base[0] | map({key: .attr, value: .storePath}) | from_entries) as $old
             | [ .[]
-                | select(.storePath != ($old[.attr] // null))
+                | select(.storePath != ($old[.attr] // null)
+                    or ($force_runtime and (.kind == "core" or .kind == "opendeck")))
                 | {kind, system, runner, attr, label, redistributable}
               ]
           ' "$RUNNER_TEMP/pr-targets.json" > "$RUNNER_TEMP/changed-targets.json"
@@ -311,6 +320,45 @@ jobs:
 
           [[ "$failed" == false ]]
 
+      # Reuse the verified reference output in this runner's Nix store.
+      # Plugin-only jobs have no OpenDeck runtime checks to perform.
+      - name: Run packaged OpenDeck integration checks
+        if: ${{ steps.rebuild.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          attr="$(jq -r '[.[] | select(.kind == "opendeck") | .attr] | first // empty' <<< "$TARGETS_JSON")"
+          if [[ -z "$attr" ]]; then
+            echo 'No wrapped OpenDeck output selected; skipping runtime checks.'
+            {
+              echo '### OpenDeck runtime tests'
+              echo
+              echo 'Not run (plugin-only verification job).'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          output="$(nix eval --raw ".#${attr}.outPath")"
+          nix path-info "$output" > /dev/null
+          # Evaluate the protected runner source directly. A PR must not be
+          # able to bypass it by replacing the optional flake app definition.
+          runner="$(nix build --impure --no-link --print-out-paths --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
+            in import ./tests/runtime { inherit pkgs; }
+          ')"
+          "$runner/bin/opendeck-runtime-test" "$output" \
+            --artifacts "$RUNNER_TEMP/opendeck-runtime"
+
+      - name: Upload runtime logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-runtime-${{ matrix.system }}-${{ github.run_attempt }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/opendeck-runtime/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload reproducibility artifacts
         id: repro_artifact
         if: ${{ failure() }}
@@ -357,6 +405,10 @@ jobs:
             fi
             if [[ "$CHECK_OUTCOME" != success ]]; then
               echo 'See the build logs and diagnostics above for the failure.'
+              echo
+              echo '### OpenDeck runtime tests'
+              echo
+              echo 'Not run (package verification did not complete).'
             fi
             if [[ -n "$ARTIFACT_URL" ]]; then
               echo
