@@ -26,12 +26,12 @@ jobs:
       jobs: ${{ steps.compare.outputs.jobs }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
 
       - name: Compare evaluated package outputs with main
         id: compare
@@ -172,13 +172,13 @@ jobs:
 
     steps:
       # Fresh, unprivileged checkout of the proposed PR merge.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
 
-      - uses: cachix/cachix-action@v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: nix-opendeck
           skipPush: true
@@ -232,7 +232,11 @@ jobs:
             output=""
 
             echo "::group::${TARGET_SYSTEM} / ${label}"
-            echo "Reference: .#${attr}"
+            echo
+            echo '=== Reference build ==='
+            echo "Target: .#${attr}"
+            echo 'Acquiring the expected output (substituting from cache if available).'
+            echo
 
             # The PR's output may be substituted or built locally; never publish it.
             if output="$(nix eval --raw ".#${attr}.outPath")" \
@@ -253,13 +257,21 @@ jobs:
             fi
 
             if [[ "$reference" == success && "$bundle" != failed ]]; then
-              echo "Independently rebuilding: .#${attr}"
+              echo
+              echo '=== Independent reproducibility rebuild ==='
+              echo "Target: .#${attr}"
+              echo "Reference output: ${output}"
+              echo 'Rebuilding the selected derivation independently using --rebuild.'
+              echo 'Dependencies may be reused from the Nix store.'
+              echo
               if nix build ".#${attr}" --rebuild --no-link --keep-failed -L; then
                 rebuild=success
               else
                 rebuild=failed
               fi
             fi
+
+            echo
 
             if [[ "$reference" != success || "$bundle" == failed || "$rebuild" != success ]]; then
               failed=true
@@ -352,7 +364,7 @@ jobs:
 
       - name: Upload runtime logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pr-runtime-${{ matrix.system }}-${{ github.run_attempt }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/opendeck-runtime/
@@ -362,7 +374,7 @@ jobs:
       - name: Upload reproducibility artifacts
         id: repro_artifact
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pr-repro-${{ matrix.system }}-${{ github.run_attempt }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/opendeck-repro/

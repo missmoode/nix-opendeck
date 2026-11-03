@@ -31,11 +31,11 @@ jobs:
       matrix: ${{ steps.targets.outputs.matrix }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
 
       - name: Discover available packages
         id: targets
@@ -101,13 +101,13 @@ jobs:
       REDISTRIBUTABLE: ${{ matrix.redistributable }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: cachix/install-nix-action@v31
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
 
-      - uses: cachix/cachix-action@v17
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: nix-opendeck
           skipPush: true
@@ -242,7 +242,7 @@ jobs:
       - name: Upload reproducibility artifacts
         id: repro_artifact
         if: ${{ failure() && matrix.redistributable }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: repro-${{ matrix.system }}-${{ matrix.attr }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/opendeck-repro/
