@@ -20,13 +20,9 @@ WORKFLOWS = {
     ),
 }
 REPORTER_PATHS = (".github/workflows/trusted-ci-report.yml", ".github/ci/trusted_ci_report.py")
-# Runtime assertions are verification policy: a PR must not weaken them while
-# still receiving an App-issued package-verification success.
-RUNTIME_POLICY_FILES = (
-    "tests/runtime/default.nix",
-    "tests/runtime/run.py",
-    "tests/runtime/harness.py",
-)
+# The checks workflow runs test definitions from the PR. Compare full test
+# trees so added, removed, or renamed files cannot silently change CI policy.
+# Package verification runs its own protected runtime test entry point.
 COMMENT_MARKER = "<!-- nix-opendeck-reproducibility -->"
 SHA = r"[0-9a-f]{40}"
 
@@ -81,6 +77,24 @@ class GitHub:
                 "target_url": result["url"],
             },
         )
+
+
+def test_policy_snapshot(tree, kind):
+    """Return protected test entries, or None if GitHub's tree is incomplete."""
+    if tree.get("truncated") is not False or not isinstance(tree.get("tree"), list):
+        return None
+    entries = {}
+    for entry in tree["tree"]:
+        path = entry["path"]
+        if kind == "Checks":
+            protected = path.startswith("tests/") or (
+                path.startswith(".github/ci/test_") and path.endswith(".py")
+            )
+        else:
+            protected = path.startswith("tests/runtime/")
+        if protected:
+            entries[path] = (entry["mode"], entry["type"], entry["sha"])
+    return entries
 
 
 def select_authoritative_run(event_run, recent, expected_title, head_sha):
@@ -165,13 +179,25 @@ def assess(event, api):
         return None
     # PR-authored changes to verification policy cannot produce App success.
     protected = (path, *REPORTER_PATHS)
-    if kind == "Package verification":
-        protected += (".github/ci/targets.nix", *RUNTIME_POLICY_FILES)
+    if kind == "Checks":
+        protected += ("flake.nix",)
+    else:
+        protected += (".github/ci/targets.nix",)
     try:
         unchanged = all(
             api.content_sha(file, merge_sha) == api.content_sha(file, pr["base"]["sha"])
             for file in protected
         )
+        if unchanged:
+            # Match paths as well as contents: a new, removed or renamed test
+            # must require the same intentional bypass as editing an old one.
+            base_tree = test_policy_snapshot(
+                api.request(f"/git/trees/{pr['base']['sha']}?recursive=1"), kind
+            )
+            merge_tree = test_policy_snapshot(
+                api.request(f"/git/trees/{merge_sha}?recursive=1"), kind
+            )
+            unchanged = base_tree is not None and merge_tree is not None and base_tree == merge_tree
     except URLError as exc:
         # New verification files do not exist on main during the introducing
         # PR. Fail closed with an explicit status rather than crashing.

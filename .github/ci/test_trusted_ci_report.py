@@ -47,6 +47,17 @@ class FakeAPI:
     def __init__(self, pr, kind="Checks"):
         self.pr = pr
         self.changed = set()
+        # Minimal Git tree fixtures for policy coverage; paths can be added,
+        # removed, renamed or altered independently at each revision.
+        baseline = {
+            ".github/ci/test_trusted_ci_report.py": ("100644", "blob", "trusted"),
+            "tests/default.nix": ("100644", "blob", "trusted"),
+            "tests/home-manager.nix": ("100644", "blob", "trusted"),
+            "tests/runtime/run.py": ("100644", "blob", "trusted"),
+        }
+        self.trees = {BASE: baseline, MERGE: baseline.copy()}
+        self.truncated = set()
+        self.missing_tree = set()
         self.newer = False
         self.recent = []
         self.jobs = [{"name": next(job for name, job, _ in reporter.WORKFLOWS.values() if name == kind),
@@ -60,6 +71,17 @@ class FakeAPI:
     def request(self, path, **kwargs):
         if path.startswith("/pulls/"):
             return self.pr
+        if path.startswith("/git/trees/"):
+            ref = path.removeprefix("/git/trees/").partition("?")[0]
+            if ref in self.missing_tree:
+                return {"truncated": False}
+            return {
+                "truncated": ref in self.truncated,
+                "tree": [
+                    {"path": name, "mode": mode, "type": kind, "sha": sha}
+                    for name, (mode, kind, sha) in self.trees[ref].items()
+                ],
+            }
         if path.startswith("/issues/"):
             self.writes.append((path, kwargs))
             return {"id": 123}
@@ -104,10 +126,78 @@ class ReporterTests(unittest.TestCase):
             event, _, api = self.setup_case(kind)
             paths = [event["workflow_run"]["path"], *reporter.REPORTER_PATHS]
             if kind == "Package verification":
-                paths.extend((".github/ci/targets.nix", *reporter.RUNTIME_POLICY_FILES))
+                paths.append(".github/ci/targets.nix")
+            else:
+                paths.append("flake.nix")
             for path in paths:
                 with self.subTest(kind=kind, path=path):
                     api.changed = {(path, MERGE)}
+                    self.assertEqual(reporter.assess(event, api)["state"], "failure")
+
+    def test_changed_or_added_check_definitions_require_review(self):
+        for path in (
+            "tests/default.nix",
+            "tests/home-manager/activation.nix",  # New test and directory.
+            ".github/ci/test_trusted_ci_report.py",
+            ".github/ci/test_new_component.py",  # Newly discovered test.
+        ):
+            with self.subTest(path=path):
+                event, _, api = self.setup_case()
+                api.trees[MERGE][path] = ("100644", "blob", "modified")
+                result = reporter.assess(event, api)
+                self.assertEqual(result["state"], "failure")
+                self.assertFalse(result["report_failure"])
+
+    def test_deleted_renamed_or_retyped_checks_require_review(self):
+        for scenario in ("deleted", "renamed", "retyped", "ci-test-deleted"):
+            with self.subTest(scenario=scenario):
+                event, _, api = self.setup_case()
+                if scenario == "ci-test-deleted":
+                    api.trees[MERGE].pop(".github/ci/test_trusted_ci_report.py")
+                elif scenario == "retyped":
+                    # A symlink replacing a checked-in test changes its mode.
+                    api.trees[MERGE]["tests/default.nix"] = ("120000", "blob", "trusted")
+                else:
+                    api.trees[MERGE].pop("tests/home-manager.nix")
+                    if scenario == "renamed":
+                        api.trees[MERGE]["tests/home-manager/evaluation.nix"] = (
+                            "100644", "blob", "trusted"
+                        )
+                self.assertEqual(reporter.assess(event, api)["state"], "failure")
+
+    def test_package_verification_protects_runtime_directory(self):
+        for scenario in ("added", "modified", "removed"):
+            with self.subTest(scenario=scenario):
+                event, _, api = self.setup_case("Package verification")
+                if scenario == "added":
+                    api.trees[MERGE]["tests/runtime/extra.py"] = ("100644", "blob", "new")
+                elif scenario == "modified":
+                    api.trees[MERGE]["tests/runtime/run.py"] = ("100644", "blob", "changed")
+                else:
+                    api.trees[MERGE].pop("tests/runtime/run.py")
+                self.assertEqual(reporter.assess(event, api)["state"], "failure")
+
+    def test_unrelated_source_changes_do_not_require_ci_bypass(self):
+        for kind in ("Checks", "Package verification"):
+            with self.subTest(kind=kind):
+                event, _, api = self.setup_case(kind)
+                api.trees[MERGE]["src/packages/opendeck/default.nix"] = ("100644", "blob", "new")
+                api.trees[MERGE][".github/ci/package_updates.py"] = ("100644", "blob", "new")
+                # Home Manager test changes do not alter the independent
+                # package-verification policy, only the Checks policy.
+                if kind == "Package verification":
+                    api.trees[MERGE]["tests/home-manager.nix"] = ("100644", "blob", "changed")
+                self.assertEqual(reporter.assess(event, api)["state"], "success")
+
+    def test_incomplete_policy_trees_fail_closed(self):
+        for kind in ("Checks", "Package verification"):
+            for problem in ("truncated", "missing"):
+                with self.subTest(kind=kind, problem=problem):
+                    event, _, api = self.setup_case(kind)
+                    if problem == "truncated":
+                        api.truncated.add(MERGE)
+                    else:
+                        api.missing_tree.add(BASE)
                     self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
     def test_stale_pr_revision_is_ignored(self):
