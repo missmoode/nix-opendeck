@@ -1,7 +1,7 @@
 Subject: Exclude linked plugin code and declarative ownership state from backups
 
 diff --git a/src-tauri/src/events/frontend/settings.rs b/src-tauri/src/events/frontend/settings.rs
-index 61180ab..997dcce 100644
+index 61180ab..3fe4fa4 100644
 --- a/src-tauri/src/events/frontend/settings.rs
 +++ b/src-tauri/src/events/frontend/settings.rs
 @@ -8,7 +8,7 @@ use std::io::Write;
@@ -13,7 +13,7 @@ index 61180ab..997dcce 100644
  #[cfg(not(debug_assertions))]
  use tauri_plugin_autostart::ManagerExt;
  use tauri_plugin_dialog::{DialogExt, FilePath};
-@@ -91,6 +91,22 @@ fn add_dir_to_zip<W: Write + std::io::Seek>(zip: &mut ZipWriter<W>, base_dir: &P
+@@ -91,6 +91,82 @@ fn add_dir_to_zip<W: Write + std::io::Seek>(zip: &mut ZipWriter<W>, base_dir: &P
  	Ok(())
  }
  
@@ -33,10 +33,70 @@ index 61180ab..997dcce 100644
 +	Ok(links)
 +}
 +
++#[cfg(all(test, unix))]
++mod managed_plugin_backup_tests {
++	use super::{add_dir_to_zip, linked_plugins};
++	use std::fs::{self, File};
++	use std::os::unix::fs::symlink;
++	use std::path::{Path, PathBuf};
++	use zip::{ZipArchive, ZipWriter, write::FileOptions};
++
++	struct TestDir(PathBuf);
++
++	impl TestDir {
++		fn new() -> Self {
++			let path = std::env::temp_dir().join(format!(
++				"opendeck-plugin-backup-{}-{}",
++				std::process::id(),
++				std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
++			));
++			fs::create_dir(&path).unwrap();
++			Self(path)
++		}
++	}
++
++	impl Drop for TestDir {
++		fn drop(&mut self) {
++			let _ = fs::remove_dir_all(&self.0);
++		}
++	}
++
++	fn plugin_dir(root: &Path, id: &str) -> PathBuf {
++		root.join("plugins").join(id)
++	}
++
++	#[test]
++	fn backup_excludes_links_and_ownership_but_keeps_user_plugins() {
++		let temp = TestDir::new();
++		let config = temp.0.join("config");
++		let external = temp.0.join("external");
++		fs::create_dir_all(&external).unwrap();
++		fs::write(external.join("not-for-backup"), "store content").unwrap();
++		fs::create_dir_all(plugin_dir(&config, "user.sdPlugin")).unwrap();
++		fs::write(plugin_dir(&config, "user.sdPlugin").join("settings.json"), "user data").unwrap();
++		fs::write(config.join("externally-managed-plugins"), "managed.sdPlugin\n").unwrap();
++		symlink(&external, plugin_dir(&config, "managed.sdPlugin")).unwrap();
++
++		let archive_path = temp.0.join("backup.zip");
++		let mut zip = ZipWriter::new(File::create(&archive_path).unwrap());
++		let options = FileOptions::default();
++		let mut skipped = linked_plugins(&config.join("plugins")).unwrap();
++		skipped.push(config.join("externally-managed-plugins"));
++		add_dir_to_zip(&mut zip, &config, &config, options, &skipped).unwrap();
++		zip.finish().unwrap();
++
++		let mut archive = ZipArchive::new(File::open(archive_path).unwrap()).unwrap();
++		assert!(archive.by_name("plugins/user.sdPlugin/settings.json").is_ok());
++		assert!(archive.by_name("plugins/managed.sdPlugin/").is_err());
++		assert!(archive.by_name("plugins/managed.sdPlugin/not-for-backup").is_err());
++		assert!(archive.by_name("externally-managed-plugins").is_err());
++	}
++}
++
  #[command]
  pub async fn backup_config_directory(app: AppHandle) -> Result<bool, Error> {
  	let filename = format!(
-@@ -119,15 +135,11 @@ pub async fn backup_config_directory(app: AppHandle) -> Result<bool, Error> {
+@@ -119,15 +195,11 @@ pub async fn backup_config_directory(app: AppHandle) -> Result<bool, Error> {
  	let mut skip_paths = vec![temp_path.clone()];
  	let config_dir = config_dir();
  
