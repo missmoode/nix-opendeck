@@ -1,11 +1,11 @@
 Subject: Preserve current Home Manager links and ownership when restoring user data
 
 diff --git a/src-tauri/src/events/frontend/settings.rs b/src-tauri/src/events/frontend/settings.rs
-index 997dcce..f54982d 100644
+index 3fe4fa4..e0474c7 100644
 --- a/src-tauri/src/events/frontend/settings.rs
 +++ b/src-tauri/src/events/frontend/settings.rs
-@@ -107,6 +107,59 @@ fn linked_plugins(plugins_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
- 	Ok(links)
+@@ -167,6 +167,167 @@ mod managed_plugin_backup_tests {
+ 	}
  }
  
 +#[cfg(unix)]
@@ -61,10 +61,118 @@ index 997dcce..f54982d 100644
 +	Ok(())
 +}
 +
++#[cfg(all(test, unix))]
++mod managed_plugin_restore_tests {
++	use super::preserve_managed_plugins;
++	use std::fs;
++	use std::os::unix::fs::symlink;
++	use std::path::{Path, PathBuf};
++
++	struct TestDir(PathBuf);
++
++	impl TestDir {
++		fn new() -> Self {
++			let path = std::env::temp_dir().join(format!(
++				"opendeck-plugin-restore-{}-{}",
++				std::process::id(),
++				std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
++			));
++			fs::create_dir(&path).unwrap();
++			Self(path)
++		}
++	}
++
++	impl Drop for TestDir {
++		fn drop(&mut self) {
++			let _ = fs::remove_dir_all(&self.0);
++		}
++	}
++
++	fn plugin_dir(root: &Path, id: &str) -> PathBuf {
++		root.join("plugins").join(id)
++	}
++
++	#[test]
++	fn restore_keeps_current_links_and_state_without_losing_user_plugins() {
++		let temp = TestDir::new();
++		let current = temp.0.join("current");
++		let restored = temp.0.join("restored");
++		let one = "one.sdPlugin";
++		let two = "two.sdPlugin";
++		let current_state = format!("{one}\n{two}\n");
++		fs::create_dir_all(current.join("plugins")).unwrap();
++		fs::create_dir_all(plugin_dir(&restored, one)).unwrap();
++		fs::write(plugin_dir(&restored, one).join("stale"), "old bundled content").unwrap();
++		symlink("/nix/store/old-plugin", plugin_dir(&restored, two)).unwrap();
++		fs::create_dir_all(plugin_dir(&restored, "user.sdPlugin")).unwrap();
++		fs::write(plugin_dir(&restored, "user.sdPlugin").join("settings.json"), "keep user data").unwrap();
++		fs::write(restored.join("externally-managed-plugins"), "old.sdPlugin\n").unwrap();
++		fs::write(current.join("externally-managed-plugins"), &current_state).unwrap();
++		symlink("/nix/store/new-plugin-one", plugin_dir(&current, one)).unwrap();
++		symlink("/nix/store/new-plugin-two", plugin_dir(&current, two)).unwrap();
++
++		preserve_managed_plugins(&current, &restored).unwrap();
++
++		assert_eq!(fs::read_to_string(restored.join("externally-managed-plugins")).unwrap(), current_state);
++		assert_eq!(fs::read_link(plugin_dir(&restored, one)).unwrap(), Path::new("/nix/store/new-plugin-one"));
++		assert_eq!(fs::read_link(plugin_dir(&restored, two)).unwrap(), Path::new("/nix/store/new-plugin-two"));
++		assert_eq!(fs::read_to_string(plugin_dir(&restored, "user.sdPlugin").join("settings.json")).unwrap(), "keep user data");
++	}
++
++	#[test]
++	fn restore_without_current_ownership_discards_archived_ownership() {
++		let temp = TestDir::new();
++		let current = temp.0.join("current");
++		let restored = temp.0.join("restored");
++		fs::create_dir_all(&current).unwrap();
++		fs::create_dir_all(plugin_dir(&restored, "user.sdPlugin")).unwrap();
++		fs::write(restored.join("externally-managed-plugins"), "obsolete.sdPlugin\n").unwrap();
++		fs::write(plugin_dir(&restored, "user.sdPlugin").join("settings.json"), "keep").unwrap();
++
++		preserve_managed_plugins(&current, &restored).unwrap();
++
++		assert!(!restored.join("externally-managed-plugins").exists());
++		assert_eq!(fs::read_to_string(plugin_dir(&restored, "user.sdPlugin").join("settings.json")).unwrap(), "keep");
++	}
++
++	#[test]
++	fn restore_does_not_claim_a_regular_directory_as_managed() {
++		let temp = TestDir::new();
++		let current = temp.0.join("current");
++		let restored = temp.0.join("restored");
++		fs::create_dir_all(plugin_dir(&current, "replaced.sdPlugin")).unwrap();
++		fs::create_dir_all(plugin_dir(&restored, "replaced.sdPlugin")).unwrap();
++		fs::write(current.join("externally-managed-plugins"), "replaced.sdPlugin\n").unwrap();
++		fs::write(plugin_dir(&restored, "replaced.sdPlugin").join("settings.json"), "restored user data").unwrap();
++
++		preserve_managed_plugins(&current, &restored).unwrap();
++
++		assert!(plugin_dir(&restored, "replaced.sdPlugin").is_dir());
++		assert_eq!(fs::read_to_string(plugin_dir(&restored, "replaced.sdPlugin").join("settings.json")).unwrap(), "restored user data");
++	}
++
++	#[test]
++	fn invalid_current_ownership_fails_before_modifying_staged_restore() {
++		let temp = TestDir::new();
++		let current = temp.0.join("current");
++		let restored = temp.0.join("restored");
++		fs::create_dir_all(&current).unwrap();
++		fs::create_dir_all(&restored).unwrap();
++		fs::write(current.join("externally-managed-plugins"), "../outside\n").unwrap();
++		fs::write(restored.join("externally-managed-plugins"), "archived\n").unwrap();
++		fs::write(restored.join("settings.json"), "user settings").unwrap();
++
++		let error = preserve_managed_plugins(&current, &restored).unwrap_err();
++		assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
++		assert_eq!(fs::read_to_string(restored.join("externally-managed-plugins")).unwrap(), "archived\n");
++		assert_eq!(fs::read_to_string(restored.join("settings.json")).unwrap(), "user settings");
++	}
++}
++
  #[command]
  pub async fn backup_config_directory(app: AppHandle) -> Result<bool, Error> {
  	let filename = format!(
-@@ -166,6 +219,8 @@ pub async fn restore_config_directory(app: AppHandle) -> Result<(), Error> {
+@@ -226,6 +387,8 @@ pub async fn restore_config_directory(app: AppHandle) -> Result<(), Error> {
  	let _ = std::fs::remove_dir_all(&backup_dir);
  
  	crate::zip_extract::extract(File::open(path)?, &temp_dir).map_err(anyhow::Error::from)?;
