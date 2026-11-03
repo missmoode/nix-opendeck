@@ -46,8 +46,6 @@ mkNpmOpenDeckPlugin (finalAttrs: {
     };
   };
 
-  serviceRequirements = [ "See upstream" ];
-
   licenseFiles = [
     "LICENSE"
   ];
