@@ -1,9 +1,8 @@
 # OpenDeck on Nix
 
-nix-opendeck packages [OpenDeck](https://github.com/nekename/OpenDeck) and a selection
-of plugins for Nix, with patches to support immutable plugins in the Nix store. It
-provides declarative plugin management through both custom bundled packages and Home
-Manager.
+nix-opendeck packages [OpenDeck](https://github.com/nekename/OpenDeck) for Nix, with a curated selection of plugins alongside reusable helpers for packaging more.
+
+OpenDeck plugins can be managed declaratively through Home Manager or wrapped into custom OpenDeck packages. The project includes patches to support plugins loaded directly from the Nix store.
 
 This is useful on NixOS, where plugins installed through OpenDeck's GUI may fail because
 they expect a conventional Linux environment. On other platforms, nix-opendeck still
@@ -24,7 +23,7 @@ As this began as both a personal tool and a learning exercise, I
 <div align="center">
 
 [Installation](#installation) | [Binary Cache](#binary-cache) | [Usage](#usage) |
-[Custom Packages](#custom-opendeck-packages) | [Plugin Listing](#plugin-listing)
+[Custom Packages](#custom-opendeck-packages) | [Plugin Listing](#plugin-listing) | [Package your own plugins](./PLUGIN-PACKAGING.md)
 
 </div>
 
