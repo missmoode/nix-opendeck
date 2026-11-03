@@ -12,14 +12,12 @@ body:
     attributes:
       label: Project scope
       description: >
-        nix-opendeck handles Nix packaging, modules, integration,
-        and downstream compatibility patches. Bugs affecting
-        OpenDeck or individual plugins independently of nix-opendeck
-        should generally be reported to their respective upstream projects.
+        nix-opendeck handles Nix packaging, modules, integration, and downstream compatibility patches. Bugs affecting OpenDeck or individual plugins independently of nix-opendeck should generally be reported to their respective upstream projects.
+
       options:
         - label: >
-            To the best of my knowledge, this issue concerns
-            nix-opendeck rather than solely an upstream project.
+            To the best of my knowledge, this issue concerns nix-opendeck rather than solely an upstream project.
+
           required: true
   - type: textarea
     id: problem
@@ -78,10 +76,8 @@ body:
     attributes:
       label: Additional plugins (if relevant)
       description: >
-        If the issue isn't related to a specific plugin,
-        List any additional plugins bundled through wrapOpenDeck
-        or managed separately through programs.opendeck.plugins.
-        Include relevant configuration snippets if useful.
+        If the issue isn't related to a specific plugin, List any additional plugins bundled through wrapOpenDeck or managed separately through programs.opendeck.plugins. Include relevant configuration snippets if useful.
+
       placeholder: |
         Bundled plugins:
         Home Manager plugins:

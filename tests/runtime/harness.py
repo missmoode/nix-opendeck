@@ -69,7 +69,9 @@ class OpenDeckHarness:
         # D-Bus session. Local macOS execution is intentionally fail-closed until
         # independently validated; hosted macOS CI machines are ephemeral.
         if sys.platform == "darwin" and not os.environ.get("GITHUB_ACTIONS"):
-            raise RuntimeError("macOS runtime tests currently require an ephemeral GitHub Actions runner")
+            raise RuntimeError(
+                "macOS runtime tests currently require an ephemeral GitHub Actions runner"
+            )
 
         for path in (
             self.home,
@@ -81,20 +83,26 @@ class OpenDeckHarness:
             path.mkdir(parents=True, exist_ok=True)
         (self.root / "runtime").chmod(0o700)
 
-        self.environ.update({
-            "HOME": str(self.home),
-            "XDG_CONFIG_HOME": str(self.config_base),
-            "XDG_DATA_HOME": str(self.root / "data"),
-            "XDG_CACHE_HOME": str(self.root / "cache"),
-            "XDG_RUNTIME_DIR": str(self.root / "runtime"),
-            "TMPDIR": str(self.root),
-        })
+        self.environ.update(
+            {
+                "HOME": str(self.home),
+                "XDG_CONFIG_HOME": str(self.config_base),
+                "XDG_DATA_HOME": str(self.root / "data"),
+                "XDG_CACHE_HOME": str(self.root / "cache"),
+                "XDG_RUNTIME_DIR": str(self.root / "runtime"),
+                "TMPDIR": str(self.root),
+            }
+        )
         if sys.platform == "darwin":
             self.environ["CFFIXED_USER_HOME"] = str(self.home)
         else:
             # The Nix runner supplies Xvfb and a private session bus.
-            if not self.environ.get("DISPLAY") or not self.environ.get("DBUS_SESSION_BUS_ADDRESS"):
-                raise RuntimeError("Linux runtime checks require the packaged Xvfb/D-Bus runner")
+            if not self.environ.get("DISPLAY") or not self.environ.get(
+                "DBUS_SESSION_BUS_ADDRESS"
+            ):
+                raise RuntimeError(
+                    "Linux runtime checks require the packaged Xvfb/D-Bus runner"
+                )
             self.environ.pop("WAYLAND_DISPLAY", None)
             self.environ.pop("HYPRLAND_INSTANCE_SIGNATURE", None)
 
@@ -116,10 +124,16 @@ class OpenDeckHarness:
         # no manifest: no test plugin is executed, or even eligible for loading.
         outside = self.root / "external-plugin"
         (outside / "icons").mkdir(parents=True)
-        (outside / "icons/test.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'></svg>\n")
+        (outside / "icons/test.svg").write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>\n"
+        )
         (self.config / "plugins").mkdir()
-        (self.config / "plugins/runtime.assets.sdPlugin").symlink_to(outside, target_is_directory=True)
-        (self.config / "local.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>\n")
+        (self.config / "plugins/runtime.assets.sdPlugin").symlink_to(
+            outside, target_is_directory=True
+        )
+        (self.config / "local.svg").write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg'/>\n"
+        )
         (self.root / "forbidden.svg").write_text("<svg>not authorized</svg>\n")
         self.plugin_dir = self._bundled_directory()
 
@@ -134,7 +148,9 @@ class OpenDeckHarness:
             for token in shlex.split(line):
                 if token.startswith("OPENDECK_BUNDLED_PLUGINS_DIR="):
                     return Path(token.partition("=")[2])
-        raise RuntimeError("Cannot locate OPENDECK_BUNDLED_PLUGINS_DIR in Linux launcher")
+        raise RuntimeError(
+            "Cannot locate OPENDECK_BUNDLED_PLUGINS_DIR in Linux launcher"
+        )
 
     def start(self):
         if self.process is not None:
@@ -142,7 +158,8 @@ class OpenDeckHarness:
         # Run the actual .app executable on macOS to preserve its resource paths.
         executable = (
             self.package / "Applications/OpenDeck.app/Contents/MacOS/opendeck"
-            if sys.platform == "darwin" else self.package / "bin/opendeck"
+            if sys.platform == "darwin"
+            else self.package / "bin/opendeck"
         )
         # File output needs no reader thread, shared buffer or output draining.
         with self.log_path.open("w") as log:
@@ -155,13 +172,18 @@ class OpenDeckHarness:
             )
 
     def log_count(self, needle: str) -> int:
-        return sum(needle in line for line in self.log_path.read_text(errors="replace").splitlines())
+        return sum(
+            needle in line
+            for line in self.log_path.read_text(errors="replace").splitlines()
+        )
 
     def wait_until(self, predicate, label: str, *, timeout: float = 30):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.process is not None and self.process.poll() is not None:
-                raise AssertionError(f"OpenDeck exited {self.process.returncode} while awaiting {label}")
+                raise AssertionError(
+                    f"OpenDeck exited {self.process.returncode} while awaiting {label}"
+                )
             result = predicate()
             if result:
                 return result
@@ -174,20 +196,35 @@ class OpenDeckHarness:
             return int(match.group(2)) if match else None
 
         self.asset_port = self.wait_until(ports, "OpenDeck port selection")
-        self.wait_until(lambda: self._tcp_available(self.asset_port), "asset server listening")
+        self.wait_until(
+            lambda: self._tcp_available(self.asset_port), "asset server listening"
+        )
         return True
 
     def wait_bus_name(self):
         try:
-            return self.wait_until(self._owns_bus_name, "private D-Bus single-instance name")
+            return self.wait_until(
+                self._owns_bus_name, "private D-Bus single-instance name"
+            )
         except AssertionError as error:
             # A timeout alone cannot distinguish an unowned name from a failed
             # query. Inspect the same private bus once, only on failure.
             result = subprocess.run(
-                ["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus",
-                 "--object-path", "/org/freedesktop/DBus", "--method",
-                 "org.freedesktop.DBus.ListNames"],
-                capture_output=True, text=True, timeout=3, env=self.environ,
+                [
+                    "gdbus",
+                    "call",
+                    "--session",
+                    "--dest",
+                    "org.freedesktop.DBus",
+                    "--object-path",
+                    "/org/freedesktop/DBus",
+                    "--method",
+                    "org.freedesktop.DBus.ListNames",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                env=self.environ,
             )
             detail = result.stdout.strip() or result.stderr.strip()
             raise AssertionError(
@@ -200,6 +237,7 @@ class OpenDeckHarness:
     @staticmethod
     def _tcp_available(port):
         import socket
+
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.3):
                 return True
@@ -208,10 +246,22 @@ class OpenDeckHarness:
 
     def _owns_bus_name(self):
         result = subprocess.run(
-            ["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus",
-             "--object-path", "/org/freedesktop/DBus", "--method",
-             "org.freedesktop.DBus.NameHasOwner", BUS_NAME],
-            capture_output=True, text=True, timeout=3, env=self.environ,
+            [
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                "org.freedesktop.DBus",
+                "--object-path",
+                "/org/freedesktop/DBus",
+                "--method",
+                "org.freedesktop.DBus.NameHasOwner",
+                BUS_NAME,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            env=self.environ,
         )
         return result.returncode == 0 and "(true,)" in result.stdout
 
@@ -235,7 +285,10 @@ class OpenDeckHarness:
     def command(self, *args: str, timeout: int = 20):
         return subprocess.run(
             [str(self.package / "bin/opendeck"), *args],
-            env=self.environ, capture_output=True, text=True, timeout=timeout,
+            env=self.environ,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
 
     def stop(self):

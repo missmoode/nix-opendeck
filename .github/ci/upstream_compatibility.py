@@ -19,15 +19,23 @@ MARKER = "<!-- nix-opendeck-upstream-audit -->"
 MODEL = "gemini-3.6-flash"
 MAX_INPUT_CHARS = 260_000
 MAX_OUTPUT_CHARS = 12_000
-VERSION_RE = re.compile(r'^\s*version\s*=\s*"([A-Za-z0-9][A-Za-z0-9._+-]*)"\s*;', re.MULTILINE)
+VERSION_RE = re.compile(
+    r'^\s*version\s*=\s*"([A-Za-z0-9][A-Za-z0-9._+-]*)"\s*;', re.MULTILINE
+)
 SAFE_VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,79}\Z")
 
 # Auto-discover checked-in patches referenced by accepted package derivations.
 # Keep the existing package-directory convention; do not maintain a separate
 # patch registry or infer packages from upstream code changes.
-PATCH_REF_RE = re.compile(r"(?<![\w./])\./([A-Za-z0-9_./+-]+\.(?:patch|diff))(?![\w./-])")
-SOURCE_RE = re.compile(r"\bsrc\s*=\s*fetchFromGitHub\s*\{(.*?)^\s*\};", re.MULTILINE | re.DOTALL)
-TAG_RE = re.compile(r'^\s*(tag|rev)\s*=\s*"(v?)\$\{(?:finalAttrs\.)?version\}"\s*;', re.MULTILINE)
+PATCH_REF_RE = re.compile(
+    r"(?<![\w./])\./([A-Za-z0-9_./+-]+\.(?:patch|diff))(?![\w./-])"
+)
+SOURCE_RE = re.compile(
+    r"\bsrc\s*=\s*fetchFromGitHub\s*\{(.*?)^\s*\};", re.MULTILINE | re.DOTALL
+)
+TAG_RE = re.compile(
+    r'^\s*(tag|rev)\s*=\s*"(v?)\$\{(?:finalAttrs\.)?version\}"\s*;', re.MULTILINE
+)
 FIELD_RE = r'^\s*{}\s*=\s*"([A-Za-z0-9_.-]+)"\s*;'
 PATCH_LIST_RE = re.compile(r"^\s*patches\s*=\s*\[(.*?)\]\s*;", re.MULTILINE | re.DOTALL)
 
@@ -35,7 +43,9 @@ PATCH_LIST_RE = re.compile(r"^\s*patches\s*=\s*\[(.*?)\]\s*;", re.MULTILINE | re
 def git(*args, cwd=None):
     # The API secret must never be inherited by Git or another child process.
     env = {key: value for key, value in os.environ.items() if key != "GEMINI_API_KEY"}
-    p = subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True)
+    p = subprocess.run(
+        ["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True
+    )
     return p.stdout
 
 
@@ -87,7 +97,9 @@ def source_spec(spec):
     content = Path(spec["path"]).read_text()
     sources = SOURCE_RE.findall(content)
     if len(sources) != 1:
-        raise ValueError(f"Cannot identify one fetchFromGitHub source in {spec['path']}")
+        raise ValueError(
+            f"Cannot identify one fetchFromGitHub source in {spec['path']}"
+        )
     body = sources[0]
     fields = {}
     for field in ("owner", "repo"):
@@ -110,7 +122,9 @@ def package_dir(label):
     if label == "opendeck-core":
         return "src/packages/opendeck/"
     segments = label.split("/")
-    if len(segments) != 2 or any(not re.fullmatch(r"[A-Za-z0-9_.-]+", part) for part in segments):
+    if len(segments) != 2 or any(
+        not re.fullmatch(r"[A-Za-z0-9_.-]+", part) for part in segments
+    ):
         raise ValueError(f"Unexpected package label {label!r}")
     return f"src/packages/plugins/{segments[0]}/{segments[1]}/"
 
@@ -123,9 +137,13 @@ def route_paths(changed_paths, review_labels, accepted):
     for name in changed_paths:
         if not name.startswith("src/") or "\n" in name or "\r" in name:
             raise ValueError(f"Unexpected updater change outside src/: {name!r}")
-        owners = [label for label, directory in prefixes.items() if name.startswith(directory)]
+        owners = [
+            label for label, directory in prefixes.items() if name.startswith(directory)
+        ]
         if len(owners) != 1:
-            raise ValueError(f"Cannot attribute updater change to an accepted package: {name!r}")
+            raise ValueError(
+                f"Cannot attribute updater change to an accepted package: {name!r}"
+            )
         if owners[0] in review_labels:
             review.append(name)
         else:
@@ -162,10 +180,14 @@ def select(base_sha, state_file, output):
     auto, review = route_paths(changed_paths, review_labels, accepted)
     for label in accepted:
         if not any(path.startswith(package_dir(label)) for path in changed_paths):
-            raise ValueError(f"Accepted package has no staged changes in {package_dir(label)}")
+            raise ValueError(
+                f"Accepted package has no staged changes in {package_dir(label)}"
+            )
     for label in review_labels:
         if not any(path.startswith(package_dir(label)) for path in review):
-            raise ValueError(f"Accepted reviewed package has no staged files in {package_dir(label)}")
+            raise ValueError(
+                f"Accepted reviewed package has no staged files in {package_dir(label)}"
+            )
     # A reviewed version change should not disappear into the automatic PR.
     result = {
         "auditTargets": chosen,
@@ -181,14 +203,30 @@ def select(base_sha, state_file, output):
 def pr_bodies(routes_file, auto_file, review_file):
     data = json.loads(Path(routes_file).read_text())
     link = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY', '')}/actions/runs/{os.getenv('GITHUB_RUN_ID', '')}"
-    header = ["Updates included here passed the updater's existing native build and combined flake checks.", ""]
+    header = [
+        "Updates included here passed the updater's existing native build and combined flake checks.",
+        "",
+    ]
     if data["autoPaths"]:
-        rows = ["## Automated package updates", ""] + header + ["### Auto-merge eligible", ""]
-        rows += [f"- `{name}`" for name in data["autoPackages"]] + ["", f"[Updater validation run]({link})", ""]
+        rows = (
+            ["## Automated package updates", ""]
+            + header
+            + ["### Auto-merge eligible", ""]
+        )
+        rows += [f"- `{name}`" for name in data["autoPackages"]] + [
+            "",
+            f"[Updater validation run]({link})",
+            "",
+        ]
         Path(auto_file).write_text("\n".join(rows))
     if data["reviewPaths"]:
         rows = ["## Patched upstream updates — manual review required", ""] + header
-        rows += ["This PR is deliberately **not auto-merged**. An AI-assisted upstream compatibility review is added as a comment when available. Its verdict is not an approval.", "", "### Packages", ""]
+        rows += [
+            "This PR is deliberately **not auto-merged**. An AI-assisted upstream compatibility review is added as a comment when available. Its verdict is not an approval.",
+            "",
+            "### Packages",
+            "",
+        ]
         rows += [f"- `{name}`" for name in data["reviewPackages"]]
         rows += ["", f"[Updater validation run]({link})", ""]
         rows += [
@@ -214,10 +252,11 @@ def pr_bodies(routes_file, auto_file, review_file):
             "You can push directly to this bot branch, but a future update "
             "may overwrite those commits.",
             "",
-            "[Repair procedure and commands](" +
-            os.getenv("GITHUB_SERVER_URL", "https://github.com") + "/" +
-            os.getenv("GITHUB_REPOSITORY", "missmoode/nix-opendeck") +
-            "/blob/main/.github/MAINTAINER_GUIDE.md#manually-updating-and-repairing-packages).",
+            "[Repair procedure and commands]("
+            + os.getenv("GITHUB_SERVER_URL", "https://github.com")
+            + "/"
+            + os.getenv("GITHUB_REPOSITORY", "missmoode/nix-opendeck")
+            + "/blob/main/.github/MAINTAINER_GUIDE.md#manually-updating-and-repairing-packages).",
         ]
         Path(review_file).write_text("\n".join(rows))
 
@@ -230,11 +269,35 @@ def source_diff(spec, old, new):
     with tempfile.TemporaryDirectory(prefix="opendeck-audit-") as temp:
         git("init", "-q", temp)
         git("remote", "add", "origin", f"https://github.com/{upstream}.git", cwd=temp)
-        git("fetch", "-q", "--depth=1", "--no-tags", "--filter=blob:none", "origin",
+        git(
+            "fetch",
+            "-q",
+            "--depth=1",
+            "--no-tags",
+            "--filter=blob:none",
+            "origin",
             f"refs/tags/{prefix}{old}:refs/tags/audit-old",
-            f"refs/tags/{prefix}{new}:refs/tags/audit-new", cwd=temp)
-        stat = git("diff", "--no-ext-diff", "--no-textconv", "--stat", "audit-old", "audit-new", cwd=temp)
-        diff = git("diff", "--no-ext-diff", "--no-textconv", "--unified=5", "audit-old", "audit-new", cwd=temp)
+            f"refs/tags/{prefix}{new}:refs/tags/audit-new",
+            cwd=temp,
+        )
+        stat = git(
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--stat",
+            "audit-old",
+            "audit-new",
+            cwd=temp,
+        )
+        diff = git(
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--unified=5",
+            "audit-old",
+            "audit-new",
+            cwd=temp,
+        )
     return stat, diff
 
 
@@ -242,7 +305,7 @@ def make_prompt(pkg, spec, old, new, stat, diff, patches):
     return f"""You are performing a narrowly scoped, evidence-based downstream compatibility audit.
 
 Package: {pkg}
-Upstream repository: https://github.com/{spec['upstream']}
+Upstream repository: https://github.com/{spec["upstream"]}
 Upstream versions: {spec["tag_prefix"]}{old} -> {spec["tag_prefix"]}{new}
 
 Compare ALL changed upstream source paths against the downstream patch intentions.
@@ -325,10 +388,15 @@ def ask_gemini(prompt):
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"maxOutputTokens": 8192},
     }
-    req = Request(url, data=json.dumps(payload).encode(), method="POST", headers={
-        "Content-Type": "application/json",
-        "x-goog-api-key": key,
-    })
+    req = Request(
+        url,
+        data=json.dumps(payload).encode(),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": key,
+        },
+    )
     try:
         with urlopen(req, timeout=180) as res:
             data = json.load(res)
@@ -336,19 +404,25 @@ def ask_gemini(prompt):
         # Do not print response bodies: service error bodies may contain prompt data.
         raise RuntimeError(f"Gemini API returned HTTP {e.code}") from None
     except (URLError, TimeoutError) as e:
-        raise RuntimeError(f"Gemini API connection failed ({type(e).__name__})") from None
+        raise RuntimeError(
+            f"Gemini API connection failed ({type(e).__name__})"
+        ) from None
     candidates = data.get("candidates") or []
     if not candidates:
         raise RuntimeError("Gemini API returned no review candidates")
     candidate = candidates[0]
     if candidate.get("finishReason") != "STOP":
-        raise RuntimeError(f"Gemini stopped without a complete review ({candidate.get('finishReason', 'missing')})")
+        raise RuntimeError(
+            f"Gemini stopped without a complete review ({candidate.get('finishReason', 'missing')})"
+        )
     parts = candidate.get("content", {}).get("parts", [])
     report = "\n".join(part.get("text", "") for part in parts if "text" in part).strip()
     if not report:
         raise RuntimeError("Gemini API returned no review text")
     if len(report) > MAX_OUTPUT_CHARS:
-        report = report[:MAX_OUTPUT_CHARS] + "\n\n*Review output truncated for PR comment.*"
+        report = (
+            report[:MAX_OUTPUT_CHARS] + "\n\n*Review output truncated for PR comment.*"
+        )
     return report
 
 
@@ -359,7 +433,9 @@ def read_targets(path):
         if any(not SAFE_VERSION.fullmatch(target[name]) for name in ("from", "to")):
             raise ValueError("Unexpected audit target version")
         if package_spec(label) is None:
-            raise ValueError(f"Audit target has no referenced downstream patches: {label}")
+            raise ValueError(
+                f"Audit target has no referenced downstream patches: {label}"
+            )
     return targets
 
 
@@ -385,10 +461,13 @@ def review(targets_file, output):
         try:
             local_patches = patch_files(spec)
             if not local_patches:
-                raise ValueError("Package patches cannot be read from local patch files; manual review required")
+                raise ValueError(
+                    "Package patches cannot be read from local patch files; manual review required"
+                )
             resolved = spec | source_spec(spec)
             patches = "\n\n".join(
-                f"=== {path.as_posix()} ===\n{path.read_text()}" for path in local_patches
+                f"=== {path.as_posix()} ===\n{path.read_text()}"
+                for path in local_patches
             )
             stat, diff = source_diff(resolved, old, new)
             prompt = make_prompt(label, resolved, old, new, stat, diff, patches)
@@ -402,15 +481,22 @@ def review(targets_file, output):
             report += [text.replace("@", "@\u200b"), ""]
         except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as e:
             # We do not hide a missing/unavailable review as a pass.
-            report += [f"**Review unavailable:** {str(e).replace(chr(64), '@\u200b')}", ""]
+            report += [
+                f"**Review unavailable:** {str(e).replace(chr(64), '@\u200b')}",
+                "",
+            ]
     Path(output).write_text("\n".join(report) + "\n")
 
 
 def unavailable(targets_file, output):
     report = render_header()
     for target in read_targets(targets_file):
-        report += [f"### `{target['package']}`: `{target['from']}` → `{target['to']}`", "",
-                   "**Review unavailable:** audit job did not produce a report. Check the workflow logs.", ""]
+        report += [
+            f"### `{target['package']}`: `{target['from']}` → `{target['to']}`",
+            "",
+            "**Review unavailable:** audit job did not produce a report. Check the workflow logs.",
+            "",
+        ]
     Path(output).write_text("\n".join(report) + "\n")
 
 
@@ -433,7 +519,9 @@ def main():
     fallback.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.command == "select":
-        print(f"Selected {select(args.base_sha, args.state, args.output)} package(s) for audit")
+        print(
+            f"Selected {select(args.base_sha, args.state, args.output)} package(s) for audit"
+        )
     elif args.command == "pr-bodies":
         pr_bodies(args.routes, args.auto, args.review)
     elif args.command == "review":

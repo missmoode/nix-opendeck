@@ -1,20 +1,16 @@
 name: Update packages
-
 on:
   schedule:
     - cron: '17 12 * * *'
   workflow_dispatch:
-
 # Updaters and native builders use only read access. A short-lived GitHub App
 # token is created in the final job, after the proposed changes are validated.
 permissions:
   contents: read
-
 concurrency:
   group: nix-opendeck-maintenance-${{ github.ref }}
   cancel-in-progress: false
   queue: max
-
 jobs:
   discover:
     runs-on: ubuntu-24.04
@@ -71,7 +67,6 @@ jobs:
           path: ${{ runner.temp }}/discovery/
           if-no-files-found: error
           retention-days: 7
-
   update:
     name: 'Update: ${{ matrix.system }}'
     needs: discover
@@ -128,7 +123,6 @@ jobs:
           path: ${{ runner.temp }}/updates/
           if-no-files-found: warn
           retention-days: 7
-
   prepare-builds:
     needs: [discover, update]
     if: always() && needs.discover.result == 'success'
@@ -169,7 +163,6 @@ jobs:
           path: ${{ runner.temp }}/build-plan/
           if-no-files-found: error
           retention-days: 7
-
   plugins:
     name: 'Plugin: ${{ matrix.label }} / ${{ matrix.system }}'
     needs: [discover, prepare-builds]
@@ -214,7 +207,6 @@ jobs:
           path: ${{ runner.temp }}/build-reports/
           if-no-files-found: warn
           retention-days: 7
-
   opendeck:
     name: 'OpenDeck: ${{ matrix.system }}'
     needs: [discover, prepare-builds]
@@ -259,7 +251,6 @@ jobs:
           path: ${{ runner.temp }}/build-reports/
           if-no-files-found: warn
           retention-days: 7
-
   finalize:
     environment:
       name: trusted-automation
@@ -373,7 +364,6 @@ jobs:
           # create-pull-request's add-paths must start with an unstaged tree,
           # otherwise the first PR can accidentally include the other group.
           git reset --quiet
-
       # AI cannot execute commands or decide whether a reviewed update merges.
       # The only credential here is a Gemini API environment secret.
       - name: Review patched upstream updates with Gemini
@@ -388,8 +378,8 @@ jobs:
             --output "$RUNNER_TEMP/upstream-compatibility.md"
       - name: Report infrastructure failure
         if: >-
-          always() &&
-          (needs.prepare-builds.result != 'success' ||
+          always() && (needs.prepare-builds.result != 'success' ||
+
            steps.finish.outcome != 'success' ||
            steps.finish.outputs.infrastructure_failure == 'true')
         shell: bash
@@ -416,7 +406,6 @@ jobs:
               jq -r '.infrastructureErrors[] | "- " + .' "$RUNNER_TEMP/package-update-state.json"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-
       # Generate the token as late as possible; it expires after one hour.
       - name: Generate automation token
         id: app-token
@@ -428,7 +417,6 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
           permission-issues: write
-
       # Separate manually reviewed upstream updates from ordinary auto-updates.
       - name: Create or update patched-package manual review PR
         id: review-pr
@@ -449,7 +437,6 @@ jobs:
             updates
             upstream
             automatically generated
-
       # Reuse the existing App token; keep one bot-owned compatibility comment.
       - name: Publish upstream compatibility review
         if: steps.review-pr.outputs.pull-request-number != ''
@@ -476,7 +463,6 @@ jobs:
           else
             gh api -X POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" -F "body=@$report" >/dev/null
           fi
-
       - name: Create or update PR containing ordinary validated sources
         id: pr
         if: steps.audit-select.outcome == 'success' && steps.audit-select.outputs.auto_count != '0'
@@ -495,7 +481,6 @@ jobs:
             updates
             upstream
             automatically generated
-
       # One persistent issue tracks known package failures. Do not treat missing
       # or corrupt validation reports as recoverable package failures.
       - name: Reconcile package update failures
@@ -543,7 +528,6 @@ jobs:
           elif [[ -n "$number" && "$status" == OPEN ]]; then
             gh issue close "$number" --reason completed
           fi
-
       # Only changed-version builds with concrete patch-related diagnostics
       # warrant an AI diagnosis. Selection has no API credentials or side effects.
       - name: Select patch-related failed updates
@@ -558,7 +542,6 @@ jobs:
             --builds "$RUNNER_TEMP/builds" \
             --output "$RUNNER_TEMP/failure-audit-candidates.json"
           echo "count=$(jq length "$RUNNER_TEMP/failure-audit-candidates.json")" >> "$GITHUB_OUTPUT"
-
       # Reserve before using Gemini, so later scheduled runs cannot re-submit
       # exactly the same upstream update and downstream patch combination.
       - name: Reserve new failure diagnoses in existing issue
@@ -577,12 +560,10 @@ jobs:
             --candidates "$RUNNER_TEMP/failure-audit-candidates.json" \
             --output "$RUNNER_TEMP/failure-audit-reservations.json"
           echo "count=$(jq length "$RUNNER_TEMP/failure-audit-reservations.json")" >> "$GITHUB_OUTPUT"
-
       # Only Gemini's secret is available to this step, not the GitHub App token.
       - name: Diagnose newly failed downstream patches with Gemini
         if: >-
-          always() && steps.failure-select.outcome == 'success' &&
-          (steps.failure-reserve.outcome == 'success' || steps.failure-reserve.outcome == 'failure')
+          always() && steps.failure-select.outcome == 'success' && (steps.failure-reserve.outcome == 'success' || steps.failure-reserve.outcome == 'failure')
         continue-on-error: true
         timeout-minutes: 10
         env:
@@ -593,14 +574,12 @@ jobs:
               --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
               --output "$RUNNER_TEMP/failure-audit-reviews.json"
           fi
-
       # Finish any reservations that were saved before a later reservation failed.
       # Even a timed-out or unavailable model gets a clear final issue comment.
       - name: Publish failure diagnoses
         id: failure-publish
         if: >-
-          always() && steps.failure-select.outcome == 'success' &&
-          (steps.failure-reserve.outcome == 'success' || steps.failure-reserve.outcome == 'failure')
+          always() && steps.failure-select.outcome == 'success' && (steps.failure-reserve.outcome == 'success' || steps.failure-reserve.outcome == 'failure')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -611,7 +590,6 @@ jobs:
               --reservations "$RUNNER_TEMP/failure-audit-reservations.json" \
               --reviews "$RUNNER_TEMP/failure-audit-reviews.json"
           fi
-
       # A separate combined repair PR may have incorporated an updater PR's
       # source changes. Reconcile this even when today's updater finds nothing;
       # never close a partially superseded PR or an unrelated user PR.
@@ -625,19 +603,16 @@ jobs:
           APP_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: python3 .github/ci/reconcile_update_prs.py
-
       - name: Report updater PR cleanup failure
         if: always() && steps.cleanup.outcome == 'failure'
         run: |
           echo '::warning::Could not reconcile obsolete updater PRs; inspect this run and close stale PRs manually.'
           echo 'Updater PR cleanup failed; stale updater PRs may need manual closure.' >> "$GITHUB_STEP_SUMMARY"
-
       # A failed package does not prevent merging other validated updates.
       - name: Enable auto-merge for validated updates
         id: merge
         if: >-
-          github.ref_name == github.event.repository.default_branch &&
-          steps.pr.outputs.pull-request-number != ''
+          github.ref_name == github.event.repository.default_branch && steps.pr.outputs.pull-request-number != ''
         shell: bash
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -651,31 +626,21 @@ jobs:
             --match-head-commit "$PR_HEAD_SHA"
           echo "Auto-merge requested for PR #$PR_NUMBER; required checks must pass." \
             >> "$GITHUB_STEP_SUMMARY"
-
       - name: Fail after reporting all errors
         if: >-
-          always() && (
-          needs.discover.result != 'success' ||
-          (needs.update.result != 'success' && needs.update.result != 'skipped') ||
-          needs.prepare-builds.result != 'success' ||
-          steps.finish.outcome != 'success' ||
-          steps.finish.outputs.infrastructure_failure != 'false' ||
-          (steps.finish.outputs.ready == 'true' && steps.audit-select.outcome != 'success') ||
-          steps.review-pr.outcome == 'failure' ||
-          steps.app-token.outcome != 'success' ||
-          (github.ref_name == github.event.repository.default_branch &&
+          always() && ( needs.discover.result != 'success' || (needs.update.result != 'success' && needs.update.result != 'skipped') || needs.prepare-builds.result != 'success' || steps.finish.outcome != 'success' || steps.finish.outputs.infrastructure_failure != 'false' || (steps.finish.outputs.ready == 'true' && steps.audit-select.outcome != 'success') || steps.review-pr.outcome == 'failure' || steps.app-token.outcome != 'success' || (github.ref_name == github.event.repository.default_branch &&
+
            steps.issues.outcome != 'success') ||
-          steps.failure-select.outcome == 'failure' ||
-          steps.failure-reserve.outcome == 'failure' ||
-          steps.failure-publish.outcome == 'failure' ||
-          steps.pr.outcome == 'failure' ||
-          (steps.audit-select.outcome == 'success' &&
+          steps.failure-select.outcome == 'failure' || steps.failure-reserve.outcome == 'failure' || steps.failure-publish.outcome == 'failure' || steps.pr.outcome == 'failure' || (steps.audit-select.outcome == 'success' &&
+
            steps.audit-select.outputs.auto_count != '0' &&
            steps.pr.outputs.pull-request-number == '') ||
           (steps.audit-select.outcome == 'success' &&
+
            steps.audit-select.outputs.review_count != '0' &&
            steps.review-pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
+
            steps.audit-select.outcome == 'success' &&
            steps.audit-select.outputs.auto_count != '0' &&
            steps.merge.outcome != 'success')

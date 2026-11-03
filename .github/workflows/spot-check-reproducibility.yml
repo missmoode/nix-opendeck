@@ -2,41 +2,33 @@
 # Compare against independently published outputs where available, or build
 # a local reference for plugins that cannot be obtained from the cache.
 name: Reproducibility Spot-check
-
 on:
   # schedule:
   #   # Away from the top of the hour, when GitHub schedules are often delayed.
   #   - cron: '17 5 * * 4'
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: nix-opendeck-maintenance-${{ github.ref }}
   cancel-in-progress: false
   queue: max
-
 jobs:
   prepare-reference:
     name: Ensure cached references exist
     uses: ./.github/workflows/cache.yml
     secrets: inherit
-
   discover:
     name: Discover reproducibility targets
     needs: prepare-reference
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-
       - name: Discover available packages
         id: targets
         shell: bash
@@ -81,37 +73,30 @@ jobs:
             echo
             echo 'Non-redistributable packages are tested without publishing binary artifacts.'
           } >> "$GITHUB_STEP_SUMMARY"
-
   check:
     name: 'Check: ${{ matrix.system }} / ${{ matrix.label }}'
     needs: discover
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
-
     strategy:
       max-parallel: 6
       fail-fast: false
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
-
     env:
       TARGET_SYSTEM: ${{ matrix.system }}
       TARGET_KIND: ${{ matrix.kind }}
       TARGET_ATTR: ${{ matrix.attr }}
       TARGET_LABEL: ${{ matrix.label }}
       REDISTRIBUTABLE: ${{ matrix.redistributable }}
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: nix-opendeck
           skipPush: true
-
       - name: Fetch or build reference
         id: reference
         shell: bash
@@ -157,7 +142,6 @@ jobs:
               echo '- Source: configured substituter or local build'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Rebuild and compare outputs
         id: rebuild
         shell: bash
@@ -173,7 +157,6 @@ jobs:
             --no-link \
             --keep-failed \
             -L
-
       - name: Diagnose reproducibility failure
         if: ${{ failure() }}
         shell: bash
@@ -213,7 +196,6 @@ jobs:
               done
             fi
           } | tee "$RUNNER_TEMP/repro-differences.txt"
-
       - name: Archive non-reproducible outputs
         if: ${{ failure() && matrix.redistributable }}
         shell: bash
@@ -238,7 +220,6 @@ jobs:
           printf 'Target: %s\nSystem: %s\nReference: %s\nRebuilt: %s\n' \
             "$TARGET_ATTR" "$TARGET_SYSTEM" "$output" "$rebuilt" \
             > "$archive_dir/paths.txt"
-
       - name: Upload reproducibility artifacts
         id: repro_artifact
         if: ${{ failure() && matrix.redistributable }}
@@ -248,7 +229,6 @@ jobs:
           path: ${{ runner.temp }}/opendeck-repro/
           if-no-files-found: ignore
           retention-days: 7
-
       - name: Summarize result
         if: ${{ always() }}
         shell: bash

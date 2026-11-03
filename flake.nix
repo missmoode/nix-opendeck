@@ -54,7 +54,50 @@
           pluginLib = (import ./src/lib/plugins) final;
         })
         // {
-          formatter = pkgs.nixfmt-tree;
+          formatter = pkgs.nixfmt-tree.override {
+            runtimeInputs = with pkgs; [
+              ruff
+              shfmt
+              yamlfmt
+              (mdformat.withPlugins (ps: [ ps.mdformat-gfm ]))
+            ];
+
+            settings.formatter = {
+              python = {
+                command = "ruff";
+                options = [ "format" ];
+                includes = [ "*.py" ];
+              };
+
+              shell = {
+                command = "shfmt";
+                options = [
+                  "-w"
+                  "-i"
+                  "2"
+                ];
+                includes = [ "*.sh" ];
+              };
+
+              yaml = {
+                command = "yamlfmt";
+                includes = [
+                  "*.yaml"
+                  "*.yml"
+                ];
+              };
+
+              markdown = {
+                command = "mdformat";
+                options = [
+                  "--wrap"
+                  "88"
+                  "--compact-tables"
+                ];
+                includes = [ "*.md" ];
+              };
+            };
+          };
 
           # Explicitly invoked integration suite; not part of nix flake check.
           apps.opendeck-runtime-test = {

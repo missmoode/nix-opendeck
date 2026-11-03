@@ -1,20 +1,16 @@
 # Propose a nixpkgs lock-file update; the required PR reproducibility check
 # performs the native builds. cache.yml publishes outputs after merging.
 name: Update nixpkgs
-
 on:
   schedule:
     - cron: '43 5 15 * *'
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: nix-opendeck-maintenance-${{ github.ref }}
   cancel-in-progress: false
   queue: max
-
 jobs:
   update:
     environment:
@@ -28,11 +24,9 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           persist-credentials: false
-
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
           github_access_token: ${{ github.token }}
-
       - name: Update nixpkgs lock
         id: update
         shell: bash
@@ -74,7 +68,6 @@ jobs:
             echo
             echo "[Updater run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
           } > "$RUNNER_TEMP/nixpkgs-report.md"
-
       # A separately installed GitHub App lets PR checks run automatically.
       # Mint the short-lived token only after confirming an update exists.
       - name: Generate automation token
@@ -86,7 +79,6 @@ jobs:
           private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-
       - name: Create or update pull request
         id: pr
         if: steps.update.outputs.changed == 'true'
@@ -105,12 +97,10 @@ jobs:
             updates
             nixpkgs
             automatically generated
-
       # GitHub, not this job, decides when the required PR checks have passed.
       - name: Enable auto-merge
         if: >-
-          github.ref_name == github.event.repository.default_branch &&
-          steps.pr.outputs.pull-request-number != ''
+          github.ref_name == github.event.repository.default_branch && steps.pr.outputs.pull-request-number != ''
         shell: bash
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -124,11 +114,9 @@ jobs:
             --match-head-commit "$PR_HEAD_SHA"
           echo "Auto-merge requested for PR #$PR_NUMBER; required checks must pass." \
             >> "$GITHUB_STEP_SUMMARY"
-
       - name: Check PR creation
         if: >-
-          steps.update.outputs.changed == 'true' &&
-          steps.pr.outputs.pull-request-number == ''
+          steps.update.outputs.changed == 'true' && steps.pr.outputs.pull-request-number == ''
         run: |
           echo '::error::The lock file changed but no pull request was created.'
           exit 1

@@ -17,7 +17,9 @@ import tempfile
 import upstream_compatibility as audit
 
 MARKER_PREFIX = "nix-opendeck-failure-audit"
-VERSION_ADDITION = re.compile(r'^\+\s*version\s*=\s*"([A-Za-z0-9][A-Za-z0-9._+-]*)"\s*;', re.MULTILINE)
+VERSION_ADDITION = re.compile(
+    r'^\+\s*version\s*=\s*"([A-Za-z0-9][A-Za-z0-9._+-]*)"\s*;', re.MULTILINE
+)
 PATCH_FAILURE = re.compile(
     r"(?i)(?:hunk\s*#\d+\s*FAILED|(?:patch|applying patch).{0,90}(?:failed|does not apply)|"
     r"(?:failed|unable) to apply patch|can't find file to patch|cannot find file to patch)"
@@ -72,16 +74,22 @@ def relevant_failure(report, changed_paths):
             continue
         # Rust reports the source location directly after the error header.
         # Unrelated mentions of patched files elsewhere in the log aren't enough.
-        location = "\n".join(lines[i:i + 8])
-        if any(path in location or path.removeprefix("src-tauri/") in location
-               for path in changed_paths):
+        location = "\n".join(lines[i : i + 8])
+        if any(
+            path in location or path.removeprefix("src-tauri/") in location
+            for path in changed_paths
+        ):
             return "compiler error in downstream-patched source"
     return None
 
 
 def find_reports(prepared, build_root):
     for target in prepared.get("plugins", []) + prepared.get("opendeck", []):
-        location = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
+        location = (
+            Path(build_root)
+            / f"build-{target['id']}-{target['system']}"
+            / "result.json"
+        )
         if not location.is_file():
             continue  # Broken/missing build artifacts are infrastructure failures, not evidence.
         report = read(location)
@@ -106,7 +114,12 @@ def select(prepared_file, update_root, build_root):
             if not local_patches:
                 continue
             upstream = audit.source_spec(spec)
-            path = Path(update_root) / f"updates-{record['system']}" / "patches" / f"{record['id']}.patch"
+            path = (
+                Path(update_root)
+                / f"updates-{record['system']}"
+                / "patches"
+                / f"{record['id']}.patch"
+            )
             change = path.read_bytes()
             if hashlib.sha256(change).hexdigest() != record["sha256"]:
                 continue
@@ -137,20 +150,33 @@ def select(prepared_file, update_root, build_root):
                 for p in target["patches"]
             )
             identity = {
-                "label": label, "old": old, "new": new,
+                "label": label,
+                "old": old,
+                "new": new,
                 "sourceUpdateSha256": record["sha256"],
                 "buildSourceUpdates": deps,
-                "downstreamPatches": [(p.as_posix(), hashlib.sha256(p.read_bytes()).hexdigest())
-                                      for p in local_patches],
+                "downstreamPatches": [
+                    (p.as_posix(), hashlib.sha256(p.read_bytes()).hexdigest())
+                    for p in local_patches
+                ],
             }
-            digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-            output.append({
-                "fingerprint": digest, "package": label, "from": old, "to": new,
-                "upstream": upstream["upstream"], "tag_prefix": upstream["tag_prefix"],
-                "reason": reason, "system": target["system"],
-                "error": report.get("error", "build failed"),
-                "errorExcerpt": report["errorExcerpt"][:10000],
-            })
+            digest = hashlib.sha256(
+                json.dumps(identity, sort_keys=True).encode()
+            ).hexdigest()
+            output.append(
+                {
+                    "fingerprint": digest,
+                    "package": label,
+                    "from": old,
+                    "to": new,
+                    "upstream": upstream["upstream"],
+                    "tag_prefix": upstream["tag_prefix"],
+                    "reason": reason,
+                    "system": target["system"],
+                    "error": report.get("error", "build failed"),
+                    "errorExcerpt": report["errorExcerpt"][:10000],
+                }
+            )
         except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             # Unknown package/source layouts are reported through ordinary CI.
             # Do not turn missing context into speculative Gemini requests.
@@ -160,7 +186,9 @@ def select(prepared_file, update_root, build_root):
 
 def gh(*args):
     env = {k: v for k, v in os.environ.items() if k != "GEMINI_API_KEY"}
-    result = subprocess.run(["gh", *args], check=True, capture_output=True, text=True, env=env)
+    result = subprocess.run(
+        ["gh", *args], check=True, capture_output=True, text=True, env=env
+    )
     return result.stdout
 
 
@@ -169,9 +197,20 @@ def issue_number():
     # reconciliation step hands us the authoritative issue number directly.
     if os.environ.get("ISSUE_NUMBER"):
         return int(os.environ["ISSUE_NUMBER"])
-    result = json.loads(gh("issue", "list", "--state", "all", "--limit", "100",
-                           "--search", "Automated package update failures in:title",
-                           "--json", "number,title,state"))
+    result = json.loads(
+        gh(
+            "issue",
+            "list",
+            "--state",
+            "all",
+            "--limit",
+            "100",
+            "--search",
+            "Automated package update failures in:title",
+            "--json",
+            "number,title,state",
+        )
+    )
     matches = [p for p in result if p["title"] == "Automated package update failures"]
     if not matches:
         raise RuntimeError("The package update failure issue could not be found")
@@ -192,21 +231,38 @@ def reserve(candidates_file, output):
     number = issue_number()
     # gh --paginate with --jq flattens all pages without holding a huge JSON
     # response; only bot-authored markers may suppress new requests.
-    prior = gh("api", "--paginate", f"repos/{repository}/issues/{number}/comments?per_page=100",
-               "--jq", f'.[] | select(.user.login == {json.dumps(bot_login)}) | .body')
+    prior = gh(
+        "api",
+        "--paginate",
+        f"repos/{repository}/issues/{number}/comments?per_page=100",
+        "--jq",
+        f".[] | select(.user.login == {json.dumps(bot_login)}) | .body",
+    )
     reserved = []
     for item in candidates:
         if marker(item["fingerprint"]) in prior:
             continue
-        body = "\n".join([
-            marker(item["fingerprint"]),
-            f"### Failure diagnosis: `{item['package']}` ({item['from']} → {item['to']})",
-            "", f"Build evidence: {item['reason']} ({item['system']}).", "",
-            "AI-assisted diagnosis requested. If unavailable, the same source and patches will "
-            "not be automatically submitted again; see the workflow logs for the original error.",
-        ])
-        comment = json.loads(gh("api", "-X", "POST", f"repos/{repository}/issues/{number}/comments",
-                                "-f", f"body={body}"))
+        body = "\n".join(
+            [
+                marker(item["fingerprint"]),
+                f"### Failure diagnosis: `{item['package']}` ({item['from']} → {item['to']})",
+                "",
+                f"Build evidence: {item['reason']} ({item['system']}).",
+                "",
+                "AI-assisted diagnosis requested. If unavailable, the same source and patches will "
+                "not be automatically submitted again; see the workflow logs for the original error.",
+            ]
+        )
+        comment = json.loads(
+            gh(
+                "api",
+                "-X",
+                "POST",
+                f"repos/{repository}/issues/{number}/comments",
+                "-f",
+                f"body={body}",
+            )
+        )
         item["comment_id"] = comment["id"]
         reserved.append(item)
         prior += "\n" + marker(item["fingerprint"])
@@ -226,15 +282,17 @@ def diagnose(item):
         raise ValueError("Referenced downstream patch text is unavailable")
     upstream = {"upstream": item["upstream"], "tag_prefix": item["tag_prefix"]}
     stat, diff = audit.source_diff(upstream, item["from"], item["to"])
-    patch_text = "\n\n".join(f"=== {p.as_posix()} ===\n{p.read_text()}" for p in patches)
+    patch_text = "\n\n".join(
+        f"=== {p.as_posix()} ===\n{p.read_text()}" for p in patches
+    )
     prompt = f"""You are diagnosing a failed native build of an automatically proposed update
 of a Nix-packaged project that carries downstream source patches.
 
-Package: {item['package']}
-Upstream: https://github.com/{item['upstream']}
-Version change: {item['tag_prefix']}{item['from']} -> {item['tag_prefix']}{item['to']}
-Failed native system: {item['system']}
-Reason selected for investigation: {item['reason']}
+Package: {item["package"]}
+Upstream: https://github.com/{item["upstream"]}
+Version change: {item["tag_prefix"]}{item["from"]} -> {item["tag_prefix"]}{item["to"]}
+Failed native system: {item["system"]}
+Reason selected for investigation: {item["reason"]}
 
 Use the actual error excerpt to identify the immediate failure. Determine whether
 upstream changes conflict with a named downstream patch. Distinguish confirmed
@@ -248,10 +306,10 @@ Do not claim to have run builds or verified a fix. Keep the report under 600 wor
 Begin with a fourth-level Markdown heading: #### Diagnosis
 
 <BUILD_ERROR>
-{item['error']}
+{item["error"]}
 </BUILD_ERROR>
 <BUILD_LOG_EXCERPT>
-{item['errorExcerpt']}
+{item["errorExcerpt"]}
 </BUILD_LOG_EXCERPT>
 <UPSTREAM_CHANGE_SUMMARY>
 {stat}
@@ -264,7 +322,9 @@ Begin with a fourth-level Markdown heading: #### Diagnosis
 </DOWNSTREAM_PATCHES>
 """
     if len(prompt) > audit.MAX_INPUT_CHARS:
-        raise ValueError("Upstream diff and patches exceed the input limit; no partial diagnosis attempted")
+        raise ValueError(
+            "Upstream diff and patches exceed the input limit; no partial diagnosis attempted"
+        )
     return audit.ask_gemini(prompt)
 
 
@@ -273,7 +333,12 @@ def review(reservations_file, output):
     for item in read(reservations_file):
         try:
             result = {"review": diagnose(item)}
-        except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            subprocess.CalledProcessError,
+        ) as error:
             result = {"error": str(error)}
         results[item["fingerprint"]] = result
         write(output, results)
@@ -286,23 +351,42 @@ def publish(reservations_file, reviews_file):
     repository = os.environ["GH_REPO"]
     for item in read(reservations_file):
         result = reviews.get(item["fingerprint"], {})
-        heading = (f"### Failure diagnosis: `{item['package']}` "
-                   f"({item['from']} → {item['to']})")
-        body = [marker(item["fingerprint"]), heading, "",
-                f"Evidence: {item['reason']} on `{item['system']}`.", "",
-                "*AI-assisted analysis is a lead for manual investigation, not a validated fix.*", ""]
+        heading = (
+            f"### Failure diagnosis: `{item['package']}` "
+            f"({item['from']} → {item['to']})"
+        )
+        body = [
+            marker(item["fingerprint"]),
+            heading,
+            "",
+            f"Evidence: {item['reason']} on `{item['system']}`.",
+            "",
+            "*AI-assisted analysis is a lead for manual investigation, not a validated fix.*",
+            "",
+        ]
         if result.get("review"):
             body.append(result["review"].replace("@", "@\u200b"))
         else:
             error = result.get("error", "audit step did not produce a report")
             body.append(f"**Diagnosis unavailable:** {error.replace('@', '@\u200b')}")
-        body += ["", "This exact update and downstream patch set will not be automatically re-analysed."]
+        body += [
+            "",
+            "This exact update and downstream patch set will not be automatically re-analysed.",
+        ]
         text = "\n".join(body)
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".md") as file:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".md"
+        ) as file:
             file.write(text)
             file.flush()
-            gh("api", "-X", "PATCH", f"repos/{repository}/issues/comments/{int(item['comment_id'])}",
-               "-F", f"body=@{file.name}")
+            gh(
+                "api",
+                "-X",
+                "PATCH",
+                f"repos/{repository}/issues/comments/{int(item['comment_id'])}",
+                "-F",
+                f"body=@{file.name}",
+            )
 
 
 def main():

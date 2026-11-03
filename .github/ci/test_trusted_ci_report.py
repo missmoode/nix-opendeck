@@ -24,19 +24,33 @@ REPO = "missmoode/nix-opendeck"
 
 
 def fixture(kind="Checks"):
-    path = next(path for path, (name, _, _) in reporter.WORKFLOWS.items() if name == kind)
+    path = next(
+        path for path, (name, _, _) in reporter.WORKFLOWS.items() if name == kind
+    )
     title = f"{kind} PR #39 merge {MERGE}"
-    event = {"workflow_run": {
-        "id": 42, "name": title, "display_title": title, "path": path,
-        "event": "pull_request", "status": "completed", "conclusion": "success",
-        "head_sha": HEAD, "repository": {"full_name": REPO},
-        "pull_requests": [{"number": 39}], "html_url": "https://github.com/example/run/42",
-    }}
+    event = {
+        "workflow_run": {
+            "id": 42,
+            "name": title,
+            "display_title": title,
+            "path": path,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": HEAD,
+            "repository": {"full_name": REPO},
+            "pull_requests": [{"number": 39}],
+            "html_url": "https://github.com/example/run/42",
+        }
+    }
     pr = {
-        "state": "open", "merge_commit_sha": MERGE,
+        "state": "open",
+        "merge_commit_sha": MERGE,
         "base": {"ref": "main", "sha": BASE, "repo": {"full_name": REPO}},
         "head": {"sha": HEAD, "ref": "feature", "repo": {"full_name": REPO}},
-        "draft": False, "labels": [], "user": {"login": "contributor"},
+        "draft": False,
+        "labels": [],
+        "user": {"login": "contributor"},
     }
     return event, pr
 
@@ -60,8 +74,14 @@ class FakeAPI:
         self.missing_tree = set()
         self.newer = False
         self.recent = []
-        self.jobs = [{"name": next(job for name, job, _ in reporter.WORKFLOWS.values() if name == kind),
-                      "conclusion": "success"}]
+        self.jobs = [
+            {
+                "name": next(
+                    job for name, job, _ in reporter.WORKFLOWS.values() if name == kind
+                ),
+                "conclusion": "success",
+            }
+        ]
         self.published = []
         self.fail_status = False
         self.annotations = []
@@ -156,12 +176,18 @@ class ReporterTests(unittest.TestCase):
                     api.trees[MERGE].pop(".github/ci/test_trusted_ci_report.py")
                 elif scenario == "retyped":
                     # A symlink replacing a checked-in test changes its mode.
-                    api.trees[MERGE]["tests/default.nix"] = ("120000", "blob", "trusted")
+                    api.trees[MERGE]["tests/default.nix"] = (
+                        "120000",
+                        "blob",
+                        "trusted",
+                    )
                 else:
                     api.trees[MERGE].pop("tests/home-manager.nix")
                     if scenario == "renamed":
                         api.trees[MERGE]["tests/home-manager/evaluation.nix"] = (
-                            "100644", "blob", "trusted"
+                            "100644",
+                            "blob",
+                            "trusted",
                         )
                 self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
@@ -170,9 +196,17 @@ class ReporterTests(unittest.TestCase):
             with self.subTest(scenario=scenario):
                 event, _, api = self.setup_case("Package verification")
                 if scenario == "added":
-                    api.trees[MERGE]["tests/runtime/extra.py"] = ("100644", "blob", "new")
+                    api.trees[MERGE]["tests/runtime/extra.py"] = (
+                        "100644",
+                        "blob",
+                        "new",
+                    )
                 elif scenario == "modified":
-                    api.trees[MERGE]["tests/runtime/run.py"] = ("100644", "blob", "changed")
+                    api.trees[MERGE]["tests/runtime/run.py"] = (
+                        "100644",
+                        "blob",
+                        "changed",
+                    )
                 else:
                     api.trees[MERGE].pop("tests/runtime/run.py")
                 self.assertEqual(reporter.assess(event, api)["state"], "failure")
@@ -181,12 +215,24 @@ class ReporterTests(unittest.TestCase):
         for kind in ("Checks", "Package verification"):
             with self.subTest(kind=kind):
                 event, _, api = self.setup_case(kind)
-                api.trees[MERGE]["src/packages/opendeck/default.nix"] = ("100644", "blob", "new")
-                api.trees[MERGE][".github/ci/package_updates.py"] = ("100644", "blob", "new")
+                api.trees[MERGE]["src/packages/opendeck/default.nix"] = (
+                    "100644",
+                    "blob",
+                    "new",
+                )
+                api.trees[MERGE][".github/ci/package_updates.py"] = (
+                    "100644",
+                    "blob",
+                    "new",
+                )
                 # Home Manager test changes do not alter the independent
                 # package-verification policy, only the Checks policy.
                 if kind == "Package verification":
-                    api.trees[MERGE]["tests/home-manager.nix"] = ("100644", "blob", "changed")
+                    api.trees[MERGE]["tests/home-manager.nix"] = (
+                        "100644",
+                        "blob",
+                        "changed",
+                    )
                 self.assertEqual(reporter.assess(event, api)["state"], "success")
 
     def test_incomplete_policy_trees_fail_closed(self):
@@ -232,21 +278,30 @@ class ReporterTests(unittest.TestCase):
 
     def test_cancelled_newer_run_does_not_hide_success(self):
         event, _, api = self.setup_case()
-        api.recent = [{
-            "id": 43, "display_title": f"Checks PR #39 merge {MERGE}",
-            "status": "completed", "conclusion": "cancelled",
-        }]
+        api.recent = [
+            {
+                "id": 43,
+                "display_title": f"Checks PR #39 merge {MERGE}",
+                "status": "completed",
+                "conclusion": "cancelled",
+            }
+        ]
         self.assertEqual(reporter.assess(event, api)["state"], "success")
 
     def test_cancelled_run_reconsiders_earlier_completion(self):
         event, _, api = self.setup_case()
         event["workflow_run"]["id"] = 43
         event["workflow_run"]["conclusion"] = "cancelled"
-        api.recent = [{
-            "id": 42, "display_title": f"Checks PR #39 merge {MERGE}",
-            "head_sha": HEAD, "status": "completed", "conclusion": "success",
-            "html_url": "https://github.com/example/run/42",
-        }]
+        api.recent = [
+            {
+                "id": 42,
+                "display_title": f"Checks PR #39 merge {MERGE}",
+                "head_sha": HEAD,
+                "status": "completed",
+                "conclusion": "success",
+                "html_url": "https://github.com/example/run/42",
+            }
+        ]
         result = reporter.assess(event, api)
         self.assertEqual(result["state"], "success")
         self.assertEqual(result["url"], "https://github.com/example/run/42")
@@ -256,18 +311,26 @@ class ReporterTests(unittest.TestCase):
         event["workflow_run"]["id"] = 43
         event["workflow_run"]["conclusion"] = "cancelled"
         prior = {
-            "id": 42, "display_title": f"Checks PR #39 merge {MERGE}",
-            "head_sha": HEAD, "status": "completed", "conclusion": "success",
+            "id": 42,
+            "display_title": f"Checks PR #39 merge {MERGE}",
+            "head_sha": HEAD,
+            "status": "completed",
+            "conclusion": "success",
             "html_url": "https://github.com/example/run/42",
         }
         api.recent = [{**prior, "status": "in_progress"}]
         self.assertIsNone(reporter.assess(event, api))
         api.recent = [{**prior, "head_sha": "d" * 40}]
         self.assertIsNone(reporter.assess(event, api))
-        api.recent = [prior, {
-            "id": 44, "display_title": f"Checks PR #39 merge {MERGE}",
-            "status": "in_progress", "conclusion": None,
-        }]
+        api.recent = [
+            prior,
+            {
+                "id": 44,
+                "display_title": f"Checks PR #39 merge {MERGE}",
+                "status": "in_progress",
+                "conclusion": None,
+            },
+        ]
         self.assertIsNone(reporter.assess(event, api))
 
     def test_cancelled_new_commit_cannot_reuse_old_success(self):
@@ -278,11 +341,16 @@ class ReporterTests(unittest.TestCase):
                 event["workflow_run"]["id"] = 43
                 event["workflow_run"]["conclusion"] = "cancelled"
                 # Run 42 passed, but for the previous PR head/merge revision.
-                api.recent = [{
-                    "id": 42, "display_title": event["workflow_run"]["display_title"],
-                    "head_sha": "d" * 40, "status": "completed",
-                    "conclusion": "success", "html_url": "https://github.com/example/run/42",
-                }]
+                api.recent = [
+                    {
+                        "id": 42,
+                        "display_title": event["workflow_run"]["display_title"],
+                        "head_sha": "d" * 40,
+                        "status": "completed",
+                        "conclusion": "success",
+                        "html_url": "https://github.com/example/run/42",
+                    }
+                ]
                 self.assertIsNone(reporter.assess(event, api))
                 # Even a valid prior run becomes obsolete after a new push.
                 api.recent[0]["head_sha"] = HEAD
@@ -291,10 +359,15 @@ class ReporterTests(unittest.TestCase):
 
     def test_newer_failed_run_is_authoritative_over_older_success(self):
         event, _, api = self.setup_case()
-        api.recent = [{
-            "id": 43, "display_title": f"Checks PR #39 merge {MERGE}",
-            "head_sha": HEAD, "status": "completed", "conclusion": "failure",
-        }]
+        api.recent = [
+            {
+                "id": 43,
+                "display_title": f"Checks PR #39 merge {MERGE}",
+                "head_sha": HEAD,
+                "status": "completed",
+                "conclusion": "failure",
+            }
+        ]
         self.assertIsNone(reporter.assess(event, api))
 
     def test_both_verifications_require_current_non_draft_pr(self):
@@ -394,22 +467,37 @@ class ReporterTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             event_file = Path(directory) / "event.json"
             event_file.write_text(json.dumps(event), encoding="utf-8")
-            env = {"GITHUB_EVENT_PATH": str(event_file), "GITHUB_REPOSITORY": REPO,
-                   "GH_TOKEN": "read", "APP_TOKEN": "app"}
-            with patch.dict(os.environ, env), \
-                 patch.object(reporter, "GitHub", return_value=api), \
-                 patch.object(reporter, "notify", side_effect=RuntimeError("comment failure")):
+            env = {
+                "GITHUB_EVENT_PATH": str(event_file),
+                "GITHUB_REPOSITORY": REPO,
+                "GH_TOKEN": "read",
+                "APP_TOKEN": "app",
+            }
+            with (
+                patch.dict(os.environ, env),
+                patch.object(reporter, "GitHub", return_value=api),
+                patch.object(
+                    reporter, "notify", side_effect=RuntimeError("comment failure")
+                ),
+            ):
                 reporter.main()
-        self.assertEqual(api.published, [(HEAD, "nix-opendeck/package-verification", "success")])
+        self.assertEqual(
+            api.published, [(HEAD, "nix-opendeck/package-verification", "success")]
+        )
 
     def test_removed_targets_comment(self):
         event, _, api = self.setup_case("Package verification")
         event["workflow_run"]["conclusion"] = "failure"
         api.jobs[0]["conclusion"] = "failure"
-        api.jobs.append({"id": 177, "name": "Discover changed packages",
-                         "conclusion": "failure"})
-        api.annotations = [{"title": "Published package targets removed",
-                            "annotation_level": "failure"}]
+        api.jobs.append(
+            {"id": 177, "name": "Discover changed packages", "conclusion": "failure"}
+        )
+        api.annotations = [
+            {
+                "title": "Published package targets removed",
+                "annotation_level": "failure",
+            }
+        ]
         result = reporter.assess(event, api)
         self.assertEqual(result["state"], "failure")
         self.assertEqual(result["discovery_check_id"], 177)
@@ -424,10 +512,12 @@ class ReporterTests(unittest.TestCase):
         event, _, api = self.setup_case("Package verification")
         event["workflow_run"]["conclusion"] = "failure"
         api.jobs[0]["conclusion"] = "failure"
-        api.jobs.append({"id": 177, "name": "Discover changed packages",
-                         "conclusion": "failure"})
-        api.annotations = [{"title": "Nix evaluation failed",
-                            "annotation_level": "failure"}]
+        api.jobs.append(
+            {"id": 177, "name": "Discover changed packages", "conclusion": "failure"}
+        )
+        api.annotations = [
+            {"title": "Nix evaluation failed", "annotation_level": "failure"}
+        ]
         result = reporter.assess(event, api)
         with patch.dict(os.environ, {"APP_BOT_LOGIN": "test[bot]"}):
             reporter.notify(api, result)
@@ -442,9 +532,16 @@ class ReporterTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             event_file = Path(directory) / "event.json"
             event_file.write_text(json.dumps(event), encoding="utf-8")
-            env = {"GITHUB_EVENT_PATH": str(event_file), "GITHUB_REPOSITORY": REPO,
-                   "GH_TOKEN": "read", "APP_TOKEN": "app"}
-            with patch.dict(os.environ, env), patch.object(reporter, "GitHub", return_value=api):
+            env = {
+                "GITHUB_EVENT_PATH": str(event_file),
+                "GITHUB_REPOSITORY": REPO,
+                "GH_TOKEN": "read",
+                "APP_TOKEN": "app",
+            }
+            with (
+                patch.dict(os.environ, env),
+                patch.object(reporter, "GitHub", return_value=api),
+            ):
                 with self.assertRaises(URLError):
                     reporter.main()
 

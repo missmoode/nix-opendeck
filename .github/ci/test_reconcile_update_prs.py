@@ -17,8 +17,11 @@ class SourceRedundancyTests(unittest.TestCase):
         self.previous = Path.cwd()
         os.chdir(self.tmp.name)
         self.addCleanup(os.chdir, self.previous)
-        for argv in (("init", "-q", "-b", "main"), ("config", "user.name", "Test"),
-                     ("config", "user.email", "test@example.invalid")):
+        for argv in (
+            ("init", "-q", "-b", "main"),
+            ("config", "user.name", "Test"),
+            ("config", "user.email", "test@example.invalid"),
+        ):
             self.git(*argv)
         self.write("src/plugin.nix", 'version = "1";\n')
         self.write("src/another.nix", 'version = "1";\n')
@@ -28,8 +31,9 @@ class SourceRedundancyTests(unittest.TestCase):
         self.git("branch", "automated/test")
 
     def git(self, *argv):
-        return subprocess.run(["git", *argv], check=True,
-                              capture_output=True, text=True).stdout.strip()
+        return subprocess.run(
+            ["git", *argv], check=True, capture_output=True, text=True
+        ).stdout.strip()
 
     def write(self, file, text):
         path = Path(file)
@@ -59,8 +63,12 @@ class SourceRedundancyTests(unittest.TestCase):
         self.assertTrue(cleanup.redundant_source_changes("main", "automated/test"))
 
     def test_partially_integrated_update_stays_open(self):
-        self.propose({"src/plugin.nix": 'version = "2";\n',
-                      "src/another.nix": 'version = "2";\n'})
+        self.propose(
+            {
+                "src/plugin.nix": 'version = "2";\n',
+                "src/another.nix": 'version = "2";\n',
+            }
+        )
         self.write("src/plugin.nix", 'version = "2";\n')
         self.commit("merged first package only")
         self.assertFalse(cleanup.redundant_source_changes("main", "automated/test"))
@@ -82,15 +90,25 @@ class MatchingPRTests(unittest.TestCase):
     @patch.object(cleanup, "execute")
     def test_bot_only_and_correct_head(self, execute):
         def entry(user, branch, number):
-            return {"number": number, "state": "open", "user": {"login": user},
-                    "head": {"ref": branch, "repo": {"full_name": "example/repo"}},
-                    "base": {"ref": "main"}}
+            return {
+                "number": number,
+                "state": "open",
+                "user": {"login": user},
+                "head": {"ref": branch, "repo": {"full_name": "example/repo"}},
+                "base": {"ref": "main"},
+            }
+
         import json
-        execute.return_value = json.dumps([
-            entry("person", "automated/package-updates", 1),
-            entry("mybot[bot]", "automated/package-updates", 2),
-        ])
-        result = cleanup.matching_pr("example/repo", "main", "automated/package-updates", "mybot[bot]")
+
+        execute.return_value = json.dumps(
+            [
+                entry("person", "automated/package-updates", 1),
+                entry("mybot[bot]", "automated/package-updates", 2),
+            ]
+        )
+        result = cleanup.matching_pr(
+            "example/repo", "main", "automated/package-updates", "mybot[bot]"
+        )
         self.assertEqual(result["number"], 2)
 
 

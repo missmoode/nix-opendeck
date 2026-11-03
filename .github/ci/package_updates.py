@@ -44,9 +44,14 @@ def logged_build(*argv):
     """Stream output to Actions while retaining only a bounded diagnostic tail."""
     print("+", " ".join(map(str, argv)), flush=True)
     last_lines = deque(maxlen=120)
-    with subprocess.Popen(list(map(str, argv)), stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, text=True, errors="replace",
-                          bufsize=1) as process:
+    with subprocess.Popen(
+        list(map(str, argv)),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+        bufsize=1,
+    ) as process:
         for line in process.stdout:
             sys.stdout.write(line)
             sys.stdout.flush()
@@ -80,12 +85,14 @@ def discover(args):
             key=lambda target: SYSTEM_PREFERENCE.index(target["system"]),
         )
         chosen = variants[0]
-        packages.append({
-            "id": identifier(label),
-            "label": label,
-            "system": chosen["system"],
-            "attr": chosen["attr"],
-        })
+        packages.append(
+            {
+                "id": identifier(label),
+                "label": label,
+                "system": chosen["system"],
+                "attr": chosen["attr"],
+            }
+        )
 
     matrix = []
     for system in SYSTEM_PREFERENCE:
@@ -96,7 +103,9 @@ def discover(args):
     plan = {"packages": packages, "updaters": matrix}
     save(Path(args.output) / "plan.json", plan)
     save(Path(args.output) / "targets.json", targets)
-    print(f"Discovered {len(packages)} updatable packages on {len(matrix)} native runners")
+    print(
+        f"Discovered {len(packages)} updatable packages on {len(matrix)} native runners"
+    )
 
 
 def clean_tree(base="HEAD"):
@@ -110,7 +119,9 @@ def update(args):
     output = Path(args.output)
     (output / "patches").mkdir(parents=True, exist_ok=True)
     results = []
-    base = run("git", "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
+    base = run(
+        "git", "rev-parse", "HEAD", capture_output=True, text=True
+    ).stdout.strip()
     for pkg in packages:
         label = pkg["label"]
         print(f"\n::group::Update {label}", flush=True)
@@ -119,13 +130,19 @@ def update(args):
             # Every update starts from the same base; no updater sees another
             # plugin's proposed source changes.
             clean_tree(base)
-            proc = run("nix-update", pkg["attr"], "--flake", "--use-update-script", check=False)
+            proc = run(
+                "nix-update", pkg["attr"], "--flake", "--use-update-script", check=False
+            )
             if proc.returncode:
                 record["errorExcerpt"] = getattr(proc, "errorExcerpt", "")
                 raise RuntimeError(f"nix-update exited with {proc.returncode}")
-            current = run("git", "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
+            current = run(
+                "git", "rev-parse", "HEAD", capture_output=True, text=True
+            ).stdout.strip()
             if current != base:
-                raise RuntimeError("updater created a commit instead of leaving a working-tree change")
+                raise RuntimeError(
+                    "updater created a commit instead of leaving a working-tree change"
+                )
             run("git", "add", "-A")
             changed = run("git", "diff", "--cached", "--quiet", check=False)
             if changed.returncode == 0:
@@ -133,16 +150,27 @@ def update(args):
             elif changed.returncode != 1:
                 raise RuntimeError("git diff could not inspect the updated files")
             else:
-                changed_files = run("git", "diff", "--cached", "--name-only", capture_output=True, text=True).stdout.splitlines()
+                changed_files = run(
+                    "git",
+                    "diff",
+                    "--cached",
+                    "--name-only",
+                    capture_output=True,
+                    text=True,
+                ).stdout.splitlines()
                 # Automated package updates may change derivations and their
                 # checked-in dependency locks, but must not edit CI, the flake
                 # inputs, or other repository infrastructure.
-                unexpected = [path for path in changed_files if not path.startswith("src/")]
+                unexpected = [
+                    path for path in changed_files if not path.startswith("src/")
+                ]
                 if unexpected:
                     raise RuntimeError(
                         "updater modified files outside src/: " + ", ".join(unexpected)
                     )
-                patch = run("git", "diff", "--cached", "--binary", capture_output=True).stdout
+                patch = run(
+                    "git", "diff", "--cached", "--binary", capture_output=True
+                ).stdout
                 if not patch:
                     raise RuntimeError("changed files produced an empty Git patch")
                 patch_path = output / "patches" / f"{pkg['id']}.patch"
@@ -177,17 +205,28 @@ def collect_updates(plan, root):
             system_records = {}
             for record in items:
                 identity = record.get("id")
-                expected = next((p for p in plan["packages"] if p["id"] == identity), None)
-                if (not expected or expected["system"] != system or
-                        record.get("label") != expected["label"] or identity in records or identity in system_records):
+                expected = next(
+                    (p for p in plan["packages"] if p["id"] == identity), None
+                )
+                if (
+                    not expected
+                    or expected["system"] != system
+                    or record.get("label") != expected["label"]
+                    or identity in records
+                    or identity in system_records
+                ):
                     raise ValueError(f"unexpected/duplicate result: {record}")
                 if record.get("status") not in ("unchanged", "changed", "failed"):
                     raise ValueError(f"invalid update result: {record}")
                 if record["status"] == "changed":
-                    patch_path = root / f"updates-{system}" / "patches" / f"{identity}.patch"
+                    patch_path = (
+                        root / f"updates-{system}" / "patches" / f"{identity}.patch"
+                    )
                     if not patch_path.is_file():
                         raise ValueError(f"missing patch for {identity}")
-                    if hashlib.sha256(patch_path.read_bytes()).hexdigest() != record.get("sha256"):
+                    if hashlib.sha256(
+                        patch_path.read_bytes()
+                    ).hexdigest() != record.get("sha256"):
                         raise ValueError(f"patch checksum mismatch for {identity}")
                 system_records[identity] = record
             records.update(system_records)
@@ -203,9 +242,11 @@ def prepare(args):
     plan = load(args.plan)
     targets = load(args.targets)
     records, errors = collect_updates(plan, args.updates)
-    changed = [p | {"sha256": records[p["id"]]["sha256"]}
-               for p in plan["packages"]
-               if records.get(p["id"], {}).get("status") == "changed"]
+    changed = [
+        p | {"sha256": records[p["id"]]["sha256"]}
+        for p in plan["packages"]
+        if records.get(p["id"], {}).get("status") == "changed"
+    ]
     per_label = {}
     for target in targets:
         per_label.setdefault((target["kind"], target["label"]), []).append(target)
@@ -218,40 +259,61 @@ def prepare(args):
         if not supported:
             errors.append(f"No supported build targets for {pkg['label']}")
         for target in supported:
-            plugin_builds.append({
-                "id": pkg["id"], "label": pkg["label"],
-                "system": target["system"], "runner": target["runner"],
-                "attr": target["attr"], "patches": [pkg],
-            })
+            plugin_builds.append(
+                {
+                    "id": pkg["id"],
+                    "label": pkg["label"],
+                    "system": target["system"],
+                    "runner": target["runner"],
+                    "attr": target["attr"],
+                    "patches": [pkg],
+                }
+            )
 
     # The default OpenDeck package bundles Starter Pack. When both it and Core
     # change, test their combination instead of two misleading isolated builds.
-    app_patches = [p for p in changed if p["label"] in ("opendeck-core", "nekename/starterpack")]
+    app_patches = [
+        p for p in changed if p["label"] in ("opendeck-core", "nekename/starterpack")
+    ]
     app_builds = []
     if app_patches:
         for target in per_label.get(("opendeck", "opendeck"), []):
-            app_builds.append({
-                "id": "opendeck", "label": "opendeck",
-                "system": target["system"], "runner": target["runner"],
-                "attr": target["attr"], "patches": app_patches,
-            })
+            app_builds.append(
+                {
+                    "id": "opendeck",
+                    "label": "opendeck",
+                    "system": target["system"],
+                    "runner": target["runner"],
+                    "attr": target["attr"],
+                    "patches": app_patches,
+                }
+            )
         if not app_builds:
             errors.append("Default OpenDeck has no build targets")
 
     output = Path(args.output)
-    save(output / "prepared.json", {
-        "updateResults": list(records.values()), "errors": errors,
-        "plugins": plugin_builds, "opendeck": app_builds,
-    })
+    save(
+        output / "prepared.json",
+        {
+            "updateResults": list(records.values()),
+            "errors": errors,
+            "plugins": plugin_builds,
+            "opendeck": app_builds,
+        },
+    )
     save(output / "plugins.json", plugin_builds)
     save(output / "opendeck.json", app_builds)
-    print(f"Selected {len(plugin_builds)} plugin builds and {len(app_builds)} OpenDeck builds")
+    print(
+        f"Selected {len(plugin_builds)} plugin builds and {len(app_builds)} OpenDeck builds"
+    )
     for message in errors:
         print(f"::warning::{message}", flush=True)
 
 
 def apply_patch(pkg, root):
-    patch_path = Path(root) / f"updates-{pkg['system']}" / "patches" / f"{pkg['id']}.patch"
+    patch_path = (
+        Path(root) / f"updates-{pkg['system']}" / "patches" / f"{pkg['id']}.patch"
+    )
     patch = patch_path.read_bytes()
     report_sha = pkg.get("sha256")
     if report_sha and hashlib.sha256(patch).hexdigest() != report_sha:
@@ -267,16 +329,31 @@ def update_platform_deps(target, output):
         raise ValueError("unsafe flake attribute")
     # Use Nix attribute selection, not an environment-specific package list.
     pkg = f"(builtins.getFlake (toString ./.)).{attr}"
-    has_hook = run("nix", "eval", "--impure", "--json", "--expr",
-                   f"let pkg = {pkg}; in pkg ? updatePlatformDeps",
-                   capture_output=True, text=True).stdout.strip()
+    has_hook = run(
+        "nix",
+        "eval",
+        "--impure",
+        "--json",
+        "--expr",
+        f"let pkg = {pkg}; in pkg ? updatePlatformDeps",
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     if has_hook == "false":
         return []
     if has_hook != "true":
         raise ValueError(f"invalid platform updater probe: {has_hook}")
-    script = run("nix", "build", "--impure", "--no-link", "--print-out-paths",
-                 "--expr", f"{pkg}.updatePlatformDeps",
-                 capture_output=True, text=True).stdout.strip()
+    script = run(
+        "nix",
+        "build",
+        "--impure",
+        "--no-link",
+        "--print-out-paths",
+        "--expr",
+        f"{pkg}.updatePlatformDeps",
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     if not script.startswith("/nix/store/") or "\n" in script:
         raise ValueError("platform updater did not produce a single store path")
     edits_file = output.with_suffix(".edits.json")
@@ -298,7 +375,9 @@ def build(args):
         result["phase"] = "platform-dependencies"
         result["sourceEdits"] = update_platform_deps(target, output)
         result["phase"] = "nix-build"
-        code, excerpt = logged_build("nix", "build", "--no-link", "-L", ".#" + target["attr"])
+        code, excerpt = logged_build(
+            "nix", "build", "--no-link", "-L", ".#" + target["attr"]
+        )
         result["status"] = "success" if code == 0 else "failed"
         if code:
             result["error"] = f"nix build exited with {code}"
@@ -308,7 +387,8 @@ def build(args):
         result["error"] = str(exc)
         captured = "\n".join(
             part.decode("utf-8", "replace") if isinstance(part, bytes) else part
-            for part in (exc.stdout, exc.stderr) if part
+            for part in (exc.stdout, exc.stderr)
+            if part
         )
         captured = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", captured)
         result["errorExcerpt"] = captured[-10000:] or str(exc)
@@ -330,7 +410,11 @@ def check_builds(prepared, build_root):
     successful = set()
     for target in prepared["plugins"] + prepared["opendeck"]:
         key = (target["id"], target["system"])
-        path = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
+        path = (
+            Path(build_root)
+            / f"build-{target['id']}-{target['system']}"
+            / "result.json"
+        )
         try:
             got = load(path)
             if not isinstance(got, dict) or any(
@@ -340,24 +424,35 @@ def check_builds(prepared, build_root):
             if got.get("status") == "success":
                 successful.add(key)
             elif got.get("status") == "failed":
-                failures.append(f"{target['label']} ({target['system']}): {got.get('error', 'build failed')}")
+                failures.append(
+                    f"{target['label']} ({target['system']}): {got.get('error', 'build failed')}"
+                )
             else:
                 raise ValueError("invalid build report status")
         except (ValueError, OSError, json.JSONDecodeError, TypeError) as exc:
-            infrastructure_errors.append(f"Missing or invalid build report for {target['label']} ({target['system']}): {exc}")
+            infrastructure_errors.append(
+                f"Missing or invalid build report for {target['label']} ({target['system']}): {exc}"
+            )
     return successful, failures, infrastructure_errors
 
 
 def apply_source_edits(accepted, prepared, build_root):
     """Combine independent, successful native updates without merging patches."""
     accepted_ids = {pkg["id"] for pkg in accepted}
-    app_accepted = any(pkg["label"] in ("opendeck-core", "nekename/starterpack")
-                       for pkg in accepted)
+    app_accepted = any(
+        pkg["label"] in ("opendeck-core", "nekename/starterpack") for pkg in accepted
+    )
     edits = {}
     for target in prepared["plugins"] + prepared["opendeck"]:
-        if target["id"] not in accepted_ids and not (target["id"] == "opendeck" and app_accepted):
+        if target["id"] not in accepted_ids and not (
+            target["id"] == "opendeck" and app_accepted
+        ):
             continue
-        path = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
+        path = (
+            Path(build_root)
+            / f"build-{target['id']}-{target['system']}"
+            / "result.json"
+        )
         report = load(path)
         if report.get("status") != "success":
             raise ValueError(f"unvalidated platform edits for {target['label']}")
@@ -365,12 +460,17 @@ def apply_source_edits(accepted, prepared, build_root):
             if set(edit) != {"path", "before", "after"}:
                 raise ValueError("invalid source edit")
             relative = Path(edit["path"])
-            if (relative.is_absolute() or ".." in relative.parts or
-                    not relative.parts or relative.parts[0] != "src" or
-                    relative.suffix != ".nix" or
-                    not all(isinstance(edit[k], str) for k in edit) or
-                    not edit["before"] or "\n" in edit["before"] or
-                    "\n" in edit["after"]):
+            if (
+                relative.is_absolute()
+                or ".." in relative.parts
+                or not relative.parts
+                or relative.parts[0] != "src"
+                or relative.suffix != ".nix"
+                or not all(isinstance(edit[k], str) for k in edit)
+                or not edit["before"]
+                or "\n" in edit["before"]
+                or "\n" in edit["after"]
+            ):
                 raise ValueError("unsafe source edit")
             key = (edit["path"], edit["before"])
             if key in edits and edits[key] != edit["after"]:
@@ -392,11 +492,21 @@ def collect_failure_diagnostics(prepared, build_root):
     diagnostics = []
     for record in prepared["updateResults"]:
         if record.get("status") == "failed":
-            diagnostics.append({"label": record["label"], "system": record["system"],
-                                "phase": "updater", "error": record.get("error", "updater failed"),
-                                "excerpt": record.get("errorExcerpt", "")})
+            diagnostics.append(
+                {
+                    "label": record["label"],
+                    "system": record["system"],
+                    "phase": "updater",
+                    "error": record.get("error", "updater failed"),
+                    "excerpt": record.get("errorExcerpt", ""),
+                }
+            )
     for target in prepared["plugins"] + prepared["opendeck"]:
-        path = Path(build_root) / f"build-{target['id']}-{target['system']}" / "result.json"
+        path = (
+            Path(build_root)
+            / f"build-{target['id']}-{target['system']}"
+            / "result.json"
+        )
         if not path.is_file():
             continue
         try:
@@ -407,12 +517,15 @@ def collect_failure_diagnostics(prepared, build_root):
             report.get(k) != target[k] for k in ("id", "label", "system", "attr")
         ):
             continue
-        diagnostics.append({
-            "label": target["label"], "system": target["system"],
-            "phase": report.get("phase", "unknown"),
-            "error": report.get("error", "build failed"),
-            "excerpt": report.get("errorExcerpt", ""),
-        })
+        diagnostics.append(
+            {
+                "label": target["label"],
+                "system": target["system"],
+                "phase": report.get("phase", "unknown"),
+                "error": report.get("error", "build failed"),
+                "excerpt": report.get("errorExcerpt", ""),
+            }
+        )
     return diagnostics
 
 
@@ -420,40 +533,58 @@ def render_failure_issue(state_file, output):
     state = load(state_file)
     diagnostics = state.get("failureDiagnostics", [])
     payload = {"failures": sorted(state["packageFailures"]), "diagnostics": diagnostics}
-    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-    lines = [f"<!-- nix-opendeck-package-update-failures:{fingerprint} -->",
-             "## Outstanding package update failures", "",
-             "The automated updater could not validate the following updates. "
-             "Successfully validated updates are proposed separately.", ""]
-    lines.extend(f"- {failure.replace('@', '@​')}" for failure in state["packageFailures"])
-    lines.extend([
+    fingerprint = hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode()
+    ).hexdigest()
+    lines = [
+        f"<!-- nix-opendeck-package-update-failures:{fingerprint} -->",
+        "## Outstanding package update failures",
         "",
-        "### Resolving downstream patch failures",
+        "The automated updater could not validate the following updates. "
+        "Successfully validated updates are proposed separately.",
         "",
-        "Not every update failure is caused by a downstream patch. "
-        "Check the diagnostic excerpts and workflow logs first.",
-        "",
-        "If an upstream update breaks a downstream patch, repair the **new "
-        "version and the patch together** in a branch; don't merge a "
-        "version-dependent fix by itself. Download the `updates-<system>` "
-        "artifact from the linked workflow run to recover the updater's "
-        "proposed version/hash changes (even if the build failed). Apply "
-        "the affected package diff, adapt the downstream patch, test, and "
-        "open **one PR against `main`** with the `run checks` label. "
-        "Already committed the updated version and hashes? Keep them; "
-        "you don't need to rerun the updater.",
-        "",
-        "[Repair procedure and commands](" +
-        os.environ.get("GITHUB_SERVER_URL", "https://github.com") + "/" +
-        os.environ.get("GITHUB_REPOSITORY", "missmoode/nix-opendeck") +
-        "/blob/main/.github/MAINTAINER_GUIDE.md#repairing-downstream-patches-for-new-upstream-versions).",
-        "",
-        "Merging a repair PR does not close this issue automatically. "
-        "The normal updater on `main` reconciles outstanding failures.",
-    ])
-    lines.extend(["", "### Diagnostic excerpts", "",
-                  "The complete build output remains in the linked workflow logs. "
-                  "These excerpts are captured even when no AI diagnosis is requested.", ""])
+    ]
+    lines.extend(
+        f"- {failure.replace('@', '@​')}" for failure in state["packageFailures"]
+    )
+    lines.extend(
+        [
+            "",
+            "### Resolving downstream patch failures",
+            "",
+            "Not every update failure is caused by a downstream patch. "
+            "Check the diagnostic excerpts and workflow logs first.",
+            "",
+            "If an upstream update breaks a downstream patch, repair the **new "
+            "version and the patch together** in a branch; don't merge a "
+            "version-dependent fix by itself. Download the `updates-<system>` "
+            "artifact from the linked workflow run to recover the updater's "
+            "proposed version/hash changes (even if the build failed). Apply "
+            "the affected package diff, adapt the downstream patch, test, and "
+            "open **one PR against `main`** with the `run checks` label. "
+            "Already committed the updated version and hashes? Keep them; "
+            "you don't need to rerun the updater.",
+            "",
+            "[Repair procedure and commands]("
+            + os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+            + "/"
+            + os.environ.get("GITHUB_REPOSITORY", "missmoode/nix-opendeck")
+            + "/blob/main/.github/MAINTAINER_GUIDE.md#repairing-downstream-patches-for-new-upstream-versions).",
+            "",
+            "Merging a repair PR does not close this issue automatically. "
+            "The normal updater on `main` reconciles outstanding failures.",
+        ]
+    )
+    lines.extend(
+        [
+            "",
+            "### Diagnostic excerpts",
+            "",
+            "The complete build output remains in the linked workflow logs. "
+            "These excerpts are captured even when no AI diagnosis is requested.",
+            "",
+        ]
+    )
     remaining = 46000
     for item in diagnostics:
         if remaining <= 0:
@@ -462,11 +593,13 @@ def render_failure_issue(state_file, output):
         heading = f"**{item['label']}** (`{item['system']}`, {item['phase']}): {item['error']}"
         excerpt = item.get("excerpt", "").strip() or "No additional output captured."
         excerpt = excerpt.replace("```", "[code fence]").replace("@", "@​")
-        excerpt = excerpt[-min(3500, remaining):]
+        excerpt = excerpt[-min(3500, remaining) :]
         remaining -= len(excerpt)
         lines.extend([heading.replace("@", "@​"), "", "```text", excerpt, "```", ""])
-    lines.append(f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
-                 f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')})")
+    lines.append(
+        f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+        f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')})"
+    )
     Path(output).write_text("\n".join(lines) + "\n")
 
 
@@ -480,15 +613,22 @@ def finalize(args):
     rejected = []
 
     app_targets = prepared["opendeck"]
-    app_ok = bool(app_targets) and all((b["id"], b["system"]) in successes for b in app_targets)
+    app_ok = bool(app_targets) and all(
+        (b["id"], b["system"]) in successes for b in app_targets
+    )
     plugin_targets = prepared["plugins"]
     # When Core and Starter Pack are both proposed, the default-app build
     # tested them together. Do not accept only half of that combination.
-    app_changed = [p for p in plan["packages"]
-                   if p["label"] in ("opendeck-core", "nekename/starterpack")
-                   and updates.get(p["id"], {}).get("status") == "changed"]
+    app_changed = [
+        p
+        for p in plan["packages"]
+        if p["label"] in ("opendeck-core", "nekename/starterpack")
+        and updates.get(p["id"], {}).get("status") == "changed"
+    ]
     starter_builds = [b for b in plugin_targets if b["label"] == "nekename/starterpack"]
-    starter_ok = bool(starter_builds) and all((b["id"], b["system"]) in successes for b in starter_builds)
+    starter_ok = bool(starter_builds) and all(
+        (b["id"], b["system"]) in successes for b in starter_builds
+    )
     app_group_ok = app_ok and (len(app_changed) < 2 or starter_ok)
     for pkg in plan["packages"]:
         status = updates.get(pkg["id"], {}).get("status", "failed")
@@ -500,11 +640,15 @@ def finalize(args):
             )
             continue
         builds = [b for b in plugin_targets if b["id"] == pkg["id"]]
-        plugin_ok = bool(builds) and all((b["id"], b["system"]) in successes for b in builds)
+        plugin_ok = bool(builds) and all(
+            (b["id"], b["system"]) in successes for b in builds
+        )
         if pkg["label"] == "opendeck-core":
             pkg_ok = app_group_ok
         else:
-            pkg_ok = plugin_ok and (pkg["label"] != "nekename/starterpack" or app_group_ok)
+            pkg_ok = plugin_ok and (
+                pkg["label"] != "nekename/starterpack" or app_group_ok
+            )
         if pkg_ok:
             accepted.append(pkg)
         else:
@@ -515,7 +659,9 @@ def finalize(args):
     package_failures = build_failures + rejected
     base_ok = args.base_unchanged == "true"
     if not base_ok:
-        infrastructure_errors.append("base branch changed while this update was running; rerun against its latest revision")
+        infrastructure_errors.append(
+            "base branch changed while this update was running; rerun against its latest revision"
+        )
 
     final_check = "skipped"
     if accepted and not infrastructure_errors:
@@ -528,7 +674,9 @@ def finalize(args):
             final_check = "passed"
         except Exception as exc:
             final_check = "failed"
-            infrastructure_errors.append(f"combined flake evaluation or patch application failed: {exc}")
+            infrastructure_errors.append(
+                f"combined flake evaluation or patch application failed: {exc}"
+            )
             # Never publish partially applied or unvalidated changes.
             clean_tree()
 
@@ -538,43 +686,59 @@ def finalize(args):
     ready = bool(accepted) and final_check == "passed" and not infrastructure_errors
     failures = infrastructure_errors + package_failures
     report = [
-        "## Automated OpenDeck package updates", "",
+        "## Automated OpenDeck package updates",
+        "",
         f"- Accepted updates: **{len(accepted)}**",
         f"- Unchanged packages: **{sum(r.get('status') == 'unchanged' for r in updates.values())}**",
         f"- Failed updates or validation checks: **{len(failures)}**",
-        f"- Combined flake evaluation: **{final_check}**", "",
-        f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL','https://github.com')}/"
-        f"{os.environ.get('GITHUB_REPOSITORY','')}/actions/runs/{os.environ.get('GITHUB_RUN_ID','')})", "",
-        "### Accepted", "",
+        f"- Combined flake evaluation: **{final_check}**",
+        "",
+        f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+        f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')})",
+        "",
+        "### Accepted",
+        "",
     ]
     report += [f"- `{p['label']}`" for p in accepted] or ["- None"]
     report += ["", "### Failed or rejected", ""]
     report += [f"- {e}" for e in failures] or ["- None"]
     report += ["", "### Unchanged", ""]
-    report += [f"- `{r['label']}`" for r in updates.values() if r.get("status") == "unchanged"] or ["- None"]
+    report += [
+        f"- `{r['label']}`" for r in updates.values() if r.get("status") == "unchanged"
+    ] or ["- None"]
     report.append("")
     Path(args.report).write_text("\n".join(report))
 
     # The PR should describe the updates it actually proposes. Failed updates
     # are tracked separately in a persistent GitHub issue.
     pr_report = [
-        "## Automated OpenDeck package updates", "",
-        "Only updates passing their required native builds and combined flake evaluation are included.", "",
-        "### Validated updates", "",
+        "## Automated OpenDeck package updates",
+        "",
+        "Only updates passing their required native builds and combined flake evaluation are included.",
+        "",
+        "### Validated updates",
+        "",
     ]
     pr_report += [f"- `{p['label']}`" for p in accepted] or ["- None"]
-    pr_report += ["", "The package-update workflow records the complete validation results.", ""]
+    pr_report += [
+        "",
+        "The package-update workflow records the complete validation results.",
+        "",
+    ]
     Path(args.pr_report).write_text("\n".join(pr_report))
 
-    save(args.state, {
-        "ready": ready,
-        "failed": bool(failures),
-        "infrastructureFailure": bool(infrastructure_errors),
-        "infrastructureErrors": infrastructure_errors,
-        "packageFailures": package_failures,
-        "failureDiagnostics": collect_failure_diagnostics(prepared, args.builds),
-        "accepted": [p["label"] for p in accepted],
-    })
+    save(
+        args.state,
+        {
+            "ready": ready,
+            "failed": bool(failures),
+            "infrastructureFailure": bool(infrastructure_errors),
+            "infrastructureErrors": infrastructure_errors,
+            "packageFailures": package_failures,
+            "failureDiagnostics": collect_failure_diagnostics(prepared, args.builds),
+            "accepted": [p["label"] for p in accepted],
+        },
+    )
     print("\n".join(report))
     # Publish validated changes and report known failures separately.
     return 0
@@ -611,8 +775,14 @@ def main():
     i.add_argument("--state", required=True)
     i.add_argument("--output", required=True)
     args = parser.parse_args()
-    return {"discover": discover, "update": update, "prepare": prepare, "build": build,
-            "finalize": finalize, "failure-issue": lambda a: render_failure_issue(a.state, a.output)}[args.command](args) or 0
+    return {
+        "discover": discover,
+        "update": update,
+        "prepare": prepare,
+        "build": build,
+        "finalize": finalize,
+        "failure-issue": lambda a: render_failure_issue(a.state, a.output),
+    }[args.command](args) or 0
 
 
 if __name__ == "__main__":

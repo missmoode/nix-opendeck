@@ -2,48 +2,38 @@
 # trusted-ci-report.yml only after it verifies this workflow was unchanged.
 name: Checks
 run-name: "Checks PR #${{ github.event.pull_request.number }} merge ${{ github.sha }}"
-
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, edited]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: nix-opendeck-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
 jobs:
   test:
     # A skipped draft job is never certified by the trusted reporter.
     if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.draft == false
+      github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Tests and evaluation
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - name: Test CI Python components
         shell: bash
         run: |
           set -euo pipefail
           python3 -m unittest discover -s .github/ci -p 'test_*.py'
-
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-
       - name: Evaluate all supported systems
         shell: bash
         run: |
           set -euo pipefail
           nix flake check --no-build --all-systems -L
-
       - name: Run native checks
         shell: bash
         run: |

@@ -1,17 +1,14 @@
 # Trusted reporter from main; never executes PR code or reads PR artifacts.
 name: Trusted CI report
-
 on:
   workflow_run:
     workflows: [Checks, Package verification]
     types: [completed]
-
 permissions:
   actions: read
   checks: read
   contents: read
   pull-requests: read
-
 jobs:
   report:
     if: github.event.workflow_run.event == 'pull_request'
@@ -19,12 +16,10 @@ jobs:
     environment:
       name: trusted-automation
       deployment: false
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - name: Create short-lived GitHub App token
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -33,7 +28,6 @@ jobs:
           private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
           permission-statuses: write
           permission-pull-requests: write
-
       - name: Verify provenance and publish trusted result
         env:
           GH_TOKEN: ${{ github.token }}

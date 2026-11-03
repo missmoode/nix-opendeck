@@ -13,8 +13,12 @@ from harness import OpenDeckHarness, PLUGIN_ID
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("package", type=Path, help="already-built Nix opendeck package output")
-    parser.add_argument("--artifacts", type=Path, help="copy application logs here before cleanup")
+    parser.add_argument(
+        "package", type=Path, help="already-built Nix opendeck package output"
+    )
+    parser.add_argument(
+        "--artifacts", type=Path, help="copy application logs here before cleanup"
+    )
     args = parser.parse_args()
     passed = []
     failures = []
@@ -25,7 +29,10 @@ def main() -> int:
         reason = " ".join(str(error).splitlines())
         failures.append((name, reason))
         if os.environ.get("GITHUB_ACTIONS") == "true":
-            print(f"::error title=OpenDeck runtime test::{name}: {reason.replace('%', '%25')}", flush=True)
+            print(
+                f"::error title=OpenDeck runtime test::{name}: {reason.replace('%', '%25')}",
+                flush=True,
+            )
 
     def check(name, condition):
         try:
@@ -46,7 +53,10 @@ def main() -> int:
         with OpenDeckHarness(args.package, args.artifacts) as app:
             app.prepare()
             plugin = app.plugin_dir / PLUGIN_ID
-            bundled = check("Bundled StarterPack manifest exists", lambda: (plugin / "manifest.json").is_file())
+            bundled = check(
+                "Bundled StarterPack manifest exists",
+                lambda: (plugin / "manifest.json").is_file(),
+            )
 
             # Act: launch the complete packaged application once.
             app.start()
@@ -54,18 +64,33 @@ def main() -> int:
             bus_ready = True
             if sys.platform == "linux":
                 if app.is_running():
-                    bus_ready = check("Private D-Bus single-instance name acquired", app.wait_bus_name)
+                    bus_ready = check(
+                        "Private D-Bus single-instance name acquired", app.wait_bus_name
+                    )
                 else:
-                    skip("Private D-Bus single-instance name acquired", "test application exited")
+                    skip(
+                        "Private D-Bus single-instance name acquired",
+                        "test application exited",
+                    )
                     bus_ready = False
 
             # Patch 0004 + wrapOpenDeck: register the packaged plugin without
             # installing a writable copy. This does not require HTTP readiness.
             if bundled and app.is_running():
-                registered = check("Bundled StarterPack registers", lambda: app.wait_registered(PLUGIN_ID))
-                check("No bundled plugin copied into user config", lambda: not (app.config / "plugins" / PLUGIN_ID).exists())
+                registered = check(
+                    "Bundled StarterPack registers",
+                    lambda: app.wait_registered(PLUGIN_ID),
+                )
+                check(
+                    "No bundled plugin copied into user config",
+                    lambda: not (app.config / "plugins" / PLUGIN_ID).exists(),
+                )
             else:
-                reason = "bundle manifest missing" if not bundled else "test application exited"
+                reason = (
+                    "bundle manifest missing"
+                    if not bundled
+                    else "test application exited"
+                )
                 skip("Bundled StarterPack registers", reason)
                 skip("No bundled plugin copied into user config", reason)
                 registered = False
@@ -96,21 +121,40 @@ def main() -> int:
 
             asset_checks = [
                 ("User-config asset allowed", lambda: expect_asset(allowed, 200)),
-                ("Symlinked plugin asset allowed", lambda: expect_asset(symlinked, 200)),
-                ("Outside-config asset forbidden", lambda: expect_asset(forbidden, 403)),
-                ("Unrelated Nix-store asset forbidden", lambda: expect_asset(unrelated, 403)),
-                ("Parent-component traversal forbidden", lambda: expect_asset(traversal, 403)),
+                (
+                    "Symlinked plugin asset allowed",
+                    lambda: expect_asset(symlinked, 200),
+                ),
+                (
+                    "Outside-config asset forbidden",
+                    lambda: expect_asset(forbidden, 403),
+                ),
+                (
+                    "Unrelated Nix-store asset forbidden",
+                    lambda: expect_asset(unrelated, 403),
+                ),
+                (
+                    "Parent-component traversal forbidden",
+                    lambda: expect_asset(traversal, 403),
+                ),
             ]
             if bundled:
                 package_asset = next(
-                    (p for suffix in ("*.svg", "*.png", "*.html")
-                     for p in plugin.rglob(suffix) if p.is_file()),
+                    (
+                        p
+                        for suffix in ("*.svg", "*.png", "*.html")
+                        for p in plugin.rglob(suffix)
+                        if p.is_file()
+                    ),
                     plugin / "manifest.json",
                 )
-                asset_checks.insert(2, (
-                    "Bundled plugin asset allowed",
-                    lambda: expect_asset(package_asset, 200),
-                ))
+                asset_checks.insert(
+                    2,
+                    (
+                        "Bundled plugin asset allowed",
+                        lambda: expect_asset(package_asset, 200),
+                    ),
+                )
             else:
                 skip("Bundled plugin asset allowed", "bundle manifest missing")
 
@@ -141,13 +185,19 @@ def main() -> int:
                 else:
                     command_ok = check(reload_checks[0], lambda: reload.returncode == 0)
                 if command_ok:
-                    check(reload_checks[1], lambda: app.wait_registered(PLUGIN_ID, registrations + 1))
+                    check(
+                        reload_checks[1],
+                        lambda: app.wait_registered(PLUGIN_ID, registrations + 1),
+                    )
                 else:
                     skip(reload_checks[1], "reload command failed")
                 check(reload_checks[2], app.is_running)
             else:
                 for name in reload_checks:
-                    skip(name, "plugin not registered, single-instance unavailable, or app exited")
+                    skip(
+                        name,
+                        "plugin not registered, single-instance unavailable, or app exited",
+                    )
 
             # Stop while preserving the private session bus and test settings.
             app.stop()
@@ -158,11 +208,19 @@ def main() -> int:
                 except Exception as error:
                     fail("Inactive restart command exits", error)
                 else:
-                    check("Inactive restart command exits", lambda: inactive.returncode == 0)
-                check("Inactive restart does not start OpenDeck", app.assert_no_instance)
+                    check(
+                        "Inactive restart command exits",
+                        lambda: inactive.returncode == 0,
+                    )
+                check(
+                    "Inactive restart does not start OpenDeck", app.assert_no_instance
+                )
             else:
                 skip("Inactive restart command exits", "test instance did not stop")
-                skip("Inactive restart does not start OpenDeck", "test instance did not stop")
+                skip(
+                    "Inactive restart does not start OpenDeck",
+                    "test instance did not stop",
+                )
 
     except Exception as error:
         fail("test harness", error)
@@ -176,7 +234,11 @@ def main() -> int:
             f"{len(passed)} passed, {len(failures)} failed, {len(skipped)} skipped.",
         ]
         if failures:
-            lines += ["", "**Failed checks:**", *(f"- **{name}**: {reason}" for name, reason in failures)]
+            lines += [
+                "",
+                "**Failed checks:**",
+                *(f"- **{name}**: {reason}" for name, reason in failures),
+            ]
         if skipped:
             lines += ["", "**Skipped checks:**", *(f"- {name}" for name in skipped)]
         try:

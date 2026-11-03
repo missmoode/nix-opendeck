@@ -1,3 +1,6 @@
 result
+
+# Python
 __pycache__/
 *.py[cod]
+.ruff_cache/

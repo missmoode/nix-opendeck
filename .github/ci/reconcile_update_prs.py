@@ -16,7 +16,9 @@ BOT_BRANCHES = ("automated/package-updates", "automated/patched-package-updates"
 
 
 def execute(*args):
-    return subprocess.run(args, check=True, text=True, capture_output=True).stdout.strip()
+    return subprocess.run(
+        args, check=True, text=True, capture_output=True
+    ).stdout.strip()
 
 
 def redundant_source_changes(base, head):
@@ -24,7 +26,8 @@ def redundant_source_changes(base, head):
     ancestor = execute("git", "merge-base", base, head)
     changed = subprocess.run(
         ["git", "diff", "--no-renames", "--name-only", "-z", ancestor, head],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     ).stdout
     paths = [os.fsdecode(path) for path in changed.split(b"\0") if path]
     # Bot PRs may only contain source updates. Never infer redundancy from
@@ -33,7 +36,8 @@ def redundant_source_changes(base, head):
         return False
     for path in paths:
         comparison = subprocess.run(
-            ["git", "diff", "--quiet", base, head, "--", path], check=False,
+            ["git", "diff", "--quiet", base, head, "--", path],
+            check=False,
         )
         if comparison.returncode != 0:
             return False  # also fail closed on git errors
@@ -42,14 +46,19 @@ def redundant_source_changes(base, head):
 
 def matching_pr(repo, base, branch, bot_login):
     owner = repo.partition("/")[0]
-    query = urlencode({"state": "open", "base": base, "head": f"{owner}:{branch}", "per_page": "100"})
+    query = urlencode(
+        {"state": "open", "base": base, "head": f"{owner}:{branch}", "per_page": "100"}
+    )
     matches = json.loads(execute("gh", "api", f"repos/{repo}/pulls?{query}"))
-    matches = [pr for pr in matches
-               if pr.get("state") == "open"
-               and pr.get("user", {}).get("login") == bot_login
-               and pr.get("head", {}).get("ref") == branch
-               and pr.get("head", {}).get("repo", {}).get("full_name") == repo
-               and pr.get("base", {}).get("ref") == base]
+    matches = [
+        pr
+        for pr in matches
+        if pr.get("state") == "open"
+        and pr.get("user", {}).get("login") == bot_login
+        and pr.get("head", {}).get("ref") == branch
+        and pr.get("head", {}).get("repo", {}).get("full_name") == repo
+        and pr.get("base", {}).get("ref") == base
+    ]
     # Multiple matching PRs should not exist. Do not choose arbitrarily.
     return matches[0] if len(matches) == 1 else None
 
@@ -59,8 +68,13 @@ def main():
     base = os.environ["BASE_BRANCH"]
     login = os.environ["APP_BOT_LOGIN"]
     # For this workflow only the default branch can publish trusted updates.
-    execute("git", "fetch", "--no-tags", "origin",
-            f"+refs/heads/{base}:refs/remotes/origin/{base}")
+    execute(
+        "git",
+        "fetch",
+        "--no-tags",
+        "origin",
+        f"+refs/heads/{base}:refs/remotes/origin/{base}",
+    )
     base_ref = f"refs/remotes/origin/{base}"
     for branch in BOT_BRANCHES:
         pr = matching_pr(repo, base, branch, login)
@@ -68,8 +82,13 @@ def main():
             continue
         head_ref = f"refs/remotes/origin/{branch}"
         try:
-            execute("git", "fetch", "--no-tags", "origin",
-                    f"+refs/heads/{branch}:{head_ref}")
+            execute(
+                "git",
+                "fetch",
+                "--no-tags",
+                "origin",
+                f"+refs/heads/{branch}:{head_ref}",
+            )
         except subprocess.CalledProcessError:
             print(f"::warning::Cannot inspect {branch}; leaving PR open")
             continue
@@ -78,7 +97,9 @@ def main():
             print(f"Skipping PR #{pr['number']}: its head changed while inspecting")
             continue
         if not redundant_source_changes(base_ref, head_ref):
-            print(f"Keeping PR #{pr['number']} ({branch}): source changes not fully present on {base}")
+            print(
+                f"Keeping PR #{pr['number']} ({branch}): source changes not fully present on {base}"
+            )
             continue
         # Recheck immediately before the write: another run or maintainer may
         # have updated the PR while the source comparison was in progress.
@@ -87,7 +108,9 @@ def main():
             print(f"Skipping PR #{pr['number']}: PR changed before closure")
             continue
         print(f"Closing obsolete updater PR #{pr['number']} ({branch})")
-        execute("gh", "pr", "close", str(pr["number"]), "--delete-branch", "--repo", repo)
+        execute(
+            "gh", "pr", "close", str(pr["number"]), "--delete-branch", "--repo", repo
+        )
 
 
 if __name__ == "__main__":

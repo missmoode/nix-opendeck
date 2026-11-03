@@ -39,8 +39,11 @@ def build_deps(attr):
     print("+", " ".join(cmd), flush=True)
     tail = deque(maxlen=300)
     with subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, errors="replace",
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
     ) as proc:
         for line in proc.stdout:
             print(line, end="", flush=True)
@@ -51,14 +54,17 @@ def build_deps(attr):
 
 def repair(source_file, system, derivation_name, output):
     candidates = [
-        m for m in MISMATCH.finditer(output)
+        m
+        for m in MISMATCH.finditer(output)
         if re.fullmatch(
             r"[0-9a-z]{32}-" + re.escape(derivation_name) + r"-.+\.drv",
             Path(m.group("drv")).name,
         )
     ]
     if len(candidates) != 1:
-        raise ValueError("failure was not a single, recognised Deno dependency hash mismatch")
+        raise ValueError(
+            "failure was not a single, recognised Deno dependency hash mismatch"
+        )
 
     expected, actual = candidates[0].group("expected", "actual")
     check_hash(expected)
@@ -78,7 +84,9 @@ def repair(source_file, system, derivation_name, output):
     item = items[0]
     old_line = item.group()
     if old_line.count(expected) != 1:
-        raise ValueError("reported expected hash does not match selected platform entry")
+        raise ValueError(
+            "reported expected hash does not match selected platform entry"
+        )
     new_line = old_line.replace(expected, actual)
     if original.count(old_line) != 1:
         raise ValueError("source edit is not unique")
@@ -89,8 +97,12 @@ def repair(source_file, system, derivation_name, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--attr", required=True, help="flake attribute of the package")
-    parser.add_argument("--package", required=True, help="pname of the denoDeps derivation")
-    parser.add_argument("--file", required=True, help="relative source file in the checkout")
+    parser.add_argument(
+        "--package", required=True, help="pname of the denoDeps derivation"
+    )
+    parser.add_argument(
+        "--file", required=True, help="relative source file in the checkout"
+    )
     parser.add_argument("--system", required=True)
     parser.add_argument("--output", required=True, help="JSON record of source edits")
     args = parser.parse_args()
@@ -106,7 +118,10 @@ def main():
         return 1
     rc, _ = build_deps(args.attr)
     if rc:
-        print("::error::Deno dependency build still failed after hash correction", file=sys.stderr)
+        print(
+            "::error::Deno dependency build still failed after hash correction",
+            file=sys.stderr,
+        )
         return 1
     output.write_text(json.dumps([edit], indent=2) + "\n")
     return 0

@@ -28,7 +28,9 @@ class DiscoveryAndRoutingTests(unittest.TestCase):
         os.chdir(self.temp.name)
         self.addCleanup(os.chdir, self.old_cwd)
         self.add_package(CORE, patched=True, owner="nekename", repo="OpenDeck")
-        self.add_package(DESKTOP, patched=True, owner="OpenActionPlugins", repo="desktopentry")
+        self.add_package(
+            DESKTOP, patched=True, owner="OpenActionPlugins", repo="desktopentry"
+        )
         self.staged = [self.path(CORE), self.path(DESKTOP)]
         self.state = Path("state.json")
         self.targets = Path("targets.json")
@@ -37,10 +39,18 @@ class DiscoveryAndRoutingTests(unittest.TestCase):
     def path(self, label):
         return audit.package_dir(label) + "default.nix"
 
-    def add_package(self, label, *, patched=False, owner="example", repo="example", tag='v${finalAttrs.version}'):
+    def add_package(
+        self,
+        label,
+        *,
+        patched=False,
+        owner="example",
+        repo="example",
+        tag="v${finalAttrs.version}",
+    ):
         path = Path(self.path(label))
         path.parent.mkdir(parents=True, exist_ok=True)
-        patches = '\npatches = [ ./patches/example.patch ];\n' if patched else ''
+        patches = "\npatches = [ ./patches/example.patch ];\n" if patched else ""
         path.write_text(f'''version = "2.0.0";
 src = fetchFromGitHub {{
     owner = "{owner}";
@@ -55,7 +65,9 @@ src = fetchFromGitHub {{
 
     def update_version(self, label, new="2.1.0"):
         path = Path(self.path(label))
-        path.write_text(path.read_text().replace('version = "2.0.0"', f'version = "{new}"', 1))
+        path.write_text(
+            path.read_text().replace('version = "2.0.0"', f'version = "{new}"', 1)
+        )
 
     def set_accepted(self, *names):
         self.state.write_text(json.dumps({"ready": True, "accepted": list(names)}))
@@ -67,6 +79,7 @@ src = fetchFromGitHub {{
             if args[:3] == ("diff", "--cached", "--name-only"):
                 return "\n".join(self.staged) + "\n"
             raise AssertionError(args)
+
         with patch.object(audit, "git", side_effect=fake_git):
             return audit.select("fixture-sha", self.state, self.targets)
 
@@ -76,9 +89,10 @@ src = fetchFromGitHub {{
     def test_only_changed_patched_package_is_audited(self):
         self.update_version(DESKTOP)
         self.assertEqual(self.select_with_old_versions(), 1)
-        self.assertEqual(self.routes()["auditTargets"], [
-            {"package": DESKTOP, "from": "2.0.0", "to": "2.1.0"}
-        ])
+        self.assertEqual(
+            self.routes()["auditTargets"],
+            [{"package": DESKTOP, "from": "2.0.0", "to": "2.1.0"}],
+        )
 
     def test_no_version_changes_even_if_accepted(self):
         self.assertEqual(self.select_with_old_versions(), 0)
@@ -104,17 +118,28 @@ src = fetchFromGitHub {{
         self.update_version(DESKTOP)
         self.assertEqual(self.select_with_old_versions(), 1)
         self.assertEqual(self.routes()["reviewPaths"], [self.path(DESKTOP)])
-        self.assertEqual(set(self.routes()["autoPaths"]), set(self.staged) - {self.path(DESKTOP)})
+        self.assertEqual(
+            set(self.routes()["autoPaths"]), set(self.staged) - {self.path(DESKTOP)}
+        )
 
     def test_new_patched_plugin_is_discovered_without_registration(self):
-        self.add_package(EXTRA, patched=True, owner="TestOrg", repo="ExamplePlugin", tag='${finalAttrs.version}')
+        self.add_package(
+            EXTRA,
+            patched=True,
+            owner="TestOrg",
+            repo="ExamplePlugin",
+            tag="${finalAttrs.version}",
+        )
         self.staged.append(self.path(EXTRA))
         self.set_accepted(CORE, DESKTOP, EXTRA)
         self.update_version(EXTRA)
         self.assertEqual(self.select_with_old_versions(), 1)
         self.assertEqual(self.routes()["reviewPackages"], [EXTRA])
         spec = audit.package_spec(EXTRA)
-        self.assertEqual(audit.source_spec(spec), {"upstream": "TestOrg/ExamplePlugin", "tag_prefix": ""})
+        self.assertEqual(
+            audit.source_spec(spec),
+            {"upstream": "TestOrg/ExamplePlugin", "tag_prefix": ""},
+        )
 
     def test_unpatched_version_bump_is_not_reviewed(self):
         self.add_package(COUNTER)
@@ -139,7 +164,9 @@ src = fetchFromGitHub {{
         self.add_package(EXTRA)
         (path.parent / "patches/tauri").mkdir(parents=True)
         (path.parent / "patches/tauri/fix.patch").write_text("patch")
-        path.write_text(path.read_text() + "\npostPatch = ''${./patches/tauri/fix.patch}'';\n")
+        path.write_text(
+            path.read_text() + "\npostPatch = ''${./patches/tauri/fix.patch}'';\n"
+        )
         self.staged.append(self.path(EXTRA))
         self.set_accepted(CORE, DESKTOP, EXTRA)
         self.update_version(EXTRA)
@@ -158,7 +185,10 @@ src = fetchFromGitHub {{
 
     def test_nonliteral_fetched_patch_is_reviewed_but_cannot_pass_audit(self):
         path = self.add_package(EXTRA)
-        path.write_text(path.read_text() + '\npatches = [ (fetchpatch { url = "https://example.com/fix.patch"; hash = "sha256-abc"; }) ];\n')
+        path.write_text(
+            path.read_text()
+            + '\npatches = [ (fetchpatch { url = "https://example.com/fix.patch"; hash = "sha256-abc"; }) ];\n'
+        )
         self.staged.append(self.path(EXTRA))
         self.set_accepted(CORE, DESKTOP, EXTRA)
         self.update_version(EXTRA)
@@ -203,13 +233,17 @@ src = fetchFromGitHub {{
 
     def test_missing_accepted_package_file_fails_closed(self):
         self.staged = [self.path(CORE)]
-        with self.assertRaisesRegex(ValueError, "Accepted package has no staged changes"):
+        with self.assertRaisesRegex(
+            ValueError, "Accepted package has no staged changes"
+        ):
             self.select_with_old_versions()
 
     def test_missing_referenced_patch_fails_closed(self):
         (Path(self.path(CORE)).parent / "patches/example.patch").unlink()
         self.update_version(CORE)
-        with self.assertRaisesRegex(ValueError, "Referenced downstream patch is missing"):
+        with self.assertRaisesRegex(
+            ValueError, "Referenced downstream patch is missing"
+        ):
             self.select_with_old_versions()
 
     def test_unready_state_fails_closed(self):
@@ -224,21 +258,34 @@ src = fetchFromGitHub {{
         p.write_text(p.read_text().replace("fetchFromGitHub", "fetchurl"))
         audit.review(self.targets, "report.md")
         self.assertIn("**Review unavailable:**", Path("report.md").read_text())
-        self.assertIn("Cannot identify one fetchFromGitHub source", Path("report.md").read_text())
+        self.assertIn(
+            "Cannot identify one fetchFromGitHub source", Path("report.md").read_text()
+        )
 
     def test_review_error_does_not_hide_other_package(self):
-        Path("targets.json").write_text(json.dumps({"auditTargets": [
-            {"package": label, "from": "2.0.0", "to": "2.1.0"} for label in (CORE, DESKTOP)
-        ]}))
-        with patch.object(audit, "source_diff", side_effect=RuntimeError("upstream fetch failed")):
+        Path("targets.json").write_text(
+            json.dumps(
+                {
+                    "auditTargets": [
+                        {"package": label, "from": "2.0.0", "to": "2.1.0"}
+                        for label in (CORE, DESKTOP)
+                    ]
+                }
+            )
+        )
+        with patch.object(
+            audit, "source_diff", side_effect=RuntimeError("upstream fetch failed")
+        ):
             audit.review("targets.json", "report.md")
         report = Path("report.md").read_text()
         self.assertEqual(report.count("**Review unavailable:**"), 2)
         self.assertIn(audit.MARKER, report)
 
     def test_unsupported_tag_format_does_not_get_guessed(self):
-        self.add_package(EXTRA, patched=True, tag='release-${finalAttrs.version}')
-        with self.assertRaisesRegex(ValueError, "Cannot identify supported version tags"):
+        self.add_package(EXTRA, patched=True, tag="release-${finalAttrs.version}")
+        with self.assertRaisesRegex(
+            ValueError, "Cannot identify supported version tags"
+        ):
             audit.source_spec(audit.package_spec(EXTRA))
 
     def test_missing_key_is_not_a_pass(self):
@@ -248,39 +295,78 @@ src = fetchFromGitHub {{
 
     def test_bad_model_completion_is_not_a_pass(self):
         class FakeResponse:
-            def __enter__(self): return self
-            def __exit__(self, *_): return None
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return None
+
         response = FakeResponse()
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-secret"}):
             with patch.object(audit, "urlopen", return_value=response):
-                with patch.object(audit.json, "load", return_value={
-                    "candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [{"text": "partial"}]}}]
-                }):
-                    with self.assertRaisesRegex(RuntimeError, "without a complete review"):
+                with patch.object(
+                    audit.json,
+                    "load",
+                    return_value={
+                        "candidates": [
+                            {
+                                "finishReason": "MAX_TOKENS",
+                                "content": {"parts": [{"text": "partial"}]},
+                            }
+                        ]
+                    },
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "without a complete review"
+                    ):
                         audit.ask_gemini("hello")
-
 
     def test_missing_model_finish_reason_is_not_a_pass(self):
         class FakeResponse:
-            def __enter__(self): return self
-            def __exit__(self, *_): return None
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return None
+
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-secret"}):
             with patch.object(audit, "urlopen", return_value=FakeResponse()):
-                with patch.object(audit.json, "load", return_value={
-                    "candidates": [{"content": {"parts": [{"text": "unconfirmed"}]}}]
-                }):
-                    with self.assertRaisesRegex(RuntimeError, "without a complete review"):
+                with patch.object(
+                    audit.json,
+                    "load",
+                    return_value={
+                        "candidates": [
+                            {"content": {"parts": [{"text": "unconfirmed"}]}}
+                        ]
+                    },
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "without a complete review"
+                    ):
                         audit.ask_gemini("hello")
 
     def test_confirmed_model_finish_reason_is_accepted(self):
         class FakeResponse:
-            def __enter__(self): return self
-            def __exit__(self, *_): return None
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return None
+
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-secret"}):
             with patch.object(audit, "urlopen", return_value=FakeResponse()):
-                with patch.object(audit.json, "load", return_value={
-                    "candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "review"}]}}]
-                }):
+                with patch.object(
+                    audit.json,
+                    "load",
+                    return_value={
+                        "candidates": [
+                            {
+                                "finishReason": "STOP",
+                                "content": {"parts": [{"text": "review"}]},
+                            }
+                        ]
+                    },
+                ):
                     self.assertEqual(audit.ask_gemini("hello"), "review")
 
 
@@ -304,7 +390,6 @@ class WorkflowWiringTests(unittest.TestCase):
         self.assertIn("assignees: ${{ vars.UPDATE_MAINTAINERS }}", content)
         self.assertIn("UPDATE_MAINTAINERS: ${{ vars.UPDATE_MAINTAINERS }}", content)
         self.assertNotIn("UPSTREAM_AUDIT_ASSIGNEE", content)
-
 
 
 if __name__ == "__main__":

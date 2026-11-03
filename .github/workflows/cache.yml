@@ -1,35 +1,28 @@
 name: Build and publish binary cache
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
   workflow_call:
-
 # nixpkgs updates now publish on their native validation runners before
 # auto-merging. A workflow_run trigger would redundantly rebuild/recheck them.
 # This workflow still handles direct pushes and manual cache repair.
 permissions:
   contents: read
-
 concurrency:
   group: nix-opendeck-cache-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
-
 jobs:
   prepare:
     runs-on: ubuntu-24.04
     outputs:
       plugins: ${{ steps.discover.outputs.plugins }}
       opendeck: ${{ steps.discover.outputs.opendeck }}
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-
       - name: Discover uncached redistributable targets
         id: discover
         shell: bash
@@ -140,7 +133,6 @@ jobs:
             echo "- OpenDeck targets requiring publication: $(jq '[.[] | .targets | length] | add // 0' <<< "$opendeck")"
             echo "- Native OpenDeck jobs: $(jq 'length' <<< "$opendeck")"
           } >> "$GITHUB_STEP_SUMMARY"
-
   plugins:
     name: 'Plugin: ${{ matrix.system }} / ${{ matrix.label }}'
     needs: prepare
@@ -150,25 +142,20 @@ jobs:
       name: trusted-cache
       deployment: false
     timeout-minutes: 180
-
     strategy:
       fail-fast: false
       max-parallel: 6
       matrix:
         include: ${{ fromJSON(needs.prepare.outputs.plugins) }}
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: nix-opendeck
           skipPush: true
-
       - name: Build plugin
         shell: bash
         env:
@@ -180,7 +167,6 @@ jobs:
             > "$RUNNER_TEMP/built-paths"
 
           test -s "$RUNNER_TEMP/built-paths"
-
       - name: Publish plugin runtime closure
         shell: bash
         env:
@@ -194,7 +180,6 @@ jobs:
           fi
 
           cachix push nix-opendeck < "$RUNNER_TEMP/built-paths"
-
   opendeck:
     name: 'OpenDeck: ${{ matrix.system }} / ${{ matrix.label }}'
     needs: prepare
@@ -204,25 +189,20 @@ jobs:
       name: trusted-cache
       deployment: false
     timeout-minutes: 180
-
     strategy:
       fail-fast: false
       max-parallel: 3
       matrix:
         include: ${{ fromJSON(needs.prepare.outputs.opendeck) }}
-
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-
       - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
           name: nix-opendeck
           skipPush: true
-
       - name: Build and publish OpenDeck targets
         shell: bash
         env:

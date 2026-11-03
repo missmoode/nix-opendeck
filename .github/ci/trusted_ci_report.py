@@ -14,12 +14,21 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 WORKFLOWS = {
-    ".github/workflows/checks.yml": ("Checks", "Tests and evaluation", "nix-opendeck/tests"),
+    ".github/workflows/checks.yml": (
+        "Checks",
+        "Tests and evaluation",
+        "nix-opendeck/tests",
+    ),
     ".github/workflows/pr-package-verification.yml": (
-        "Package verification", "Package verification gate", "nix-opendeck/package-verification"
+        "Package verification",
+        "Package verification gate",
+        "nix-opendeck/package-verification",
     ),
 }
-REPORTER_PATHS = (".github/workflows/trusted-ci-report.yml", ".github/ci/trusted_ci_report.py")
+REPORTER_PATHS = (
+    ".github/workflows/trusted-ci-report.yml",
+    ".github/ci/trusted_ci_report.py",
+)
 # The checks workflow runs test definitions from the PR. Compare full test
 # trees so added, removed, or renamed files cannot silently change CI policy.
 # Package verification runs its own protected runtime test entry point.
@@ -42,7 +51,8 @@ class GitHub:
             method=method,
             headers={
                 "Accept": "application/vnd.github+json",
-                "Authorization": "Bearer " + (self.app_token if app else self.read_token),
+                "Authorization": "Bearer "
+                + (self.app_token if app else self.read_token),
                 "X-GitHub-Api-Version": "2022-11-28",
                 "Content-Type": "application/json",
             },
@@ -69,7 +79,9 @@ class GitHub:
         # Verification runs against the merge commit, but GitHub may
         # regenerate that commit. Publish on the stable PR head instead.
         self.request(
-            "/statuses/" + result["head"], method="POST", app=True,
+            "/statuses/" + result["head"],
+            method="POST",
+            app=True,
             payload={
                 "state": result["state"],
                 "context": result["context"],
@@ -114,7 +126,8 @@ def select_authoritative_run(event_run, recent, expected_title, head_sha):
         # The earlier completion event may already have been ignored while
         # this run was pending. Reconsider it now that this run is cancelled.
         previous = [
-            other for other in recent
+            other
+            for other in recent
             if other["id"] < run["id"]
             and other.get("display_title") == expected_title
             and other.get("head_sha") == head_sha
@@ -125,11 +138,14 @@ def select_authoritative_run(event_run, recent, expected_title, head_sha):
             return None
         run = max(previous, key=lambda other: other["id"])
     if any(
-        other["id"] > run["id"] and other.get("display_title") == expected_title
+        other["id"] > run["id"]
+        and other.get("display_title") == expected_title
         and other.get("conclusion") != "cancelled"
         # The triggering cancellation can precede the list API's update.
-        and not (other["id"] == event_run["id"]
-                 and event_run.get("conclusion") == "cancelled")
+        and not (
+            other["id"] == event_run["id"]
+            and event_run.get("conclusion") == "cancelled"
+        )
         for other in recent
     ):
         print("Superseded by a newer run; ignoring", file=sys.stderr)
@@ -144,11 +160,16 @@ def assess(event, api):
     path = (run.get("path") or "").split("@", 1)[0]
     if run.get("event") != "pull_request" or path not in WORKFLOWS:
         return None
-    if run.get("status") != "completed" or run.get("repository", {}).get("full_name") != api.repo:
+    if (
+        run.get("status") != "completed"
+        or run.get("repository", {}).get("full_name") != api.repo
+    ):
         return None
 
     kind, job_name, context = WORKFLOWS[path]
-    match = re.fullmatch(rf"{kind} PR #(\d+) merge ({SHA})", run.get("display_title") or "")
+    match = re.fullmatch(
+        rf"{kind} PR #(\d+) merge ({SHA})", run.get("display_title") or ""
+    )
     if not match or not re.fullmatch(SHA, run.get("head_sha") or ""):
         print("Unrecognised run identity; refusing to certify", file=sys.stderr)
         return None
@@ -164,16 +185,21 @@ def assess(event, api):
     ):
         print("PR revision is no longer current; ignoring", file=sys.stderr)
         return None
-    if run.get("pull_requests") and pr_number not in [p["number"] for p in run["pull_requests"]]:
+    if run.get("pull_requests") and pr_number not in [
+        p["number"] for p in run["pull_requests"]
+    ]:
         return None
 
     # Runs are evaluated only for the current PR head and merge commit. Run
     # selection does not itself certify any job or produce a GitHub status.
     expected_title = f"{kind} PR #{pr_number} merge {merge_sha}"
-    recent = list(api.pages(
-        f"/actions/workflows/{path.rsplit('/', 1)[-1]}/runs"
-        f"?event=pull_request&head_sha={head_sha}", key="workflow_runs"
-    ))
+    recent = list(
+        api.pages(
+            f"/actions/workflows/{path.rsplit('/', 1)[-1]}/runs"
+            f"?event=pull_request&head_sha={head_sha}",
+            key="workflow_runs",
+        )
+    )
     run = select_authoritative_run(run, recent, expected_title, head_sha)
     if run is None:
         return None
@@ -197,7 +223,11 @@ def assess(event, api):
             merge_tree = test_policy_snapshot(
                 api.request(f"/git/trees/{merge_sha}?recursive=1"), kind
             )
-            unchanged = base_tree is not None and merge_tree is not None and base_tree == merge_tree
+            unchanged = (
+                base_tree is not None
+                and merge_tree is not None
+                and base_tree == merge_tree
+            )
     except URLError as exc:
         # New verification files do not exist on main during the introducing
         # PR. Fail closed with an explicit status rather than crashing.
@@ -208,7 +238,8 @@ def assess(event, api):
     matching = [job for job in jobs if job["name"] == job_name]
     # Diagnostic only: the signed result still depends on the required gate.
     discovery = [
-        job for job in jobs
+        job
+        for job in jobs
         if kind == "Package verification"
         and job["name"] == "Discover changed packages"
         and job["conclusion"] == "failure"
@@ -219,7 +250,8 @@ def assess(event, api):
     # Keep its status pending, never success; do not mask real failures.
     skipped = run["conclusion"] == "skipped" or (
         run["conclusion"] == "success"
-        and len(matching) == 1 and matching[0]["conclusion"] == "skipped"
+        and len(matching) == 1
+        and matching[0]["conclusion"] == "skipped"
     )
     # Draft jobs can be skipped but still look successful to GitHub.
     # Only the current, explicitly non-draft PR may be certified;
@@ -238,9 +270,13 @@ def assess(event, api):
     else:
         description = "CI verification failed (see workflow run)"
     return {
-        "pr": pr_number, "head": head_sha, "merge": merge_sha,
-        "kind": kind, "context": context,
-        "state": "pending" if pending else ("success" if passed else "failure"), "description": description,
+        "pr": pr_number,
+        "head": head_sha,
+        "merge": merge_sha,
+        "kind": kind,
+        "context": context,
+        "state": "pending" if pending else ("success" if passed else "failure"),
+        "description": description,
         "url": run["html_url"],
         "report_failure": unchanged and ready and not passed and not skipped,
         "discovery_check_id": discovery[0]["id"] if len(discovery) == 1 else None,
@@ -248,10 +284,10 @@ def assess(event, api):
             kind == "Package verification"
             and pr["user"]["login"] == os.environ.get("APP_BOT_LOGIN")
             and pr["head"]["repo"]["full_name"] == api.repo
-            and pr["head"]["ref"] in ("automated/package-updates", "automated/nixpkgs-update")
+            and pr["head"]["ref"]
+            in ("automated/package-updates", "automated/nixpkgs-update")
         ),
     }
-
 
 
 def notify(api, result):
@@ -259,11 +295,19 @@ def notify(api, result):
     if result["kind"] != "Package verification":
         return
     if result["report_failure"] and result["automated"]:
-        maintainers = [m.strip() for m in os.environ.get("UPDATE_MAINTAINERS", "").split(",") if m.strip()]
+        maintainers = [
+            m.strip()
+            for m in os.environ.get("UPDATE_MAINTAINERS", "").split(",")
+            if m.strip()
+        ]
         if maintainers:
             try:
-                api.request(f"/issues/{result['pr']}/assignees", method="POST",
-                            payload={"assignees": maintainers}, app=True)
+                api.request(
+                    f"/issues/{result['pr']}/assignees",
+                    method="POST",
+                    payload={"assignees": maintainers},
+                    app=True,
+                )
             except URLError as exc:
                 print(f"Optional assignment failed: {exc}", file=sys.stderr)
 
@@ -273,7 +317,8 @@ def notify(api, result):
         print("No App bot identity; skipping optional PR comment", file=sys.stderr)
         return
     comments = [
-        c for c in api.pages(f"/issues/{result['pr']}/comments")
+        c
+        for c in api.pages(f"/issues/{result['pr']}/comments")
         if c["user"]["login"] == bot and COMMENT_MARKER in (c.get("body") or "")
     ]
     if not result["report_failure"]:
@@ -287,9 +332,11 @@ def notify(api, result):
                 annotations = api.pages(
                     f"/check-runs/{result['discovery_check_id']}/annotations"
                 )
-                if any(a.get("title") == "Published package targets removed"
-                       and a.get("annotation_level") == "failure"
-                       for a in annotations):
+                if any(
+                    a.get("title") == "Published package targets removed"
+                    and a.get("annotation_level") == "failure"
+                    for a in annotations
+                ):
                     removal_note = (
                         "**Published package targets were removed.**\n\n"
                         "The PR removes previously exported package outputs. "
@@ -309,11 +356,19 @@ def notify(api, result):
             f"[View failing verification run]({result['url']}).\n"
         )
         if comments:
-            api.request(f"/issues/comments/{comments[-1]['id']}", method="PATCH",
-                        payload={"body": body}, app=True)
+            api.request(
+                f"/issues/comments/{comments[-1]['id']}",
+                method="PATCH",
+                payload={"body": body},
+                app=True,
+            )
         else:
-            api.request(f"/issues/{result['pr']}/comments", method="POST",
-                        payload={"body": body}, app=True)
+            api.request(
+                f"/issues/{result['pr']}/comments",
+                method="POST",
+                payload={"body": body},
+                app=True,
+            )
 
 
 def main():

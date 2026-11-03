@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """Update one Hyprstream plugin from the latest GitHub Release."""
 
@@ -94,7 +93,7 @@ def main():
 
     contents, count = re.subn(
         version_pattern,
-        lambda m: f'{m[1]}{new_version}{m[3]}',
+        lambda m: f"{m[1]}{new_version}{m[3]}",
         contents,
     )
     if count != 1:
@@ -102,7 +101,7 @@ def main():
 
     contents, count = re.subn(
         revision_pattern,
-        lambda m: f'{m[1]}{commit}{m[3]}',
+        lambda m: f"{m[1]}{commit}{m[3]}",
         contents,
     )
     if count != 1:
