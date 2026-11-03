@@ -10,9 +10,9 @@ they expect a conventional Linux environment. On other platforms, nix-opendeck s
 provides declarative plugin management.
 
 This is my first attempt at packaging software for Nix, made out of a personal need for
-my Stream Deck to just work on NixOS. I make no promises to maintain this long-term, but
-in the spirit of Nix, I'm making it public and doing what I can to make it useful for
-everyone.
+my Stream Deck to just work on NixOS. As such, I use it myself and will continue
+maintaining it for as long as I do. In the spirit of Nix, I'm making it public and doing
+what I can to make it useful for everyone.
 
 As this began as both a personal tool and a learning exercise, I
 [made use of LLM assistance during development](#llm-usage-disclosure).
