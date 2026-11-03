@@ -17,8 +17,9 @@ everyone.
 As this began as both a personal tool and a learning exercise, I
 [made use of LLM assistance during development](#llm-usage-disclosure).
 
-> [!WARNING] Breaking changes may still happen for a little while, but I think it's very
-> unlikely at this point. This README will remain an up-to-date source of truth.
+> [!WARNING]
+> Breaking changes may still happen for a little while, but I think it's very unlikely
+> at this point. This README will remain an up-to-date source of truth.
 
 <div align="center">
 
@@ -35,8 +36,9 @@ Add nix-opendeck to your flake inputs:
 opendeck.url = "github:missmoode/nix-opendeck";
 ```
 
-> [!NOTE] These examples assume your flake inputs are available to your NixOS or Home
-> Manager modules. If you haven't already configured this, pass `inputs` through NixOS's
+> [!NOTE]
+> These examples assume your flake inputs are available to your NixOS or Home Manager
+> modules. If you haven't already configured this, pass `inputs` through NixOS's
 > `specialArgs` or Home Manager's `extraSpecialArgs`.
 
 ### Installing OpenDeck with plugins
@@ -150,10 +152,11 @@ nix-opendeck currently targets Linux (`x86_64-linux` and `aarch64-linux`) and ma
 Apple Silicon (`aarch64-darwin`). It's tested working on NixOS, and should also work on
 nix-darwin or standalone Nix installations on supported systems.
 
-> [!WARNING] I've only tested it on NixOS on x86_64. While everything seems to compile
-> for the others, I don't have the hardware to check. If you're on Linux aarch64 or
-> Apple Silicon and trying this out, you're welcome to open an issue and let me know if
-> it works!
+> [!WARNING]
+> I've only tested it on NixOS on x86_64. While everything seems to compile for the
+> others, I don't have the hardware to check. If you're on Linux aarch64 or Apple
+> Silicon and trying this out, you're welcome to open an issue and let me know if it
+> works!
 
 The Home Manager module is available on all supported platforms.
 
@@ -217,9 +220,10 @@ extra-substituters = https://nix-opendeck.cachix.org
 extra-trusted-public-keys = nix-opendeck.cachix.org-1:twvVjvv6Xm9H/m9sD2YQfIDoeUZLWEX5CpokN2An9L8=
 ```
 
-> [!NOTE] To benefit from the cache on your first installation, activate the new Nix
-> settings before installing OpenDeck. Otherwise, OpenDeck may be compiled locally
-> because the new cache configuration hasn't yet been activated.
+> [!NOTE]
+> To benefit from the cache on your first installation, activate the new Nix settings
+> before installing OpenDeck. Otherwise, OpenDeck may be compiled locally because the
+> new cache configuration hasn't yet been activated.
 >
 > Cache hits also depend on matching Nix derivations. Overriding this flake's `nixpkgs`
 > input with `inputs.nixpkgs.follows` may result in cache misses.
@@ -341,9 +345,10 @@ still match the OpenDeck package you installed elsewhere. The module uses it to 
 which plugins are already bundled and prevent accidental double-declarations, as well as
 to target the correct executable for plugin reloads or an optional restart.
 
-> [!IMPORTANT] Plugins managed by the Home Manager module are marked as externally
-> managed. The OpenDeck package includes patches that prevent its plugin manager from
-> updating or removing them.
+> [!IMPORTANT]
+> Plugins managed by the Home Manager module are marked as externally managed. The
+> OpenDeck package includes patches that prevent its plugin manager from updating or
+> removing them.
 >
 > OpenDeck also skips automatic update checks for these plugins and for bundled plugins,
 > since their updates are managed outside the graphical store.
@@ -450,7 +455,8 @@ helper, and their `udev` rules through your existing `pkgs` argument:
   allowing them to share dependencies with your system. This may result in cache misses
   and local compilation.
 
-> [!IMPORTANT] To benefit from the binary cache when using `overlays.pinned`, do not set
+> [!IMPORTANT]
+> To benefit from the binary cache when using `overlays.pinned`, do not set
 > `opendeck.inputs.nixpkgs.follows = "nixpkgs"` in your flake inputs. Doing so overrides
 > nix-opendeck's locked Nixpkgs revision, potentially producing different derivations
 > from those published by CI.
@@ -507,8 +513,9 @@ Manager configuration:
 }
 ```
 
-> [!NOTE] If Home Manager uses a separate Nixpkgs instance on systems integrated with
-> NixOS or nix-darwin, the overlay must also be applied to that instance. When
+> [!NOTE]
+> If Home Manager uses a separate Nixpkgs instance on systems integrated with NixOS or
+> nix-darwin, the overlay must also be applied to that instance. When
 > `home-manager.useGlobalPkgs = true`, the system-level overlay is shared automatically.
 >
 > The Home Manager module uses nix-opendeck's own `opendeck` package by default,

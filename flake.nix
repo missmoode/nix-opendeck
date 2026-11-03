@@ -59,7 +59,10 @@
               ruff
               shfmt
               yamlfmt
-              (mdformat.withPlugins (ps: [ ps.mdformat-gfm ]))
+              (mdformat.withPlugins (ps: [
+                ps.mdformat-gfm
+                ps.mdformat-gfm-alerts
+              ]))
             ];
 
             settings.formatter = {
