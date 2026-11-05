@@ -26,7 +26,8 @@ As this began as both a personal tool and a learning exercise, I
 <div align="center">
 
 [Installation](#installation) | [Binary Cache](#binary-cache) | [Usage](#usage) |
-[Custom Packages](#custom-opendeck-packages) | [Plugin Listing](#plugin-listing) | [Package your own plugins](./PLUGIN-PACKAGING.md)
+[Custom Packages](#custom-opendeck-packages) | [Plugin Listing](#plugin-listing) |
+[Package your own plugins](./PLUGIN-PACKAGING.md)
 
 </div>
 
@@ -331,11 +332,14 @@ services that the wrapper does not automatically configure.
 
 ### Home Manager Module
 
-The Home Manager module lets you declare plugins you'd like to use, and installs them
-into OpenDeck's plugin directory via symlinks from the Nix store.
+The Home Manager module lets you declaratively manage OpenDeck plugins and application
+settings. Plugins are installed into OpenDeck's plugin directory via symlinks from the
+Nix store.
 
 It can be used with standalone Home Manager, or as part of a NixOS or nix-darwin
 configuration. See [Quick Start](#quick-start) for an example.
+
+#### Package configuration
 
 By default, the module installs this flake's `opendeck` package. You can change
 `programs.opendeck.package` to use something else, such as `opendeck-core`. If you do
@@ -347,25 +351,57 @@ still match the OpenDeck package you installed elsewhere. The module uses it to 
 which plugins are already bundled and prevent accidental double-declarations, as well as
 to target the correct executable for plugin reloads or an optional restart.
 
-> [!IMPORTANT]
-> Plugins managed by the Home Manager module are marked as externally managed. The
-> OpenDeck package includes patches that prevent its plugin manager from updating or
-> removing them.
->
-> OpenDeck also skips automatic update checks for these plugins and for bundled plugins,
-> since their updates are managed outside the graphical store.
->
-> Plugins installed through the GUI are unaffected. The Home Manager module will refuse
-> to overwrite a plugin it doesn't already manage.
+#### Declarative plugin management
+
+Plugins managed by the Home Manager module are marked as externally managed. The
+OpenDeck package includes patches that prevent its plugin manager from updating or
+removing them.
+
+OpenDeck also skips automatic update checks for these plugins and for bundled plugins,
+since their updates are managed outside the graphical store.
+
+Plugins installed through the GUI are unaffected. The Home Manager module will refuse to
+overwrite a plugin it doesn't already manage.
+
+#### Declarative settings
+
+You can configure OpenDeck's settings via the `programs.opendeck.settings` attribute.
+Known settings are type-checked, but additional JSON-compatible options are also
+accepted, allowing you to configure settings introduced in newer OpenDeck versions.
+
+Only explicitly declared settings are managed; existing settings not declared in Home
+Manager are preserved.
+
+For example:
+
+```nix
+programs.opendeck.settings = {
+  background = true;
+  rotation = 0;
+};
+```
+
+#### Reloading and restarting
 
 Home Manager normally reloads individual plugins when their symlinks are added, removed
 or changed. The reload preserves saved settings and profile assignments without
 restarting OpenDeck. It does not reload plugins whose store paths are unchanged.
 
-Set `programs.opendeck.reloadOnPluginChanges = false` to defer changes until the next
-launch, or `programs.opendeck.restartOnPluginChanges = true` to request one restart
-instead of individual reloads. Restart takes precedence when both are enabled. These
-notifications do not detect changes to bundled plugins in `programs.opendeck.package`.
+Plugin reloads are enabled by default. Set
+`programs.opendeck.reloadOnPluginChanges = false` to disable them, or
+`programs.opendeck.restartOnPluginChanges = true` to request a restart instead of
+individual reloads. Restart takes precedence when both are enabled. This does not
+detect changes to bundled plugins in `programs.opendeck.package`.
+
+Changes to declaratively managed settings may not take effect until OpenDeck is
+restarted. Set `programs.opendeck.restartOnSettingsChanges = true` to restart OpenDeck
+when those settings change. This option is disabled by default. If both plugin and
+settings changes require a restart, OpenDeck is restarted only once.
+
+When automatic restarting is disabled, a running OpenDeck instance may retain its
+previous settings and overwrite the declarative changes when it next saves its settings.
+Neither reload nor restart notifications will launch OpenDeck if it isn't already
+running.
 
 ### Device Access
 

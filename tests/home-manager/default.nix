@@ -9,7 +9,6 @@ let
   homeManager = {
     lib = import "${homeManagerSource}/lib" { inherit (pkgs) lib; };
   };
-
   module = self.homeManagerModules.default;
   core = config.packages.opendeck-core;
 in
@@ -26,13 +25,7 @@ in
     opendeck = config.packages.opendeck;
     starterpack = config.legacyPackages.opendeck-plugins.nekename.starterpack;
   };
-
-  home-manager-activation = import ./activation.nix {
-    inherit
-      pkgs
-      homeManager
-      module
-      core
-      ;
-  };
 }
+// (import ./activation {
+  inherit pkgs homeManager module;
+})

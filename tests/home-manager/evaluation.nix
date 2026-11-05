@@ -10,42 +10,71 @@
 
 let
   mkConfiguration =
-    settings:
+    options:
     homeManager.lib.homeManagerConfiguration {
       inherit pkgs;
-
       modules = [
         module
         {
           home.username = "test";
           home.homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test" else "/home/test";
           home.stateVersion = "26.05";
-
-          programs.opendeck = settings;
+          programs.opendeck = options;
         }
       ];
     };
 
-  disabled = mkConfiguration {
-    enable = false;
-  };
-
-  defaultEnabled = mkConfiguration {
-    enable = true;
-  };
-
+  disabled = mkConfiguration { enable = false; };
+  enabled = mkConfiguration { enable = true; };
   pluginsOnly = mkConfiguration {
     enable = true;
     installPackage = false;
     package = core;
     plugins = [ starterpack ];
   };
+  noNotifications = mkConfiguration {
+    enable = true;
+    reloadOnPluginChanges = false;
+  };
+  pluginRestart = mkConfiguration {
+    enable = true;
+    restartOnPluginChanges = true;
+  };
+  settingsRestart = mkConfiguration {
+    enable = true;
+    settings.updatecheck = false;
+    restartOnSettingsChanges = true;
+  };
+  managedSettings = mkConfiguration {
+    enable = true;
+    settings = {
+      brightness = 75;
+      updatecheck = false;
+      sleep_timeout_minutes = 0;
+      rotation = 90;
+      future_toggle = true;
+      future_values = [
+        0
+        "example"
+        false
+      ];
+      future_object = {
+        enabled = true;
+      };
+    };
+  };
+  nullSettings = mkConfiguration {
+    enable = true;
+    settings = {
+      updatecheck = null;
+      future_toggle = null;
+    };
+  };
 
   bundledConflict = mkConfiguration {
     enable = true;
     plugins = [ starterpack ];
   };
-
   duplicatePlugins = mkConfiguration {
     enable = true;
     package = core;
@@ -54,103 +83,124 @@ let
       starterpack
     ];
   };
-
-  reloadDisabled = mkConfiguration {
-    enable = true;
-    installPackage = false;
-    package = core;
-    plugins = [ starterpack ];
-    reloadOnPluginChanges = false;
-  };
-
-  restartEnabled = mkConfiguration {
-    enable = true;
-    installPackage = false;
-    package = core;
-    plugins = [ starterpack ];
-    restartOnPluginChanges = true;
-  };
-
   missingPluginId = mkConfiguration {
     enable = true;
     plugins = [ pkgs.hello ];
   };
+  invalidBrightness = mkConfiguration {
+    enable = true;
+    settings.brightness = "bright";
+  };
+  invalidRotation = mkConfiguration {
+    enable = true;
+    settings.rotation = 45;
+  };
+  invalidFutureValue = mkConfiguration {
+    enable = true;
+    settings.future = _: 42;
+  };
 
+  # Home Manager checks assertions before exposing the evaluated config.
+  # Trying to inspect config.assertions directly would throw instead.
   evaluationFails = configuration: !(builtins.tryEval configuration.config.home.packages).success;
+  settingsEvaluationFails =
+    configuration:
+    !(builtins.tryEval (builtins.deepSeq configuration.config.home.activation.opendeck.data true))
+    .success;
 
-  activationScript = pluginsOnly.config.home.activation.opendeckPlugins.data;
-
+  activation = pluginsOnly.config.home.activation.opendeck.data;
+  settingsActivation = managedSettings.config.home.activation.opendeck.data;
+  noNotificationActivation = noNotifications.config.home.activation.opendeck.data;
 in
-
 assert lib.assertMsg (
-  !(disabled.config.home.activation ? opendeckPlugins)
-) "Disabled OpenDeck module should not add activation steps";
+  !(disabled.config.home.activation ? opendeck)
+) "Disabled OpenDeck module should not create an activation entry";
 
 assert lib.assertMsg (builtins.any (
   p: p.outPath == opendeck.outPath
-) defaultEnabled.config.home.packages) "Enabled OpenDeck module should install its default package";
+) enabled.config.home.packages) "Enabled module should install the default package";
 
 assert lib.assertMsg (
-  !builtins.any (package: package.outPath == core.outPath) pluginsOnly.config.home.packages
+  !builtins.any (p: p.outPath == core.outPath) pluginsOnly.config.home.packages
 ) "installPackage=false should not install OpenDeck";
 
-assert lib.assertMsg (lib.hasInfix starterpack.pluginId activationScript)
-  "Declared plugin ID should appear in the activation script";
+assert lib.assertMsg (lib.hasInfix starterpack.pluginId activation)
+  "Declared plugins should appear in reconciliation";
 
-assert lib.assertMsg (lib.hasInfix "externally-managed-plugins" activationScript)
-  "Activation should maintain the plugin ownership state";
+assert lib.assertMsg (lib.hasInfix "externally-managed-plugins" activation)
+  "Activation must maintain plugin ownership state";
 
-assert lib.assertMsg (evaluationFails bundledConflict)
-  "Bundled plugin conflicts should fail Home Manager evaluation";
+assert lib.assertMsg (lib.hasInfix "settings.json" settingsActivation)
+  "Managed settings should be reconciled in the same activation";
 
-assert lib.assertMsg (evaluationFails duplicatePlugins)
-  "Duplicate plugin IDs should fail Home Manager evaluation";
+assert lib.assertMsg (lib.hasInfix ''"brightness":75'' settingsActivation)
+  "Known settings should serialize correctly";
 
-assert lib.assertMsg (lib.hasInfix "--reload-plugin" activationScript)
-  "Automatic reload should be enabled by default";
+assert lib.assertMsg (lib.hasInfix ''"updatecheck":false'' settingsActivation)
+  "Explicit false must not be discarded";
+
+assert lib.assertMsg (lib.hasInfix ''"sleep_timeout_minutes":0'' settingsActivation)
+  "Explicit zero must not be discarded";
+
+assert lib.assertMsg (lib.hasInfix ''"future_toggle":true'' settingsActivation)
+  "Unknown boolean fields should be accepted";
+
+assert lib.assertMsg (lib.hasInfix ''"future_values":[0,"example",false]'' settingsActivation)
+  "Unknown list fields should be accepted";
+
+assert lib.assertMsg (lib.hasInfix ''"future_object":{'' settingsActivation)
+  "Unknown JSON objects should be accepted";
 
 assert lib.assertMsg (
-  !lib.hasInfix "--restart-if-running" activationScript
-) "Restart logic should be absent when disabled";
+  !lib.hasInfix ''"autolaunch":'' settingsActivation
+) "Unmanaged known settings must not be written";
 
 assert lib.assertMsg (
-  !lib.hasInfix "--reload-plugin" reloadDisabled.config.home.activation.opendeckPlugins.data
-) "Reload logic should be absent when disabled";
+  !lib.hasInfix "managedSettings=" nullSettings.config.home.activation.opendeck.data
+) "Null-only settings should not generate JSON reconciliation";
 
 assert lib.assertMsg (
-  !lib.hasInfix "--restart-if-running" reloadDisabled.config.home.activation.opendeckPlugins.data
-) "Disabling reload should not enable restart";
+  !lib.hasInfix "managedSettings=" enabled.config.home.activation.opendeck.data
+) "Empty settings should not generate JSON reconciliation";
+
+assert lib.assertMsg (lib.hasInfix "reloadPlugins=true" activation)
+  "Plugin reload must remain enabled by default";
+
+assert lib.assertMsg (lib.hasInfix "restartPlugins=false" activation)
+  "Plugin restarts must remain disabled by default";
+
+assert lib.assertMsg (lib.hasInfix "restartSettings=false" activation)
+  "Settings restarts must be opt-in";
+
+assert lib.assertMsg (
+  !lib.hasInfix "isRunning()" noNotificationActivation
+) "No notification options should avoid D-Bus probing";
 
 assert lib.assertMsg
-  (lib.hasInfix "--restart-if-running" restartEnabled.config.home.activation.opendeckPlugins.data)
-  "Restart logic should be present when enabled";
+  (lib.hasInfix "restartPlugins=true" pluginRestart.config.home.activation.opendeck.data)
+  "Plugin restart setting must be propagated";
 
-assert lib.assertMsg (
-  !lib.hasInfix "--reload-plugin" restartEnabled.config.home.activation.opendeckPlugins.data
-) "Restart should take precedence over reload";
+assert lib.assertMsg
+  (lib.hasInfix "restartSettings=true" settingsRestart.config.home.activation.opendeck.data)
+  "Settings restart setting must be propagated";
 
-# very unlikely for this to fail unless I do something very silly,
-# but it's cheap so why not include it.
-assert lib.assertMsg (
-  !builtins.any (package: package.outPath == opendeck.outPath) disabled.config.home.packages
-) "Disabled OpenDeck module should not install OpenDeck";
+assert lib.assertMsg (evaluationFails bundledConflict)
+  "Bundled plugin conflicts should fail validation";
 
-assert lib.assertMsg (
-  pkgs.stdenv.hostPlatform.isLinux
-  -> lib.hasInfix "me.amankhanna.opendeck.SingleInstance" activationScript
-) "Linux reload should check OpenDeck's single-instance D-Bus name";
-
-assert lib.assertMsg (
-  pkgs.stdenv.hostPlatform.isLinux
-  -> lib.hasInfix "me.amankhanna.opendeck.SingleInstance" restartEnabled.config.home.activation.opendeckPlugins.data
-) "Linux restart should use the same D-Bus gate";
-
-assert lib.assertMsg (
-  !lib.hasInfix "NameHasOwner" reloadDisabled.config.home.activation.opendeckPlugins.data
-) "Disabling notifications should omit the D-Bus probe";
+assert lib.assertMsg (evaluationFails duplicatePlugins)
+  "Duplicate plugin IDs should fail validation";
 
 assert lib.assertMsg (evaluationFails missingPluginId)
-  "Plugins without pluginId should fail evaluation";
+  "Plugins without pluginId must fail validation";
+
+assert lib.assertMsg (settingsEvaluationFails invalidBrightness)
+  "Known settings should be type-checked";
+
+assert lib.assertMsg (settingsEvaluationFails invalidRotation)
+  "Rotation must be restricted to supported values";
+
+assert lib.assertMsg (settingsEvaluationFails invalidFutureValue)
+  "Unknown settings must still be JSON-compatible";
 
 pkgs.runCommand "opendeck-home-manager-evaluation" { } ''
   touch "$out"
