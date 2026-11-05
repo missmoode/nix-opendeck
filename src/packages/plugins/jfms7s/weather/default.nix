@@ -10,13 +10,13 @@
 
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-jfms7s-weather";
-  version = "0.3.2";
+  version = "0.8.1";
 
   src = fetchFromGitHub {
     owner = "jfms7s";
     repo = "opendeck-weather";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-+9rdGOrWsvptgoobFOWlZFOdR3YMT9PTC8FT2zyw0Os=";
+    hash = "sha256-Zjjp9exTAlsjeg7mPJWGk3zUZ+GG4M5nQQYSdoSUIQs=";
   };
 
   pluginId = "com.jfms7s.weather.sdPlugin";
@@ -26,7 +26,7 @@ mkRustOpenDeckPlugin (finalAttrs: {
   # in the plugin root.
   binaryInstallPath = "opendeck-weather-${stdenv.hostPlatform.rust.rustcTarget}";
 
-  cargoHash = "sha256-OIo/+0/9Wt/pBkoKjBUE7ydsPXwU7bReXLXcAQ4kCA8=";
+  cargoHash = "sha256-dNabCncCjO2aJFO5nn0PGRa2sFEHpD177QZQCCRldBo=";
 
   licenseFiles = [
     "LICENSE"
