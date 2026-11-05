@@ -122,7 +122,7 @@
 
         homeManagerModules.default =
           { pkgs, ... }@moduleArgs:
-          (import ./src/modules/home-manager.nix {
+          (import ./src/modules/home-manager {
             defaultPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.opendeck;
           })
             moduleArgs;
