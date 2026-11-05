@@ -390,7 +390,7 @@ restarting OpenDeck. It does not reload plugins whose store paths are unchanged.
 Plugin reloads are enabled by default. Set
 `programs.opendeck.reloadOnPluginChanges = false` to disable them, or
 `programs.opendeck.restartOnPluginChanges = true` to request a restart instead of
-individual reloads. Restart takes precendence when both are enabled. This does not
+individual reloads. Restart takes precedence when both are enabled. This does not
 detect changes to bundled plugins in `programs.opendeck.package`.
 
 Changes to declaratively managed settings may not take effect until OpenDeck is
