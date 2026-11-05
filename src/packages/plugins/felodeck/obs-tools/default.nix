@@ -9,13 +9,13 @@
 
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-felodeck-obs-tools";
-  version = "0.3.1";
+  version = "0.3.2";
 
   src = fetchFromGitHub {
     owner = "FeloDeck";
     repo = "obs-tools";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-9x0MwKamhxR05NDjsAPHzm8jBxPCL3X5AScWQc3keXQ=";
+    hash = "sha256-4Alm882rd1U6BVw+BaDd2bLYQK+lvNh43b6IalfYYsU=";
   };
 
   cargoHash = "sha256-7W5D64Zpiksoo5lvUR0Mmb8XChNX3ZdYo6IhgBzEFFo=";
