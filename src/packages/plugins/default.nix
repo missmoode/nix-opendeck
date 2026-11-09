@@ -165,6 +165,12 @@ let
       };
     };
 
+    missmoode = {
+      umbriel-controls = pkgs.callPackage ./missmoode/umbriel-controls {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
     felodeck = {
       obs-tools = pkgs.callPackage ./felodeck/obs-tools {
         inherit (pluginLib) mkRustOpenDeckPlugin;

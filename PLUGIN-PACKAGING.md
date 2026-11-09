@@ -136,6 +136,11 @@ Replace `x86_64-linux` with your target system where necessary. Once the package
 commit `flake.nix` and `flake.lock` and publish the repository. Consumers can add it as
 a normal flake input; you do not need to publish it through nix-opendeck.
 
+For a maintained standalone example using `mkRustOpenDeckPlugin`, see
+[Umbriel Controls' flake](https://github.com/missmoode/opendeck-umbriel-controls/blob/main/flake.nix).
+It demonstrates Cargo lockfile handling, platform-specific executable paths and
+package overrides without requiring inclusion in this catalogue.
+
 ## Using an independently packaged plugin
 
 Once published, another user can add your repository as a flake input:
