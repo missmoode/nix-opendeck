@@ -710,6 +710,7 @@ integrations like PipeWire are not available on macOS.
 | [Rotary Generic Command][rotary-command] | `opendeck-plugins.babs.rotary-command` | Rotary Encoder | - |
 | [TikClock] | `opendeck-plugins.gdwhisper.tikclock` | - | - |
 | [Tomato Timer][tomato-timer] | `opendeck-plugins.gallowaylabs.tomato-timer` | - | - |
+| [Umbriel Controls][umbriel-controls] | `opendeck-plugins.missmoode.umbriel-controls` | Umbriel compositor | - |
 | [OpenDeck Weather][jfms7sweather] | `opendeck-plugins.jfms7s.weather` | - | - |
 | [Volume Controller][volume-controller] | `opendeck-plugins.mdvictor.volume-controller` | PulseAudio / PipeWire (via pipewire-pulse) | - |
 | [Web Requests][web-requests] | `opendeck-plugins.data-enabler.web-requests` | - | - |
@@ -850,6 +851,7 @@ test everything in this repo that can be tested on a Stream Deck Mk2 and NixOS o
 [tikclock]: https://github.com/GDWhisper/opendeck-tikclock
 [tomato-timer]: https://github.com/gallowaylabs/streamdeck-tomato-timer
 [uinput-simulation]: https://github.com/Havner/uinput-simulation
+[umbriel-controls]: https://github.com/missmoode/opendeck-umbriel-controls
 [volume-controller]: https://github.com/mdvictor/opendeck-volume-controller
 [web-requests]: https://github.com/data-enabler/streamdeck-web-requests
 [xivdeck]: https://github.com/KazWolfe/XIVDeck
