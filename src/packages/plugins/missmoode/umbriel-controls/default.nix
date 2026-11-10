@@ -12,16 +12,16 @@
 
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-missmoode-umbriel-controls";
-  version = "0.1.0";
+  version = "0.1.2";
 
   src = fetchFromGitHub {
     owner = "missmoode";
     repo = "opendeck-umbriel-controls";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-lElr2hTv8ln0mOuge5G/ofwh7rEe/NSx2BMVlg0uFH0=";
+    hash = "sha256-WfbI+/NcBvUIgOMS3G5mbozX00t3YxMn3WgFU4Btp0s=";
   };
 
-  cargoHash = "sha256-256RX9Nj1sWDfDc/+7Cfud6PIGAQuUQc6v6/7n8sdwg=";
+  cargoHash = "sha256-vGuBwmliRS2GDCEdy4QBjhoPW/tqmwT5hnNcFftftCA=";
 
   pluginId = "dev.moode.umbriel-controls.sdPlugin";
   binaryName = "umbriel-controls";
