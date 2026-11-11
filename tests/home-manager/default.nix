@@ -11,6 +11,10 @@ let
   };
   module = self.homeManagerModules.default;
   core = config.packages.opendeck-core;
+
+  traditional = import ../../default.nix {
+    inherit pkgs;
+  };
 in
 {
   home-manager-module = import ./evaluation.nix {
@@ -24,6 +28,8 @@ in
 
     opendeck = config.packages.opendeck;
     starterpack = config.legacyPackages.opendeck-plugins.nekename.starterpack;
+    traditionalModule = traditional.homeManagerModules.default;
+    traditionalOpendeck = traditional.opendeck;
   };
 }
 // (import ./activation {
