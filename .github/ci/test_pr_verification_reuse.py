@@ -20,19 +20,31 @@ MERGE = "b" * 40
 CURRENT_RUN = 900
 
 
-def plugin(*, attr="legacyPackages.x86_64-linux.opendeck-plugins.a.foo", store="/nix/store/old-foo"):
+def plugin(
+    *,
+    attr="legacyPackages.x86_64-linux.opendeck-plugins.a.foo",
+    store="/nix/store/old-foo",
+):
     return {
-        "kind": "plugin", "system": "x86_64-linux", "runner": "ubuntu-24.04",
-        "attr": attr, "label": "a/foo", "storePath": store,
+        "kind": "plugin",
+        "system": "x86_64-linux",
+        "runner": "ubuntu-24.04",
+        "attr": attr,
+        "label": "a/foo",
+        "storePath": store,
     }
 
 
 def run(*, run_id=800, pr=91, conclusion="failure", head=HEAD, merge=MERGE):
     return {
-        "id": run_id, "event": "pull_request", "status": "completed",
-        "conclusion": conclusion, "repository": {"full_name": REPO},
+        "id": run_id,
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": conclusion,
+        "repository": {"full_name": REPO},
         "display_title": f"Package verification PR #{pr} merge {merge}",
-        "head_sha": head, "pull_requests": [{"number": pr}],
+        "head_sha": head,
+        "pull_requests": [{"number": pr}],
     }
 
 
@@ -48,9 +60,15 @@ def pick(changed=None, runs=None, jobs=None, catalogue=None):
     changed = [plugin()] if changed is None else changed
     runs = [run()] if runs is None else runs
     jobs = [job()] if jobs is None else jobs
-    catalogue = {item["attr"]: item for item in changed} if catalogue is None else catalogue
+    catalogue = (
+        {item["attr"]: item for item in changed} if catalogue is None else catalogue
+    )
     return reuse.select_reused(
-        changed, runs, repo=REPO, pr_number=91, current_run_id=CURRENT_RUN,
+        changed,
+        runs,
+        repo=REPO,
+        pr_number=91,
+        current_run_id=CURRENT_RUN,
         job_lookup=lambda _id: jobs,
         old_catalogue=lambda _run, _merge: catalogue,
     )
@@ -62,7 +80,9 @@ class ReuseTests(unittest.TestCase):
         response.__enter__.return_value = response
         response.read.return_value = b'{"workflow_runs": []}'
         with patch.object(reuse, "urlopen", return_value=response) as call:
-            self.assertEqual(reuse.github_api(REPO, "/actions/runs"), {"workflow_runs": []})
+            self.assertEqual(
+                reuse.github_api(REPO, "/actions/runs"), {"workflow_runs": []}
+            )
             request = call.call_args.args[0]
             self.assertFalse(any(k.lower() == "authorization" for k in request.headers))
 
@@ -82,8 +102,11 @@ class ReuseTests(unittest.TestCase):
 
     def test_only_previous_completed_run_of_the_same_pr_counts(self):
         cases = [
-            run(run_id=CURRENT_RUN), run(run_id=CURRENT_RUN + 1), run(pr=92),
-            run(head="untrusted"), run(merge="untrusted"),
+            run(run_id=CURRENT_RUN),
+            run(run_id=CURRENT_RUN + 1),
+            run(pr=92),
+            run(head="untrusted"),
+            run(merge="untrusted"),
             {**run(), "event": "push"},
             {**run(), "repository": {"full_name": "fork/repo"}},
             {**run(), "conclusion": "cancelled"},
@@ -96,10 +119,18 @@ class ReuseTests(unittest.TestCase):
 
     def test_no_reuse_if_previous_policy_or_merge_is_unavailable(self):
         self.assertEqual(pick(catalogue=None, changed=[plugin()], runs=[]), [])
-        self.assertEqual(reuse.select_reused(
-            [plugin()], [run()], repo=REPO, pr_number=91, current_run_id=CURRENT_RUN,
-            job_lookup=lambda _: [job()], old_catalogue=lambda *_: None,
-        ), [])
+        self.assertEqual(
+            reuse.select_reused(
+                [plugin()],
+                [run()],
+                repo=REPO,
+                pr_number=91,
+                current_run_id=CURRENT_RUN,
+                job_lookup=lambda _: [job()],
+                old_catalogue=lambda *_: None,
+            ),
+            [],
+        )
 
     def test_old_target_must_match_kind_system_attribute_and_label(self):
         current = plugin()
@@ -109,17 +140,25 @@ class ReuseTests(unittest.TestCase):
             {**current, "label": "new-name"},
         ):
             with self.subTest(changed=changed):
-                self.assertEqual(pick(changed=[changed], catalogue={current["attr"]: current}), [])
+                self.assertEqual(
+                    pick(changed=[changed], catalogue={current["attr"]: current}), []
+                )
 
     def test_core_not_reused_even_if_all_other_fields_match(self):
         target = {**plugin(), "kind": "core"}
         self.assertEqual(pick(changed=[target], catalogue={target["attr"]: target}), [])
 
     def test_impure_historical_eval_does_not_receive_api_credentials(self):
-        with patch.dict(os.environ, {
-            "GH_TOKEN": "secret", "GITHUB_TOKEN": "other-secret",
-            "ACTIONS_RUNTIME_TOKEN": "runtime-secret", "PATH": "/bin",
-        }, clear=True):
+        with patch.dict(
+            os.environ,
+            {
+                "GH_TOKEN": "secret",
+                "GITHUB_TOKEN": "other-secret",
+                "ACTIONS_RUNTIME_TOKEN": "runtime-secret",
+                "PATH": "/bin",
+            },
+            clear=True,
+        ):
             env = reuse.nix_eval_environment("/trusted/targets.nix")
             self.assertEqual(env["PATH"], "/bin")
             self.assertEqual(env["TRUSTED_TARGETS"], "/trusted/targets.nix")
@@ -130,16 +169,24 @@ class ReuseTests(unittest.TestCase):
         recent = run(run_id=850, merge="c" * 40, head="d" * 40)
         old = run(run_id=800)
         selected = reuse.select_reused(
-            [plugin()], [old, recent], repo=REPO, pr_number=91,
+            [plugin()],
+            [old, recent],
+            repo=REPO,
+            pr_number=91,
             current_run_id=CURRENT_RUN,
-            job_lookup=lambda id: [{**job(), "html_url": f"https://example.org/job/{id}"}],
+            job_lookup=lambda id: [
+                {**job(), "html_url": f"https://example.org/job/{id}"}
+            ],
             old_catalogue=lambda *_: {plugin()["attr"]: plugin()},
         )
         self.assertEqual(selected[0]["jobUrl"], "https://example.org/job/850")
 
     def test_missing_proof_is_a_rebuild_not_an_error(self):
         selected = reuse.select_reused(
-            [plugin()], [run()], repo=REPO, pr_number=91,
+            [plugin()],
+            [run()],
+            repo=REPO,
+            pr_number=91,
             current_run_id=CURRENT_RUN,
             job_lookup=lambda _: (_ for _ in ()).throw(OSError("API unavailable")),
             old_catalogue=lambda *_: None,
@@ -151,7 +198,9 @@ class ReuseTests(unittest.TestCase):
             repo = Path(temp)
 
             def git(*args):
-                return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+                return subprocess.check_output(
+                    ["git", "-C", str(repo), *args], text=True
+                ).strip()
 
             git("init", "-q")
             git("config", "user.email", "ci@example.invalid")
@@ -168,14 +217,22 @@ class ReuseTests(unittest.TestCase):
             git("add", "package.nix")
             git("commit", "-qm", "pr")
             head = git("rev-parse", "HEAD")
-            git("switch", "-q", "master" if git("branch", "--list", "master") else "main")
+            git(
+                "switch",
+                "-q",
+                "master" if git("branch", "--list", "master") else "main",
+            )
             git("merge", "--no-ff", "--no-edit", "pr")
             merge = git("rev-parse", "HEAD")
             # The helper uses Git subprocesses relative to cwd.
             # git() helper's cwd is explicitly passed via monkeypatch here.
             real_git = reuse.git
+
             def in_repo(*args, cwd=None, timeout=30):
-                return real_git(*args, cwd=str(repo) if cwd is None else cwd, timeout=timeout)
+                return real_git(
+                    *args, cwd=str(repo) if cwd is None else cwd, timeout=timeout
+                )
+
             with patch.object(reuse, "git", side_effect=in_repo):
                 self.assertTrue(reuse.trusted_revision(merge, base, head))
                 self.assertFalse(reuse.trusted_revision(merge, base, "e" * 40))
@@ -184,9 +241,15 @@ class ReuseTests(unittest.TestCase):
                 git("add", ".")
                 git("commit", "-qm", "change policy")
                 changed_head = git("rev-parse", "HEAD")
-                git("switch", "-q", "master" if git("branch", "--list", "master") else "main")
+                git(
+                    "switch",
+                    "-q",
+                    "master" if git("branch", "--list", "master") else "main",
+                )
                 git("merge", "--no-ff", "--no-edit", "untrusted-policy")
-                self.assertFalse(reuse.trusted_revision(git("rev-parse", "HEAD"), base, changed_head))
+                self.assertFalse(
+                    reuse.trusted_revision(git("rev-parse", "HEAD"), base, changed_head)
+                )
 
 
 if __name__ == "__main__":
