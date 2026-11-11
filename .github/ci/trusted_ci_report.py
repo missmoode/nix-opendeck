@@ -13,6 +13,8 @@ from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from verification_diagnostics import render_job_failures
+
 WORKFLOWS = {
     ".github/workflows/checks.yml": (
         "Checks",
@@ -28,6 +30,7 @@ WORKFLOWS = {
 REPORTER_PATHS = (
     ".github/workflows/trusted-ci-report.yml",
     ".github/ci/trusted_ci_report.py",
+    ".github/ci/verification_diagnostics.py",
 )
 # The checks workflow runs test definitions from the PR. Compare full test
 # trees so added, removed, or renamed files cannot silently change CI policy.
@@ -283,6 +286,15 @@ def assess(event, api):
         "state": "pending" if pending else ("success" if passed else "failure"),
         "description": description,
         "url": run["html_url"],
+        # Diagnostic-only fields; never used to decide the trusted verdict.
+        "run_id": run["id"],
+        "jobs": [
+            {key: job.get(key) for key in ("name", "id", "conclusion", "check_run_url")}
+            for job in jobs
+            if job.get("conclusion") == "failure"
+        ]
+        if kind == "Package verification"
+        else [],
         "report_failure": unchanged and ready and not passed and not skipped,
         "discovery_check_id": discovery[0]["id"] if len(discovery) == 1 else None,
         "automated": (
@@ -355,9 +367,20 @@ def notify(api, result):
                     )
             except URLError as exc:
                 print(f"Optional annotation lookup failed: {exc}", file=sys.stderr)
+        # Fetch at most one page of annotations per failed native job. The
+        # annotations are untrusted explanations, never inputs to the verdict.
+        details = render_job_failures(
+            result["jobs"],
+            api.repo,
+            result["run_id"],
+            lambda check_id: api.request(
+                f"/check-runs/{check_id}/annotations?per_page=30"
+            ),
+        )
         body = (
             f"{COMMENT_MARKER}\n### Package verification failed\n\n"
             f"{removal_note}"
+            f"{details}\n"
             f"[View failing verification run]({result['url']}).\n"
         )
         if comments:

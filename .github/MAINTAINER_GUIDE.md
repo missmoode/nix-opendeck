@@ -729,6 +729,20 @@ before treating the package as broken.
 
 ### Runtime integration checks
 
+For a failed package-verification run, the bot's comment on automated PRs groups failed
+native jobs by package and matching highlighted errors, and links each affected
+architecture directly. Native jobs emit a bounded GitHub error annotation identifying
+the failed stage (evaluation, reference build, output validation, bundle validation,
+independent rebuild, reproducibility mismatch, or runtime tests). The job summary also
+identifies wrapper targets blocked by an earlier Core failure. These diagnostics are
+best-effort, come from unprivileged build output, and **never influence the trusted
+status or auto-merge decision**. If the annotation API is unavailable, the comment still
+links the failed jobs. Logs remain authoritative for investigation.
+
+The automated package-update failure issue separately groups identical extracted errors
+across architectures for the same package and phase, preserving a representative excerpt
+and pointing to the full job logs. This does not trigger Gemini analysis.
+
 For runtime failures, inspect the `opendeck.log` artifact from the package verification
 job (or `./runtime-test-logs/opendeck.log` from the local command above). Startup port
 discovery and plugin registration use upstream log messages, so a message change can

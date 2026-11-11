@@ -15,6 +15,8 @@ import re
 import subprocess
 import sys
 
+from verification_diagnostics import render_update_diagnostics
+
 SYSTEM_PREFERENCE = ("x86_64-linux", "aarch64-linux", "aarch64-darwin")
 
 
@@ -585,17 +587,7 @@ def render_failure_issue(state_file, output):
             "",
         ]
     )
-    remaining = 46000
-    for item in diagnostics:
-        if remaining <= 0:
-            lines.append("Additional excerpts omitted; consult the workflow logs.")
-            break
-        heading = f"**{item['label']}** (`{item['system']}`, {item['phase']}): {item['error']}"
-        excerpt = item.get("excerpt", "").strip() or "No additional output captured."
-        excerpt = excerpt.replace("```", "[code fence]").replace("@", "@​")
-        excerpt = excerpt[-min(3500, remaining) :]
-        remaining -= len(excerpt)
-        lines.extend([heading.replace("@", "@​"), "", "```text", excerpt, "```", ""])
+    lines.extend(render_update_diagnostics(diagnostics))
     lines.append(
         f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
         f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')})"
