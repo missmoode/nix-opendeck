@@ -380,6 +380,7 @@ jobs:
         if: >-
           always() && (needs.prepare-builds.result != 'success' ||
 
+
            steps.finish.outcome != 'success' ||
            steps.finish.outputs.infrastructure_failure == 'true')
         shell: bash
@@ -630,16 +631,20 @@ jobs:
         if: >-
           always() && ( needs.discover.result != 'success' || (needs.update.result != 'success' && needs.update.result != 'skipped') || needs.prepare-builds.result != 'success' || steps.finish.outcome != 'success' || steps.finish.outputs.infrastructure_failure != 'false' || (steps.finish.outputs.ready == 'true' && steps.audit-select.outcome != 'success') || steps.review-pr.outcome == 'failure' || steps.app-token.outcome != 'success' || (github.ref_name == github.event.repository.default_branch &&
 
+
            steps.issues.outcome != 'success') ||
           steps.failure-select.outcome == 'failure' || steps.failure-reserve.outcome == 'failure' || steps.failure-publish.outcome == 'failure' || steps.pr.outcome == 'failure' || (steps.audit-select.outcome == 'success' &&
+
 
            steps.audit-select.outputs.auto_count != '0' &&
            steps.pr.outputs.pull-request-number == '') ||
           (steps.audit-select.outcome == 'success' &&
 
+
            steps.audit-select.outputs.review_count != '0' &&
            steps.review-pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
+
 
            steps.audit-select.outcome == 'success' &&
            steps.audit-select.outputs.auto_count != '0' &&

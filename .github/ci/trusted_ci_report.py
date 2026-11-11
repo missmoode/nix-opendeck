@@ -9,9 +9,12 @@ import json
 import os
 import re
 import sys
-from urllib.error import URLError
+import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+from verification_diagnostics import render_job_failures
 
 WORKFLOWS = {
     ".github/workflows/checks.yml": (
@@ -28,6 +31,7 @@ WORKFLOWS = {
 REPORTER_PATHS = (
     ".github/workflows/trusted-ci-report.yml",
     ".github/ci/trusted_ci_report.py",
+    ".github/ci/verification_diagnostics.py",
 )
 # The checks workflow runs test definitions from the PR. Compare full test
 # trees so added, removed, or renamed files cannot silently change CI policy.
@@ -57,9 +61,23 @@ class GitHub:
                 "Content-Type": "application/json",
             },
         )
-        with urlopen(request, timeout=30) as response:
-            body = response.read()
-            return json.loads(body) if body else None
+        # A transient GitHub gateway error must not prevent a trusted verdict.
+        # Never retry writes: the server may have applied them before failing.
+        for attempt in range(4):
+            try:
+                with urlopen(request, timeout=30) as response:
+                    body = response.read()
+                    return json.loads(body) if body else None
+            except HTTPError as exc:
+                if (
+                    method != "GET"
+                    or payload is not None
+                    or exc.code not in (502, 503, 504)
+                    or attempt == 3
+                ):
+                    raise
+                exc.close()
+                time.sleep(2**attempt)
 
     def pages(self, path, key=None):
         page = 1
@@ -283,6 +301,15 @@ def assess(event, api):
         "state": "pending" if pending else ("success" if passed else "failure"),
         "description": description,
         "url": run["html_url"],
+        # Diagnostic-only fields; never used to decide the trusted verdict.
+        "run_id": run["id"],
+        "jobs": [
+            {key: job.get(key) for key in ("name", "id", "conclusion", "check_run_url")}
+            for job in jobs
+            if job.get("conclusion") == "failure"
+        ]
+        if kind == "Package verification"
+        else [],
         "report_failure": unchanged and ready and not passed and not skipped,
         "discovery_check_id": discovery[0]["id"] if len(discovery) == 1 else None,
         "automated": (
@@ -355,9 +382,20 @@ def notify(api, result):
                     )
             except URLError as exc:
                 print(f"Optional annotation lookup failed: {exc}", file=sys.stderr)
+        # Fetch at most one page of annotations per failed native job. The
+        # annotations are untrusted explanations, never inputs to the verdict.
+        details = render_job_failures(
+            result["jobs"],
+            api.repo,
+            result["run_id"],
+            lambda check_id: api.request(
+                f"/check-runs/{check_id}/annotations?per_page=30"
+            ),
+        )
         body = (
             f"{COMMENT_MARKER}\n### Package verification failed\n\n"
             f"{removal_note}"
+            f"{details}\n"
             f"[View failing verification run]({result['url']}).\n"
         )
         if comments:

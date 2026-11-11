@@ -251,6 +251,11 @@ jobs:
             bundle=skipped
             rebuild=skipped
             output=""
+            failure_stage=""
+            failure_hint=""
+            reference_log="$RUNNER_TEMP/native-reference.log"
+            rebuild_log="$RUNNER_TEMP/native-rebuild.log"
+            : > "$reference_log"
 
             echo "::group::${TARGET_SYSTEM} / ${label}"
             echo
@@ -261,10 +266,19 @@ jobs:
 
             # The PR's output may be substituted or built locally; never publish it.
             if output="$(nix eval --raw ".#${attr}.outPath")" \
-              && [[ "$output" == /nix/store/* ]] \
-              && nix build ".#${attr}" --no-link -L \
-              && nix path-info "$output"; then
-              reference=success
+              && [[ "$output" == /nix/store/* ]]; then
+              if nix build ".#${attr}" --no-link -L 2>&1 | tee "$reference_log"; then
+                if nix path-info "$output"; then
+                  reference=success
+                else
+                  failure_stage="reference output validation"
+                fi
+              else
+                failure_stage="reference build"
+                failure_hint="$(python3 .github/ci/verification_diagnostics.py extract "$reference_log" || true)"
+              fi
+            else
+              failure_stage="target evaluation"
             fi
 
             # Preserve the original macOS bundle check, after the reference
@@ -274,6 +288,7 @@ jobs:
                 bundle=success
               else
                 bundle=failed
+                failure_stage="macOS bundle validation"
               fi
             fi
 
@@ -285,10 +300,12 @@ jobs:
               echo 'Rebuilding the selected derivation independently using --rebuild.'
               echo 'Dependencies may be reused from the Nix store.'
               echo
-              if nix build ".#${attr}" --rebuild --no-link --keep-failed -L; then
+              if nix build ".#${attr}" --rebuild --no-link --keep-failed -L 2>&1 | tee "$rebuild_log"; then
                 rebuild=success
               else
                 rebuild=failed
+                failure_stage="independent rebuild"
+                failure_hint="$(python3 .github/ci/verification_diagnostics.py extract "$rebuild_log" || true)"
               fi
             fi
 
@@ -297,6 +314,15 @@ jobs:
             if [[ "$reference" != success || "$bundle" == failed || "$rebuild" != success ]]; then
               failed=true
               rebuilt="${output}.check"
+
+              if [[ "$rebuild" == failed && -d "$output" && -d "$rebuilt" ]]; then
+                failure_stage="reproducibility mismatch"
+                failure_hint="Reference and independently rebuilt outputs differ."
+              fi
+              # This is a diagnostic annotation, not a status or pass/fail gate.
+              python3 .github/ci/verification_diagnostics.py annotate \
+                --label "$label" --stage "${failure_stage:-independent rebuild}" \
+                --hint "$failure_hint" || true
 
               if [[ -d "$output" && -d "$rebuilt" ]]; then
                 echo '=== Differing files ==='
@@ -340,7 +366,10 @@ jobs:
               --arg reference "$reference" \
               --arg bundle "$bundle" \
               --arg rebuild "$rebuild" \
-              '{label: $label, reference: $reference, bundle: $bundle, rebuild: $rebuild}' \
+              --arg stage "$failure_stage" \
+              --arg diagnostic "$failure_hint" \
+              '{label: $label, reference: $reference, bundle: $bundle, rebuild: $rebuild,
+                stage: $stage, diagnostic: $diagnostic}' \
               >> "$results"
             echo '::endgroup::'
 
@@ -355,6 +384,7 @@ jobs:
       # Reuse the verified reference output in this runner's Nix store.
       # Plugin-only jobs have no OpenDeck runtime checks to perform.
       - name: Run packaged OpenDeck integration checks
+        id: runtime
         if: ${{ steps.rebuild.outcome == 'success' }}
         shell: bash
         run: |
@@ -381,6 +411,11 @@ jobs:
           ')"
           "$runner/bin/opendeck-runtime-test" "$output" \
             --artifacts "$RUNNER_TEMP/opendeck-runtime"
+      - name: Annotate runtime test failure
+        if: ${{ always() && steps.runtime.outcome == 'failure' }}
+        run: |
+          python3 .github/ci/verification_diagnostics.py annotate \
+            --label opendeck --stage 'runtime tests'
       - name: Upload runtime logs
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -404,6 +439,7 @@ jobs:
         env:
           ARTIFACT_URL: ${{ steps.repro_artifact.outputs.artifact-url }}
           CHECK_OUTCOME: ${{ steps.rebuild.outcome }}
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
         run: |
           set -euo pipefail
 
@@ -415,10 +451,10 @@ jobs:
             if [[ -s "$RUNNER_TEMP/repro-results.jsonl" ]]; then
               jq -r '
                 "- **\(.label)**: " +
-                (if .reference != "success" then "reference acquisition/build failed"
-                 elif .bundle == "failed" then "macOS bundle validation failed"
+                (if .stage != "" then .stage + " failed"
                  elif .rebuild == "success" then "reproduced bit-for-bit"
-                 else "rebuild failed or differs from reference" end)
+                 else "verification incomplete" end) +
+                (if .diagnostic != "" then " — " + .diagnostic else "" end)
               ' "$RUNNER_TEMP/repro-results.jsonl"
             else
               echo 'No checks completed. See the job logs.'
@@ -428,16 +464,23 @@ jobs:
               checked="$(wc -l < "$RUNNER_TEMP/repro-results.jsonl" | tr -d ' ')"
               expected="$(jq 'length' <<< "$TARGETS_JSON")"
               if (( checked < expected )); then
-                echo 'Remaining targets were skipped after an earlier failure.'
+                echo 'Targets blocked by an earlier failure:'
+                jq -r --argjson checked "$checked" \
+                  '.[$checked:][] | "- **\(.label)**: not run (blocked by previous target failure)"' \
+                  <<< "$TARGETS_JSON"
                 echo
               fi
             fi
             if [[ "$CHECK_OUTCOME" != success ]]; then
-              echo 'See the build logs and diagnostics above for the failure.'
+              echo 'See the build logs and diagnostic annotations above for the failure.'
               echo
               echo '### OpenDeck runtime tests'
               echo
               echo 'Not run (package verification did not complete).'
+            elif [[ "$RUNTIME_OUTCOME" == failure ]]; then
+              echo '### OpenDeck runtime tests'
+              echo
+              echo 'Failed. See the runtime test job step and uploaded logs.'
             fi
             if [[ -n "$ARTIFACT_URL" ]]; then
               echo
