@@ -76,6 +76,7 @@ class GitHub:
                     or attempt == 3
                 ):
                     raise
+                exc.close()
                 time.sleep(2**attempt)
 
     def pages(self, path, key=None):
