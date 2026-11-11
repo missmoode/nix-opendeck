@@ -9,7 +9,8 @@ import json
 import os
 import re
 import sys
-from urllib.error import URLError
+import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -60,9 +61,22 @@ class GitHub:
                 "Content-Type": "application/json",
             },
         )
-        with urlopen(request, timeout=30) as response:
-            body = response.read()
-            return json.loads(body) if body else None
+        # A transient GitHub gateway error must not prevent a trusted verdict.
+        # Never retry writes: the server may have applied them before failing.
+        for attempt in range(4):
+            try:
+                with urlopen(request, timeout=30) as response:
+                    body = response.read()
+                    return json.loads(body) if body else None
+            except HTTPError as exc:
+                if (
+                    method != "GET"
+                    or payload is not None
+                    or exc.code not in (502, 503, 504)
+                    or attempt == 3
+                ):
+                    raise
+                time.sleep(2**attempt)
 
     def pages(self, path, key=None):
         page = 1

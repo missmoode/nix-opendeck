@@ -5,13 +5,14 @@ tests, not a substitute for a live GitHub Actions integration test.
 """
 
 import importlib.util
+from io import BytesIO
 import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 spec = importlib.util.spec_from_file_location(
     "trusted_ci_report", Path(__file__).with_name("trusted_ci_report.py")
@@ -549,6 +550,103 @@ class ReporterTests(unittest.TestCase):
             ):
                 with self.assertRaises(URLError):
                     reporter.main()
+
+
+class GitHubReadRetryTests(unittest.TestCase):
+    def setUp(self):
+        self.api = reporter.GitHub(REPO, "read-token", "app-token")
+
+    @staticmethod
+    def http_error(code):
+        error = HTTPError(
+            "https://api.github.com/test",
+            code,
+            "API failure",
+            None,
+            None,
+        )
+        error.close()
+        return error
+
+    def test_transient_get_errors_retry_with_bounded_backoff(self):
+        with (
+            patch.object(
+                reporter,
+                "urlopen",
+                side_effect=[
+                    self.http_error(502),
+                    self.http_error(503),
+                    self.http_error(504),
+                    BytesIO(b'{"ok": true}'),
+                ],
+            ) as request,
+            patch.object(reporter.time, "sleep") as sleep,
+        ):
+            self.assertEqual(self.api.request("/actions/runs"), {"ok": True})
+        self.assertEqual(request.call_count, 4)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4])
+        self.assertTrue(
+            all(call.args[0].get_method() == "GET" for call in request.call_args_list)
+        )
+
+    def test_exhausted_transient_get_errors_fail_closed(self):
+        with (
+            patch.object(
+                reporter,
+                "urlopen",
+                side_effect=[self.http_error(502) for _ in range(4)],
+            ) as request,
+            patch.object(reporter.time, "sleep") as sleep,
+        ):
+            with self.assertRaises(HTTPError) as raised:
+                self.api.request("/actions/runs")
+        self.assertEqual(raised.exception.code, 502)
+        self.assertEqual(request.call_count, 4)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4])
+
+    def test_other_http_errors_do_not_retry(self):
+        for code in (401, 403, 404, 429, 500):
+            with self.subTest(code=code):
+                with (
+                    patch.object(
+                        reporter, "urlopen", side_effect=self.http_error(code)
+                    ) as request,
+                    patch.object(reporter.time, "sleep") as sleep,
+                ):
+                    with self.assertRaises(HTTPError) as raised:
+                        self.api.request("/actions/runs")
+                self.assertEqual(raised.exception.code, code)
+                request.assert_called_once()
+                sleep.assert_not_called()
+
+    def test_mutations_are_never_retried(self):
+        for method in ("POST", "PATCH", "DELETE"):
+            with self.subTest(method=method):
+                with (
+                    patch.object(
+                        reporter, "urlopen", side_effect=self.http_error(502)
+                    ) as request,
+                    patch.object(reporter.time, "sleep") as sleep,
+                ):
+                    with self.assertRaises(HTTPError):
+                        self.api.request(
+                            "/statuses/test", method=method, payload={"x": 1}, app=True
+                        )
+                request.assert_called_once()
+                self.assertEqual(request.call_args.args[0].get_method(), method)
+                sleep.assert_not_called()
+
+    def test_get_with_payload_is_not_retried(self):
+        with (
+            patch.object(
+                reporter, "urlopen", side_effect=self.http_error(502)
+            ) as request,
+            patch.object(reporter.time, "sleep") as sleep,
+        ):
+            with self.assertRaises(HTTPError):
+                self.api.request("/test", method="GET", payload={"x": 1})
+        request.assert_called_once()
+        sleep.assert_not_called()
 
 
 if __name__ == "__main__":
