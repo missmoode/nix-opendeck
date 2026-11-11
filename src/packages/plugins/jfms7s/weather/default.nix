@@ -3,6 +3,8 @@
   fetchFromGitHub,
   stdenv,
   cacert,
+  aws-lc,
+  pkg-config,
 
   mkRustOpenDeckPlugin,
   nix-update-script,
@@ -27,6 +29,9 @@ mkRustOpenDeckPlugin (finalAttrs: {
   binaryInstallPath = "opendeck-weather-${stdenv.hostPlatform.rust.rustcTarget}";
 
   cargoHash = "sha256-dNabCncCjO2aJFO5nn0PGRa2sFEHpD177QZQCCRldBo=";
+
+  nativeBuildInputs = [ pkg-config ];
+  buildInputs = [ aws-lc ];
 
   licenseFiles = [
     "LICENSE"
