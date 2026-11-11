@@ -208,7 +208,12 @@ def assess(event, api):
     if kind == "Checks":
         protected += ("flake.nix",)
     else:
-        protected += (".github/ci/targets.nix",)
+        # Reuse selection runs during discovery and can omit native jobs.
+        # Its code is part of the trusted package verification policy.
+        protected += (
+            ".github/ci/targets.nix",
+            ".github/ci/pr_verification_reuse.py",
+        )
     try:
         unchanged = all(
             api.content_sha(file, merge_sha) == api.content_sha(file, pr["base"]["sha"])

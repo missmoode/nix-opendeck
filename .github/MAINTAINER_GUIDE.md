@@ -20,6 +20,7 @@ Paths in this table are relative to `.github/`.
 | File | Responsibility |
 | -- | -- |
 | `ci/targets.nix` | Derive supported native package targets from the flake |
+| `ci/pr_verification_reuse.py` | Conservatively reuse matching, successfully verified plugin jobs from older revisions of the same PR |
 | `workflows/update-packages.yml` | Discover and update packages, validate builds, create PRs and report failures |
 | `ci/package_updates.py` | Isolate updater changes, prepare build targets, validate results and produce diagnostic reports |
 | `ci/upstream_compatibility.py` | Detect downstream-patched updates, route them for manual review and perform optional static compatibility analysis |
@@ -186,6 +187,48 @@ for inspection; non-redistributable outputs must not be published.
 
 A PR that changes no evaluated package outputs can still pass the package verification
 gate after successful target discovery.
+
+### Reusing earlier verification within a PR
+
+Plugin-only matrix jobs can be expensive when a PR updates several unrelated
+packages. On each new revision, discovery may reuse a previous **successful
+plugin job** from the same PR, even if that earlier workflow failed because of
+a different plugin. Core and wrapped OpenDeck jobs are always checked again.
+
+This is not based on a filename diff or an earlier workflow's overall status.
+The read-only Actions API supplies old job conclusions; CI independently
+retrieves the previous synthetic merge commit and re-evaluates its target
+catalogue against the **current trusted base** target selector. Reuse requires
+all of the following:
+
+- The earlier run is completed, belongs to this exact PR, and merges the
+  reported PR head. Only completed `success` or `failure` workflow runs are
+  considered; cancelled runs cannot provide proof.
+- The old merge contains byte-for-byte identical verification workflow,
+  target-selection code, and reuse helper (including file mode) to the
+  current trusted base. If policy changed between runs, reuse is unavailable.
+- Exactly one successful native plugin matrix job has the required system and
+  label, and the earlier evaluation yields the **same attribute, kind, system,
+  label and Nix output path** as the current target.
+
+The lookup is bounded to recent runs, and older synthetic merges may no
+longer be fetchable. API failures, missing evidence, policy changes, and
+reevaluation errors fall back to normal builds. Discovery lists reused jobs
+with links to their old logs, and the gate requires every remaining target
+to pass during the current run. A fully reused plugin-only change may have
+no native jobs; successful discovery is sufficient in that case.
+
+Only metadata and old derivation outputs are reused. This does **not** copy
+old build artifacts, publish PR results, relax sandboxing, or certify the
+previous commit as the current commit. The workflow runs without secrets or an
+Actions API token. Public GitHub workflow-run and job endpoints are queried
+anonymously; historical Nix evaluation receives no token from this workflow.
+Anonymous API rate limits may disable reuse, but cannot skip verification:
+unavailable or incomplete API evidence triggers ordinary native rebuilds.
+
+The optimisation is not used for core/OpenDeck because those jobs also carry
+application-bundle and runtime checks, which have separate verification
+semantics. Do not widen reuse to them without accounting for those checks.
 
 ### Trusted status publication
 

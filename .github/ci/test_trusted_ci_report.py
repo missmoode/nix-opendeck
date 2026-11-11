@@ -146,7 +146,10 @@ class ReporterTests(unittest.TestCase):
             event, _, api = self.setup_case(kind)
             paths = [event["workflow_run"]["path"], *reporter.REPORTER_PATHS]
             if kind == "Package verification":
-                paths.append(".github/ci/targets.nix")
+                paths.extend((
+                    ".github/ci/targets.nix",
+                    ".github/ci/pr_verification_reuse.py",
+                ))
             else:
                 paths.append("flake.nix")
             for path in paths:

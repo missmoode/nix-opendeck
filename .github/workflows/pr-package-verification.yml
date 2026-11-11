@@ -31,6 +31,7 @@ jobs:
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           # Read the target catalogue from the merge's base, not the PR.
           TRUSTED_TARGETS: ${{ runner.temp }}/trusted-targets.nix
         run: |
@@ -107,9 +108,33 @@ jobs:
             | [ .[]
                 | select(.storePath != ($old[.attr] // null)
                     or ($force_runtime and (.kind == "core" or .kind == "opendeck")))
-                | {kind, system, runner, attr, label, redistributable}
+                | {kind, system, runner, attr, label, redistributable, storePath}
               ]
           ' "$RUNNER_TEMP/pr-targets.json" > "$RUNNER_TEMP/changed-targets.json"
+
+          # Reuse only previous successful plugin *jobs* for this exact PR,
+          # after independently re-evaluating their old merge's store paths
+          # and confirming its CI policy matches this trusted base. History
+          # lookup failures always fall back to full native verification.
+          # Public GitHub Actions metadata is queried without credentials.
+          # Historical Nix evaluation is impure and must not share a process
+          # tree with a GitHub token (even a read-only one).
+          if ! python3 .github/ci/pr_verification_reuse.py \
+              "$RUNNER_TEMP/changed-targets.json" \
+              "$RUNNER_TEMP/reused-targets.json"; then
+            echo '::warning::Prior verification lookup failed; rebuilding all selected targets.'
+            printf '[]\n' > "$RUNNER_TEMP/reused-targets.json"
+          fi
+
+          # Defend the gate against stale or malformed reuse records: both
+          # the evaluated attribute and the *current* store path must match.
+          jq -c --slurpfile reused "$RUNNER_TEMP/reused-targets.json" '
+            ($reused[0] | map(select(.attr != null and .storePath != null)
+              | {key: .attr, value: .storePath}) | from_entries) as $previous
+            | [ .[]
+                | select(.kind != "plugin" or .storePath != ($previous[.attr] // null))
+              ]
+          ' "$RUNNER_TEMP/changed-targets.json" > "$RUNNER_TEMP/pending-targets.json"
 
           # Group changed core/wrapper targets by platform so they share a Nix
           # store and run in dependency order. Keep plugins in separate jobs.
@@ -125,9 +150,9 @@ jobs:
                   }))
             + ([.[] | select(.kind == "plugin")]
               | map({system, runner, label, targets: [.] }))
-          ' "$RUNNER_TEMP/changed-targets.json" > "$RUNNER_TEMP/check-jobs.json"
+          ' "$RUNNER_TEMP/pending-targets.json" > "$RUNNER_TEMP/check-jobs.json"
 
-          echo "targets=$(cat "$RUNNER_TEMP/changed-targets.json")" >> "$GITHUB_OUTPUT"
+          echo "targets=$(cat "$RUNNER_TEMP/pending-targets.json")" >> "$GITHUB_OUTPUT"
           echo "jobs=$(cat "$RUNNER_TEMP/check-jobs.json")" >> "$GITHUB_OUTPUT"
 
           {
@@ -135,15 +160,25 @@ jobs:
             echo
             echo "- PR targets: $(jq 'length' "$RUNNER_TEMP/pr-targets.json")"
             echo "- Changed/new targets: $(jq 'length' "$RUNNER_TEMP/changed-targets.json")"
+            echo "- Reused plugin verifications: $(jq 'length' "$RUNNER_TEMP/reused-targets.json")"
+            echo "- Targets requiring native verification: $(jq 'length' "$RUNNER_TEMP/pending-targets.json")"
             echo "- Native runner jobs: $(jq 'length' "$RUNNER_TEMP/check-jobs.json")"
             echo
-            if [[ "$(jq 'length' "$RUNNER_TEMP/changed-targets.json")" -eq 0 ]]; then
-              echo 'No changed package outputs require a reproducibility rebuild.'
+            if [[ "$(jq 'length' "$RUNNER_TEMP/reused-targets.json")" -gt 0 ]]; then
+              echo '### Reused successful jobs from this PR'
+              jq -r '.[] | "- `\(.system)` / `\(.label)` — [previous job](\(.jobUrl))"' \
+                "$RUNNER_TEMP/reused-targets.json"
+              echo
+            fi
+            if [[ "$(jq 'length' "$RUNNER_TEMP/pending-targets.json")" -eq 0 ]]; then
+              echo 'No targets remain for native verification.'
             else
-              jq -r '.[] | "- `\(.system)` / `\(.label)`"' "$RUNNER_TEMP/changed-targets.json"
+              echo '### Targets requiring native verification'
+              jq -r '.[] | "- `\(.system)` / `\(.label)`"' "$RUNNER_TEMP/pending-targets.json"
             fi
             echo
             echo 'Selection compares evaluated output paths; removed targets are not rebuilt.'
+            echo 'Prior success is reused only after verifying the old CI policy and exact output path.'
           } >> "$GITHUB_STEP_SUMMARY"
   check:
     name: 'Rebuild: ${{ matrix.system }} / ${{ matrix.label }}'
