@@ -33,6 +33,16 @@ mkRustOpenDeckPlugin (finalAttrs: {
   # localhost, which the Darwin build sandbox blocks by default.
   __darwinAllowLocalNetworking = true;
 
+  # The integration tests spawn the real plugin with an ephemeral UDP
+  # port. Bind that test-only socket to loopback on Darwin so the
+  # sandbox permits it.
+  postPatch = lib.optionalString stdenv.hostPlatform.isDarwin ''
+    substituteInPlace crates/plugin/src/registry.rs \
+      --replace-fail \
+        'SocketAddr::from(([0, 0, 0, 0], port))' \
+        'SocketAddr::from(([127, 0, 0, 1], port))'
+  '';
+
   # The integration tests spawn the real plugin binary, which writes
   # logs through XDG_DATA_HOME. Give it a writable directory in the
   # Nix build sandbox.
