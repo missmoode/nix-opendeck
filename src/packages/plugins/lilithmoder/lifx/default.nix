@@ -29,6 +29,10 @@ mkRustOpenDeckPlugin (finalAttrs: {
       "bin/lifx-opendeck-plugin";
   assetsDir = null;
 
+  # The integration tests start a mock OpenDeck WebSocket server on
+  # localhost, which the Darwin build sandbox blocks by default.
+  __darwinAllowLocalNetworking = true;
+
   # The integration tests spawn the real plugin binary, which writes
   # logs through XDG_DATA_HOME. Give it a writable directory in the
   # Nix build sandbox.
