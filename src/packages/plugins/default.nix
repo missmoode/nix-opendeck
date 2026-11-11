@@ -69,6 +69,42 @@ let
       };
     };
 
+    ibanks42 = {
+      m18 = pkgs.callPackage ./ibanks42/m18 {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
+    dwot = {
+      keylight = pkgs.callPackage ./dwot/keylight {
+        inherit (pluginLib) mkNpmOpenDeckPlugin;
+      };
+    };
+
+    lilithmoder = {
+      lifx = pkgs.callPackage ./lilithmoder/lifx {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
+    mroneleg = {
+      kde-connect = pkgs.callPackage ./mroneleg/kde-connect {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
+    mrredstonia = {
+      clocks = pkgs.callPackage ./mrredstonia/clocks {
+        inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+      };
+    };
+
+    tonyheadband = {
+      steam = pkgs.callPackage ./tonyheadband/steam {
+        inherit (pluginLib) mkPnpmOpenDeckPlugin;
+      };
+    };
+
     openactionplugins = {
       counter = pkgs.callPackage ./openactionplugins/counter {
         inherit (pluginLib) mkRustOpenDeckPlugin;
@@ -160,7 +196,17 @@ let
     };
 
     mdvictor = {
+      graphs = pkgs.callPackage ./mdvictor/graphs {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+
       volume-controller = pkgs.callPackage ./mdvictor/volume-controller {
+        inherit (pluginLib) mkRustOpenDeckPlugin;
+      };
+    };
+
+    mean-ui-thread = {
+      stream-dock-xl = pkgs.callPackage ./mean-ui-thread/stream-dock-xl {
         inherit (pluginLib) mkRustOpenDeckPlugin;
       };
     };
