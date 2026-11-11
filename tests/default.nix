@@ -31,6 +31,12 @@ in
         })
         // (import ./wrap-opendeck {
           inherit config pkgs;
-        });
+        })
+        // {
+          traditional-entrypoints = import ./traditional.nix {
+            inherit pkgs;
+            inherit (pkgs) lib;
+          };
+        };
     };
 }

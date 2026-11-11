@@ -6,15 +6,17 @@
   opendeck,
   core,
   starterpack,
+  traditionalModule,
+  traditionalOpendeck,
 }:
 
 let
-  mkConfiguration =
-    options:
+  mkConfigurationWith =
+    selectedModule: options:
     homeManager.lib.homeManagerConfiguration {
       inherit pkgs;
       modules = [
-        module
+        selectedModule
         {
           home.username = "test";
           home.homeDirectory = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/test" else "/home/test";
@@ -23,6 +25,12 @@ let
         }
       ];
     };
+
+  mkConfiguration = mkConfigurationWith module;
+
+  traditionalEnabled = mkConfigurationWith traditionalModule {
+    enable = true;
+  };
 
   disabled = mkConfiguration { enable = false; };
   enabled = mkConfiguration { enable = true; };
@@ -119,6 +127,14 @@ assert lib.assertMsg (
 assert lib.assertMsg (builtins.any (
   p: p.outPath == opendeck.outPath
 ) enabled.config.home.packages) "Enabled module should install the default package";
+
+assert lib.assertMsg (lib.any (p: p.outPath == traditionalOpendeck.outPath)
+  traditionalEnabled.config.home.packages
+) "Traditional Home Manager module should install its default package";
+
+assert lib.assertMsg
+  (lib.hasInfix "externally-managed-plugins" traditionalEnabled.config.home.activation.opendeck.data)
+  "Traditional Home Manager module should provide plugin activation";
 
 assert lib.assertMsg (
   !builtins.any (p: p.outPath == core.outPath) pluginsOnly.config.home.packages
