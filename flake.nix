@@ -51,7 +51,6 @@
             lib
             pkgs
             ;
-          pluginLib = (import ./src/lib/plugins) final;
         })
         // {
           formatter = pkgs.nixfmt-tree.override {

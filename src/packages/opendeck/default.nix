@@ -191,6 +191,11 @@ rustPlatform.buildRustPackage (
       "--no-sign"
     ];
 
+    preCheck = ''
+      # Validate the Svelte/TypeScript frontend.
+      deno task check
+    '';
+
     nativeBuildInputs = [
       cargo-tauri.hook
       deno

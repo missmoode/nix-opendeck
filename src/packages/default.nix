@@ -1,9 +1,9 @@
 {
   inputs,
-  final,
-  lib,
   pkgs,
-  pluginLib,
+  final ? pkgs,
+  lib ? pkgs.lib,
+  pluginLib ? (import ../lib/plugins) final,
 }:
 let
   denoPkgs = import inputs.deno-nixpkgs {

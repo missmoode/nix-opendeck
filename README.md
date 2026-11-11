@@ -39,6 +39,9 @@ Add nix-opendeck to your flake inputs:
 opendeck.url = "github:missmoode/nix-opendeck";
 ```
 
+Not using flakes? See [Traditional Nix](#traditional-nix-without-flakes) for
+installation instructions.
+
 > [!NOTE]
 > These examples assume your flake inputs are available to your NixOS or Home Manager
 > modules. If you haven't already configured this, pass `inputs` through NixOS's
@@ -115,7 +118,7 @@ rules.
 
 ## Packages and Scope
 
-This flake provides three OpenDeck packages:
+nix-opendeck provides three OpenDeck packages:
 
 - `opendeck-core`: OpenDeck with Nix compatibility patches, without bundled plugins.
 - `opendeck`: The default package, including the upstream StarterPack plugin.
@@ -167,20 +170,14 @@ On Linux (including NixOS), OpenDeck requires setting appropriate permissions to
 supported USB devices, normally provided through udev rules. See
 [Device Access](#device-access) for configuration instructions.
 
-### Standalone OpenDeck
+For declarative installation, see [Overlay](#overlay) for NixOS or
+[Home Manager](#home-manager-module) for managing plugins and settings.
 
-If you just want the package, and don't care about the module or flake stuff:
+### Flake installation
 
-```bash
-nix profile add github:missmoode/nix-opendeck#opendeck
-```
+#### Flake input
 
-On Linux, this won't automatically configure device permissions: you'll need to
-[configure device access](#device-access) yourself.
-
-### Flakes
-
-Import the flake as normal:
+Add nix-opendeck to your flake inputs:
 
 ```nix
 opendeck = {
@@ -188,10 +185,65 @@ opendeck = {
 
   # Optionally, bring your own nixpkgs.
   # This may prevent binary cache hits.
-  # 
   # inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
+
+#### Standalone installation
+
+To install OpenDeck into your user profile:
+
+```bash
+nix profile add github:missmoode/nix-opendeck#opendeck
+```
+
+See [Usage](#usage) for information on declaratively installing the package.
+
+### Traditional Nix (without flakes)
+
+nix-opendeck also supports traditional Nix installations without enabling flakes. The
+same packages, plugins, and Home Manager module are available through `default.nix`.
+
+By default, nix-opendeck uses your configured Nixpkgs rather than its own pinned
+version. Its independently pinned Deno dependency is still read from `flake.lock`.
+
+#### Obtaining nix-opendeck
+
+You can use a local checkout, or fetch a fixed revision in a Nix expression:
+
+```nix
+opendeckSrc = fetchTarball {
+  url = "https://github.com/missmoode/nix-opendeck/archive/<commit>.tar.gz";
+  sha256 = "<hash>";
+};
+```
+
+Replace `<commit>` with the Git commit you want to use, and obtain its source hash with:
+
+```bash
+nix-prefetch-url --unpack \
+  https://github.com/missmoode/nix-opendeck/archive/<commit>.tar.gz
+```
+
+Make sure to update both the revision and hash when you want to update nix-opendeck.
+
+#### Standalone installation
+
+From a checkout of this repository, install OpenDeck into your user profile:
+
+```bash
+nix-env -f . -iA opendeck
+```
+
+Individual packages can also be built using `nix-build`:
+
+```bash
+nix-build -A opendeck
+nix-build -A opendeck-plugins.openactionplugins.mpris
+```
+
+These commands use your configured `<nixpkgs>` source, which must be available through
+`NIX_PATH`.
 
 ### Binary Cache
 
@@ -229,7 +281,9 @@ extra-trusted-public-keys = nix-opendeck.cachix.org-1:twvVjvv6Xm9H/m9sD2YQfIDoeU
 > new cache configuration hasn't yet been activated.
 >
 > Cache hits also depend on matching Nix derivations. Overriding this flake's `nixpkgs`
-> input with `inputs.nixpkgs.follows` may result in cache misses.
+> input with `inputs.nixpkgs.follows` may result in cache misses. For traditional Nix,
+> `overlay-pinned.nix` may improve cache compatibility over `overlay.nix`, which uses
+> your own Nixpkgs. Neither overlay enables the cache automatically.
 
 ## Usage
 
@@ -341,9 +395,9 @@ configuration. See [Quick Start](#quick-start) for an example.
 
 #### Package configuration
 
-By default, the module installs this flake's `opendeck` package. You can change
-`programs.opendeck.package` to use something else, such as `opendeck-core`. If you do
-that and still want StarterPack, you'll need to declare
+By default, the module installs nix-opendeck's default `opendeck` package. You can
+change `programs.opendeck.package` to use something else, such as `opendeck-core`. If
+you do that and still want StarterPack, you'll need to declare
 `opendeck-plugins.nekename.starterpack` in `programs.opendeck.plugins` yourself.
 
 If `programs.opendeck.installPackage` is `false`, `programs.opendeck.package` should
@@ -390,8 +444,8 @@ restarting OpenDeck. It does not reload plugins whose store paths are unchanged.
 Plugin reloads are enabled by default. Set
 `programs.opendeck.reloadOnPluginChanges = false` to disable them, or
 `programs.opendeck.restartOnPluginChanges = true` to request a restart instead of
-individual reloads. Restart takes precedence when both are enabled. This does not
-detect changes to bundled plugins in `programs.opendeck.package`.
+individual reloads. Restart takes precedence when both are enabled. This does not detect
+changes to bundled plugins in `programs.opendeck.package`.
 
 Changes to declaratively managed settings may not take effect until OpenDeck is
 restarted. Set `programs.opendeck.restartOnSettingsChanges = true` to restart OpenDeck
@@ -402,6 +456,34 @@ When automatic restarting is disabled, a running OpenDeck instance may retain it
 previous settings and overwrite the declarative changes when it next saves its settings.
 Neither reload nor restart notifications will launch OpenDeck if it isn't already
 running.
+
+#### Without flakes
+
+The Home Manager module can also be imported from a local checkout or a pinned source:
+
+```nix
+{ pkgs, ... }:
+let
+  opendeck = import /path/to/nix-opendeck {
+    inherit pkgs;
+  };
+in
+{
+  imports = [ opendeck.homeManagerModules.default ];
+
+  programs.opendeck = {
+    enable = true;
+
+    plugins = with opendeck.opendeck-plugins; [
+      openactionplugins.mpris
+    ];
+  };
+}
+```
+
+Replace `/path/to/nix-opendeck` with your checkout or a
+[pinned source](#obtaining-nix-opendeck). The same Home Manager options are available
+with or without flakes.
 
 ### Device Access
 
@@ -483,6 +565,8 @@ Overlays are optional. The Home Manager module and NixOS udev configuration work
 them, but an overlay lets you access OpenDeck, its plugins, and their udev rules through
 your existing `pkgs` argument.
 
+#### With flakes
+
 The flake provides two overlays which expose OpenDeck, its plugins, the `wrapOpenDeck`
 helper, and their `udev` rules through your existing `pkgs` argument:
 
@@ -563,6 +647,35 @@ Manager configuration:
 >
 > Custom package overrides may also produce different store paths and require local
 > compilation.
+
+#### Without flakes
+
+To install OpenDeck declaratively and use its overlay, add the following to your
+`configuration.nix`:
+
+```nix
+{ pkgs, ... }:
+let
+  opendeckSrc = fetchTarball {
+    url = "https://github.com/missmoode/nix-opendeck/archive/<commit>.tar.gz";
+    sha256 = "<hash>";
+  };
+in
+{
+  nixpkgs.overlays = [
+    (import (opendeckSrc + "/overlay.nix"))
+  ];
+
+  environment.systemPackages = [ pkgs.opendeck ];
+  services.udev.packages = [ pkgs.opendeck.udev ];
+}
+```
+
+For the commit and hash placeholders, see
+[Obtaining nix-opendeck](#obtaining-nix-opendeck).
+
+The default `overlay.nix` uses your system's Nixpkgs. Alternatively, use
+`overlay-pinned.nix` to build against nix-opendeck's locked Nixpkgs revision.
 
 ## Packaging Details
 
@@ -679,9 +792,9 @@ check their upstream sources for more information.
 
 ### Action & Integration Plugins
 
-Not every plugin is available on every platform. The flake filters the available plugins
-based on their supported systems, so for example plugins focused on Linux-specific
-integrations like PipeWire are not available on macOS.
+Not every plugin is available on every platform. Available plugins are filtered based on
+their supported systems, so for example plugins focused on Linux-specific integrations
+like PipeWire are not available on macOS.
 
 <!--
 | [Hyprstream](https://github.com/danmaxis/hyprstream) | `opendeck-plugins.danmaxis.hyprstream` | Hyprland | Action-dependent: `grim`, `slurp`, `wl-copy`, `wf-recorder`, `makoctl` / `dunstctl` |
