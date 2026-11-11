@@ -24,6 +24,18 @@ let
     inherit mkOpenDeckPlugin;
   };
 
+  mkPnpmOpenDeckPlugin = import ./mkPnpmOpenDeckPlugin.nix {
+    inherit (pkgs)
+      stdenv
+      fetchPnpmDeps
+      pnpm_10
+      pnpmConfigHook
+      pnpmBuildHook
+      nodejs
+      ;
+    inherit mkOpenDeckPlugin;
+  };
+
   mkYarnOpenDeckPlugin = import ./mkYarnOpenDeckPlugin.nix {
     inherit (pkgs)
       yarnConfigHook
@@ -46,6 +58,7 @@ in
     mkRustOpenDeckPlugin
     mkNpmOpenDeckPlugin
     mkYarnOpenDeckPlugin
+    mkPnpmOpenDeckPlugin
     mkPrebuiltOpenDeckPlugin
     ;
 }

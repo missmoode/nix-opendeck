@@ -45,6 +45,7 @@ package set first, and then the plugin definition.
 | `mkPrebuiltOpenDeckPlugin` | Sources or release archives containing an already-built plugin | `pluginDir` |
 | `mkRustOpenDeckPlugin` | Plugins compiled with Cargo | `binaryName`, `binaryInstallPath`; optionally `binaryPath`, `assetsDir` |
 | `mkNpmOpenDeckPlugin` | Plugins built using npm | `pluginDir`, and the usual `buildNpmPackage` inputs such as `npmDepsHash` |
+| `mkPnpmOpenDeckPlugin` | Plugins built using pnpm | `pluginDir`, `pnpmDepsHash`; optionally `pnpm`, `pnpmBuildScript` |
 | `mkYarnOpenDeckPlugin` | Plugins built using Yarn | `pluginDir`, `yarnDepsHash`; optionally `yarnBuildScript` |
 | `mkOpenDeckPlugin` | Common installation logic for custom derivations | `pluginId`, `installPlugin` |
 

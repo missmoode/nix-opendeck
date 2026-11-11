@@ -828,6 +828,12 @@ like PipeWire are not available on macOS.
 | [Volume Controller][volume-controller] | `opendeck-plugins.mdvictor.volume-controller` | PulseAudio / PipeWire (via pipewire-pulse) | - |
 | [Web Requests][web-requests] | `opendeck-plugins.data-enabler.web-requests` | - | - |
 | [XIVDeck] | `opendeck-plugins.kazwolfe.xivdeck` | FFXIV / Dalamud | - |
+| [KDE Connect][kde-connect] | `opendeck-plugins.mroneleg.kde-connect` | KDE Connect daemon (CLI for SMS) | - |
+| [Hardware Graphs][hardware-graphs] | `opendeck-plugins.mdvictor.graphs` | Linux hardware sensors | - |
+| [Steam Dashboard Controller][steam-dashboard] | `opendeck-plugins.tonyheadband.steam` | Native Steam client | `xdg-open` |
+| [Key Light Direct][keylight-direct] | `opendeck-plugins.dwot.keylight` | Elgato Key Lights over LAN | - |
+| [LIFX] | `opendeck-plugins.lilithmoder.lifx` | LIFX smart lighting over LAN | - |
+| [Clocks] | `opendeck-plugins.mrredstonia.clocks` | - | - |
 
 ### Device Support Plugins
 
@@ -846,6 +852,8 @@ See [Device Access](#device-access) for more information on installing udev rule
 | [Ajazz AKP03 / Mirabox N3][akp03] | `opendeck-plugins."4ndv".akp03` | AKP03, Mirabox N3 and compatible devices | Udev rules (Linux) |
 | [Ajazz AKP153 / Mirabox HSV293S][akp153] | `opendeck-plugins."4ndv".akp153` | AKP153, Mirabox HSV293S and compatible devices | Udev rules (Linux) |
 | [Ajazz AKP05 / Mirabox N4][akp05] | `opendeck-plugins.ambiso.akp05` | AKP05, Mirabox N4 and compatible devices | Udev rules (Linux) |
+| [Mirabox M18 / VSD Inside M18][m18] | `opendeck-plugins.ibanks42.m18` | VSD Inside M18, Mirabox M18 and M18 EN | Udev rules (Linux) |
+| [Mirabox Stream Dock XL][stream-dock-xl] | `opendeck-plugins.mean-ui-thread.stream-dock-xl` | VSD Inside / Mirabox Stream Dock XL | Udev rules (Linux) |
 
 ## Plugin packaging and contributions
 
@@ -945,8 +953,14 @@ test everything in this repo that can be tested on a Stream Deck Mk2 and NixOS o
 [akp05]: https://github.com/ambiso/opendeck-akp05
 [akp153]: https://github.com/4ndv/opendeck-akp153
 [analog-clock]: https://github.com/elgatosf/streamdeck-analogclock/
+[clocks]: https://github.com/MrRedstonia/opendeck-clocks
+[hardware-graphs]: https://github.com/mdvictor/opendeck-graphs
 [homeassistant]: https://github.com/cgiesche/streamdeck-homeassistant
 [jfms7sweather]: https://github.com/jfms7s/opendeck-weather
+[kde-connect]: https://github.com/mroneleg/kde-connect-opendeck
+[keylight-direct]: https://github.com/dwot/opendeck-keylight
+[lifx]: https://github.com/lilithmoder/lifx-opendeck-plugin
+[m18]: https://github.com/ibanks42/opendeck-m18
 [multi-obs-controller]: https://github.com/theca11/multi-obs-controller
 [oacounter]: https://github.com/OpenActionPlugins/counter
 [oadesktopentry]: https://github.com/OpenActionPlugins/desktopentry
@@ -961,6 +975,8 @@ test everything in this repo that can be tested on a Stream Deck Mk2 and NixOS o
 [redline-monitor]: https://github.com/kahikara/opendeck-redline-monitor
 [rotary-command]: https://github.com/babs/opendeck-plugins-rotary-command
 [starterpack]: https://github.com/nekename/OpenDeck/tree/main/plugins/com.amansprojects.starterpack.sdPlugin
+[steam-dashboard]: https://github.com/TonyHeadband/opendeck-steam-plugin
+[stream-dock-xl]: https://github.com/mean-ui-thread/opendeck-stream-dock-xl
 [tikclock]: https://github.com/GDWhisper/opendeck-tikclock
 [tomato-timer]: https://github.com/gallowaylabs/streamdeck-tomato-timer
 [uinput-simulation]: https://github.com/Havner/uinput-simulation
