@@ -13,6 +13,8 @@
 
   deno,
   pkg-config,
+  libgit2,
+  zstd,
 
   udev,
   dbus,
@@ -237,7 +239,11 @@ rustPlatform.buildRustPackage (
         "$out/share/licenses/${finalAttrs.pname}/LICENSE.md"
     '';
 
-    buildInputs = lib.optionals stdenv.hostPlatform.isLinux (
+    buildInputs = [
+      libgit2
+      zstd
+    ]
+    ++ lib.optionals stdenv.hostPlatform.isLinux (
       gstPlugins
       ++ [
         dbus
