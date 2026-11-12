@@ -207,6 +207,9 @@ same packages, plugins, and Home Manager module are available through `default.n
 By default, nix-opendeck uses your configured Nixpkgs rather than its own pinned
 version. Its independently pinned Deno dependency is still read from `flake.lock`.
 
+<details>
+<summary>Show non-flake installation instructions</summary>
+
 #### Obtaining nix-opendeck
 
 You can use a local checkout, or fetch a fixed revision in a Nix expression:
@@ -244,6 +247,8 @@ nix-build -A opendeck-plugins.openactionplugins.mpris
 
 These commands use your configured `<nixpkgs>` source, which must be available through
 `NIX_PATH`.
+
+</details>
 
 ### Binary Cache
 
@@ -316,7 +321,10 @@ in
 }
 ```
 
-If you've applied an [overlay](#overlay), you can instead use `pkgs.wrapOpenDeck`:
+<details>
+<summary>Using an overlay</summary>
+
+With an [overlay](#overlay) applied, you can use `pkgs.wrapOpenDeck`:
 
 ```nix
 { pkgs, ... }:
@@ -337,8 +345,13 @@ in
 }
 ```
 
-**Using Home Manager:** You can also set `programs.opendeck.package` to a custom bundle,
-with or without an overlay. Additional plugins can still be managed separately through
+</details>
+
+<details>
+<summary>Using Home Manager</summary>
+
+You can also set `programs.opendeck.package` to a custom bundle, with or without an
+overlay. Additional plugins can still be managed separately through
 `programs.opendeck.plugins`.
 
 ```nix
@@ -366,6 +379,8 @@ in
   };
 }
 ```
+
+</details>
 
 The examples using `environment.systemPackages` demonstrate NixOS installation, but
 `wrapOpenDeck` itself is also available on nix-darwin and standalone Nix installations.
@@ -441,6 +456,9 @@ Home Manager normally reloads individual plugins when their symlinks are added, 
 or changed. The reload preserves saved settings and profile assignments without
 restarting OpenDeck. It does not reload plugins whose store paths are unchanged.
 
+<details>
+<summary>Configure reloads and restarts</summary>
+
 Plugin reloads are enabled by default. Set
 `programs.opendeck.reloadOnPluginChanges = false` to disable them, or
 `programs.opendeck.restartOnPluginChanges = true` to request a restart instead of
@@ -456,6 +474,8 @@ When automatic restarting is disabled, a running OpenDeck instance may retain it
 previous settings and overwrite the declarative changes when it next saves its settings.
 Neither reload nor restart notifications will launch OpenDeck if it isn't already
 running.
+
+</details>
 
 #### Without flakes
 
@@ -545,6 +565,9 @@ You could symlink the plugins from the Nix store (or elsewhere) directly into th
 the patched `opendeck` should be able to use them. However, without the Home Manager
 module they will not be protected from modification through the GUI.
 
+<details>
+<summary>Reloading manually managed plugins</summary>
+
 If you manage plugin symlinks yourself, notify a running OpenDeck instance after
 changing or removing a plugin:
 
@@ -558,6 +581,8 @@ whole application instead. Neither command starts an inactive OpenDeck instance.
 
 If you would rather bundle your plugins than manage these symlinks, see
 [Custom OpenDeck packages](#custom-opendeck-packages).
+
+</details>
 
 ### Overlay
 
@@ -598,6 +623,9 @@ On NixOS or nix-darwin, add your chosen overlay to your system configuration:
   ];
 }
 ```
+
+<details>
+<summary>Using the overlay with Home Manager</summary>
 
 If you're just using Home Manager, you can configure an overlay through your own Nixpkgs
 instance.
@@ -648,10 +676,15 @@ Manager configuration:
 > Custom package overrides may also produce different store paths and require local
 > compilation.
 
+</details>
+
 #### Without flakes
 
 To install OpenDeck declaratively and use its overlay, add the following to your
 `configuration.nix`:
+
+<details>
+<summary>Show configuration example</summary>
 
 ```nix
 { pkgs, ... }:
@@ -676,6 +709,8 @@ For the commit and hash placeholders, see
 
 The default `overlay.nix` uses your system's Nixpkgs. Alternatively, use
 `overlay-pinned.nix` to build against nix-opendeck's locked Nixpkgs revision.
+
+</details>
 
 ## Packaging Details
 
@@ -753,6 +788,9 @@ their package resources, leaving existing user installations untouched.
 The Home Manager module prevents declaring a plugin separately when it is already
 bundled, and refuses to overwrite existing user-installed plugins.
 
+<details>
+<summary>Plugin version precedence and removal behaviour</summary>
+
 When a plugin exists both in the package and in the user’s plugin directory, the
 packaged version is selected when its manifest version is **newer than or equal to** the
 user’s version; a newer user version wins. If the versions cannot be compared,
@@ -764,6 +802,8 @@ again if the plugin is removed from the package. Configuration backups retain or
 user-installed plugins, while managed plugin symlinks and package resources are handled
 separately. If removing a newer user-installed plugin reveals a bundled version, restart
 OpenDeck to refresh resources in existing profile instances.
+
+</details>
 
 Upstream OpenDeck includes the StarterPack plugin by default, so nix-opendeck's
 `opendeck` package does as well. The `opendeck-core` package includes no bundled
