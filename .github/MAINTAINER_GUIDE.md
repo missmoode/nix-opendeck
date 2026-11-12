@@ -430,7 +430,11 @@ manually rather than assuming each package has its own bot PR.
 ### Failed update reporting
 
 The updater maintains an `Automated package update failures` issue to report known
-package failures, with links to the relevant workflow runs and diagnostic artifacts.
+package failures, with links to the relevant workflow runs and diagnostic artifacts. The
+workflow also attempts to assign `UPDATE_MAINTAINERS` when failures are present,
+including on an existing issue. Assignment is best-effort and does not affect update
+validation or failure reporting; edits to an already-assigned issue may not trigger new
+GitHub notifications.
 
 Source-update artifacts are retained even when a subsequent native build fails. Build
 reports may include additional dependency-update edits that are not present in the
