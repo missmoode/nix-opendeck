@@ -663,18 +663,17 @@ Manager configuration:
 }
 ```
 
-> [!NOTE]
-> If Home Manager uses a separate Nixpkgs instance on systems integrated with NixOS or
-> nix-darwin, the overlay must also be applied to that instance. When
-> `home-manager.useGlobalPkgs = true`, the system-level overlay is shared automatically.
->
-> The Home Manager module uses nix-opendeck's own `opendeck` package by default,
-> independently of the chosen overlay. Setting
-> `programs.opendeck.package = pkgs.opendeck` ensures that it uses the overlay-provided
-> package.
->
-> Custom package overrides may also produce different store paths and require local
-> compilation.
+If Home Manager uses a separate Nixpkgs instance on systems integrated with NixOS or
+nix-darwin, the overlay must also be applied to that instance. When
+`home-manager.useGlobalPkgs = true`, the system-level overlay is shared automatically.
+
+The Home Manager module uses nix-opendeck's own `opendeck` package by default,
+independently of the chosen overlay. Setting
+`programs.opendeck.package = pkgs.opendeck` ensures that it uses the overlay-provided
+package.
+
+Custom package overrides may also produce different store paths and require local
+compilation.
 
 </details>
 
