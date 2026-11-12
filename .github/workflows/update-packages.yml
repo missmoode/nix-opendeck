@@ -404,6 +404,7 @@ jobs:
 
 
 
+
            steps.finish.outcome != 'success' ||
            steps.finish.outputs.infrastructure_failure == 'true')
         shell: bash
@@ -518,16 +519,21 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           UPDATE_MAINTAINERS: ${{ vars.UPDATE_MAINTAINERS }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
           set -euo pipefail
+          if [[ -z "$APP_SLUG" ]]; then
+            echo '::error::Cannot identify the automation App that owns failure issues.'
+            exit 1
+          fi
           state="$RUNNER_TEMP/package-update-state.json"
           title='Automated package update failures'
-          issue=$(gh issue list --state all --limit 100 \
+          # Closed incidents remain closed. A later failure opens a new issue.
+          issue=$(gh issue list --app "$APP_SLUG" --state open --limit 100 \
             --search 'Automated package update failures in:title' \
-            --json number,title,state \
+            --json number,title \
             --jq 'map(select(.title == "Automated package update failures")) | first // {}')
           number=$(jq -r '.number // empty' <<< "$issue")
-          status=$(jq -r '.state // empty' <<< "$issue")
 
           if jq -e '.packageFailures | length > 0' "$state" > /dev/null; then
             body="$RUNNER_TEMP/package-update-issue.md"
@@ -541,11 +547,18 @@ jobs:
                 --label "updates,automatically generated,automated failure report")
               number=${created##*/}
             else
-              existing_body=$(gh issue view "$number" --json body --jq .body)
-              if [[ "$status" == CLOSED ]]; then
-                gh issue reopen "$number"
+              previous_body="$RUNNER_TEMP/package-update-previous-issue.md"
+              gh issue view "$number" --json body --jq .body > "$previous_body"
+              existing_body=$(cat "$previous_body")
+              status_comment="$RUNNER_TEMP/package-update-status.md"
+              python3 .github/ci/package_updates.py issue-status \
+                --state "$state" --previous-body "$previous_body" --output "$status_comment"
+              # Publish the status before advancing the tracked failure set.
+              # If commenting fails, the next run can retry from the old body.
+              if [[ -s "$status_comment" ]]; then
+                gh issue comment "$number" --body-file "$status_comment"
               fi
-              if [[ "$status" == CLOSED || "$existing_body" != *"$marker"* ]]; then
+              if [[ "$existing_body" != *"$marker"* ]]; then
                 gh issue edit "$number" --body-file "$body"
               fi
             fi
@@ -557,7 +570,15 @@ jobs:
                 echo "::warning::Could not assign maintainers to failure issue #$number."
               fi
             fi
-          elif [[ -n "$number" && "$status" == OPEN ]]; then
+          elif [[ -n "$number" ]]; then
+            previous_body="$RUNNER_TEMP/package-update-previous-issue.md"
+            status_comment="$RUNNER_TEMP/package-update-status.md"
+            gh issue view "$number" --json body --jq .body > "$previous_body"
+            python3 .github/ci/package_updates.py issue-status \
+              --state "$state" --previous-body "$previous_body" --output "$status_comment"
+            test -s "$status_comment"
+            # Never close the incident without recording its final status.
+            gh issue comment "$number" --body-file "$status_comment"
             gh issue close "$number" --reason completed
           fi
       # Only changed-version builds with concrete patch-related diagnostics
@@ -666,8 +687,10 @@ jobs:
 
 
 
+
            steps.issues.outcome != 'success') ||
           steps.failure-select.outcome == 'failure' || steps.failure-reserve.outcome == 'failure' || steps.failure-publish.outcome == 'failure' || steps.pr.outcome == 'failure' || (steps.audit-select.outcome == 'success' &&
+
 
 
 
@@ -681,9 +704,11 @@ jobs:
 
 
 
+
            steps.audit-select.outputs.review_count != '0' &&
            steps.review-pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
+
 
 
 

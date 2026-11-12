@@ -334,6 +334,106 @@ class FinalizationTests(unittest.TestCase):
         self.assertFalse(state["ready"])
         self.assertFalse(state["infrastructureFailure"])
         self.assertEqual(state["packageFailures"], [])
+        self.assertEqual(state["failedPackages"], [])
+        self.assertEqual(state["catalogPackages"], ["test/alpha"])
+
+
+class IssueStatusTests(unittest.TestCase):
+    @staticmethod
+    def metadata(labels):
+        payload = json.dumps(sorted(labels)).encode()
+        encoded = package_updates.base64.urlsafe_b64encode(payload).decode()
+        return f"<!-- nix-opendeck-failed-packages:{encoded} -->\n"
+
+    def status(self, previous, *, failing, catalog, infrastructure=False):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / "state.json"
+            old = root / "old.md"
+            comment = root / "comment.md"
+            package_updates.save(
+                state,
+                {
+                    "infrastructureFailure": infrastructure,
+                    "packageFailures": [f"{p}: updater failed" for p in failing],
+                    "failedPackages": failing,
+                    "catalogPackages": catalog,
+                },
+            )
+            old.write_text(previous)
+            package_updates.render_failure_status(state, old, comment)
+            return comment.read_text()
+
+    def test_only_changes_in_failure_set_get_a_comment(self):
+        previous = self.metadata(["a", "b"])
+        self.assertEqual(
+            self.status(previous, failing=["a", "b"], catalog=["a", "b"]), ""
+        )
+        comment = self.status(previous, failing=["b", "c"], catalog=["a", "b", "c"])
+        self.assertIn("Newly failing", comment)
+        self.assertIn("No longer failing", comment)
+        self.assertIn("`a`", comment)
+        self.assertIn("`c`", comment)
+        self.assertIn("Outstanding failures:** 2", comment)
+        self.assertNotIn("will now be closed", comment)
+
+    def test_unchanged_failure_does_not_comment_when_error_changes(self):
+        previous = self.metadata(["a"])
+        self.assertEqual(self.status(previous, failing=["a"], catalog=["a"]), "")
+
+    def test_removed_package_is_not_reported_as_fixed(self):
+        previous = self.metadata(["a", "b"])
+        comment = self.status(previous, failing=["b"], catalog=["b"])
+        self.assertIn("No longer in the updater catalogue", comment)
+        self.assertIn("`a`", comment)
+        self.assertNotIn("No longer failing in the latest run", comment)
+        closing = self.status(previous, failing=[], catalog=[])
+        self.assertIn("not verified as fixed", closing)
+        self.assertIn("will now be closed", closing)
+        self.assertNotIn("all failures have been resolved", closing)
+
+    def test_completed_episode_has_closing_status(self):
+        previous = self.metadata(["a"])
+        comment = self.status(previous, failing=[], catalog=["a"])
+        self.assertIn("No longer failing", comment)
+        self.assertIn("As no outstanding tracked failures remain", comment)
+        self.assertIn("Outstanding failures:** 0", comment)
+
+    def test_prior_catalogue_removal_is_not_reclassified_as_resolved(self):
+        initial = self.metadata(["a", "b"])
+        partial = self.status(initial, failing=["b"], catalog=["b"])
+        self.assertIn("No longer in the updater catalogue", partial)
+        # The next issue body tracks only b. It should not matter that a's
+        # removal happened in an earlier run when the issue eventually closes.
+        closing = self.status(self.metadata(["b"]), failing=[], catalog=["b"])
+        self.assertIn("As no outstanding tracked failures remain", closing)
+        self.assertNotIn("all failures have been resolved", closing)
+
+    def test_missing_metadata_fails_safe(self):
+        with self.assertRaisesRegex(ValueError, "tracking metadata"):
+            self.status("No valid bot tracking metadata", failing=[], catalog=[])
+
+    def test_issue_metadata_is_hidden_and_preserves_labels(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state.json"
+            issue = Path(temp) / "issue.md"
+            package_updates.save(
+                state,
+                {
+                    "packageFailures": ["new/key: updater failed"],
+                    "failedPackages": ["new/key"],
+                    "failureDiagnostics": [],
+                },
+            )
+            package_updates.render_failure_issue(state, issue)
+            self.assertEqual(
+                package_updates.previous_failed_packages(issue.read_text()),
+                {"new/key"},
+            )
+
+    def test_incomplete_report_cannot_close(self):
+        with self.assertRaises(ValueError):
+            self.status("", failing=[], catalog=[], infrastructure=True)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ information; this module does not maintain a second list of supported plugins.
 """
 
 import argparse
+import base64
 from collections import deque
 import hashlib
 import json
@@ -531,6 +532,77 @@ def collect_failure_diagnostics(prepared, build_root):
     return diagnostics
 
 
+def previous_failed_packages(body):
+    """Read machine-owned identities; never infer a repair from malformed data."""
+    match = re.search(
+        r"(?m)^<!-- nix-opendeck-failed-packages:([A-Za-z0-9_-]+={0,2}) -->$",
+        body,
+    )
+    if not match:
+        raise ValueError("failure issue has no valid package tracking metadata")
+    try:
+        raw = base64.b64decode(match.group(1), altchars=b"-_", validate=True)
+        labels = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ValueError("invalid failure issue package metadata") from exc
+    if not isinstance(labels, list) or not all(
+        isinstance(label, str) and label for label in labels
+    ):
+        raise ValueError("invalid failure issue package list")
+    return set(labels)
+
+
+def render_failure_status(state_file, previous_body_file, output):
+    """Summarise changes in package failure identities, not error text."""
+    state = load(state_file)
+    if state["infrastructureFailure"]:
+        raise ValueError("incomplete updater results cannot resolve failure issues")
+    current = set(state["failedPackages"])
+    catalog = set(state["catalogPackages"])
+    if bool(state["packageFailures"]) != bool(current) or not current <= catalog:
+        raise ValueError("failure identities disagree with the updater report")
+
+    previous = previous_failed_packages(Path(previous_body_file).read_text())
+    added = sorted(current - previous)
+    recovered = sorted((previous - current) & catalog)
+    removed = sorted((previous - current) - catalog)
+    if current and not (added or recovered or removed):
+        Path(output).write_text("")
+        return
+
+    def safe_label(label):
+        # Prevent labels from generating user mentions or formatting in comments.
+        return "`" + label.replace("`", "'").replace("@", "@\u200b") + "`"
+
+    lines = ["## Package update status", ""]
+    for title, labels in (
+        ("Newly failing", added),
+        ("No longer failing in the latest run", recovered),
+        ("No longer in the updater catalogue (not verified as fixed)", removed),
+    ):
+        if labels:
+            lines.extend([f"**{title}:**", ""])
+            lines.extend(f"- {safe_label(label)}" for label in labels)
+            lines.append("")
+    lines.extend(
+        [
+            f"**Outstanding failures:** {len(current)} package(s).",
+            "",
+            f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
+            f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')})",
+        ]
+    )
+    if not current:
+        # This says nothing about historical packages no longer in the catalogue.
+        lines.extend(
+            [
+                "",
+                "As no outstanding tracked failures remain, this issue will now be closed.",
+            ]
+        )
+    Path(output).write_text("\n".join(lines) + "\n")
+
+
 def render_failure_issue(state_file, output):
     state = load(state_file)
     diagnostics = state.get("failureDiagnostics", [])
@@ -538,8 +610,12 @@ def render_failure_issue(state_file, output):
     fingerprint = hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()
     ).hexdigest()
+    labels = base64.urlsafe_b64encode(
+        json.dumps(sorted(state["failedPackages"])).encode()
+    ).decode()
     lines = [
         f"<!-- nix-opendeck-package-update-failures:{fingerprint} -->",
+        f"<!-- nix-opendeck-failed-packages:{labels} -->",
         "## Outstanding package update failures",
         "",
         "The automated updater could not validate the following updates. "
@@ -603,6 +679,7 @@ def finalize(args):
     infrastructure_errors = list(prepared["errors"]) + report_errors
     accepted = []
     rejected = []
+    failed_packages = set()
 
     app_targets = prepared["opendeck"]
     app_ok = bool(app_targets) and all(
@@ -627,6 +704,7 @@ def finalize(args):
         if status == "unchanged":
             continue
         if status == "failed":
+            failed_packages.add(pkg["label"])
             rejected.append(
                 f"{pkg['label']}: updater failed ({updates.get(pkg['id'], {}).get('error', 'missing result')})"
             )
@@ -644,6 +722,7 @@ def finalize(args):
         if pkg_ok:
             accepted.append(pkg)
         else:
+            failed_packages.add(pkg["label"])
             rejected.append(f"{pkg['label']}: one or more native builds failed")
 
     # A known updater/build failure is not a reason to reject other packages.
@@ -727,6 +806,8 @@ def finalize(args):
             "infrastructureFailure": bool(infrastructure_errors),
             "infrastructureErrors": infrastructure_errors,
             "packageFailures": package_failures,
+            "failedPackages": sorted(failed_packages),
+            "catalogPackages": sorted(pkg["label"] for pkg in plan["packages"]),
             "failureDiagnostics": collect_failure_diagnostics(prepared, args.builds),
             "accepted": [p["label"] for p in accepted],
         },
@@ -766,6 +847,10 @@ def main():
     i = commands.add_parser("failure-issue")
     i.add_argument("--state", required=True)
     i.add_argument("--output", required=True)
+    s = commands.add_parser("issue-status")
+    s.add_argument("--state", required=True)
+    s.add_argument("--previous-body", required=True)
+    s.add_argument("--output", required=True)
     args = parser.parse_args()
     return {
         "discover": discover,
@@ -774,6 +859,9 @@ def main():
         "build": build,
         "finalize": finalize,
         "failure-issue": lambda a: render_failure_issue(a.state, a.output),
+        "issue-status": lambda a: render_failure_status(
+            a.state, a.previous_body, a.output
+        ),
     }[args.command](args) or 0
 
 

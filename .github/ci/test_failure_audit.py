@@ -302,6 +302,7 @@ class DiagnosticCaptureTests(unittest.TestCase):
                 json.dumps(
                     {
                         "packageFailures": ["opendeck: failed"],
+                        "failedPackages": ["opendeck"],
                         "failureDiagnostics": [
                             {
                                 "label": "opendeck",
@@ -319,6 +320,9 @@ class DiagnosticCaptureTests(unittest.TestCase):
             self.assertIn("Hunk #1 FAILED", body)
             self.assertIn("### Diagnostic excerpts", body)
             self.assertIn("nix-opendeck-package-update-failures", body)
+            self.assertEqual(
+                package_updates.previous_failed_packages(body), {"opendeck"}
+            )
 
 
 if __name__ == "__main__":

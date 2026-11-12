@@ -429,6 +429,21 @@ manually rather than assuming each package has its own bot PR.
 
 ### Failed update reporting
 
+Each period of outstanding package failures has its own automation-owned issue; closed
+incidents are not reopened. The issue body lists current failures and stores package
+identities in hidden metadata. When the failing package set changes, CI posts a status
+comment linking the latest workflow run. It distinguishes packages that no longer fail
+from packages removed from the updater catalogue, which are not necessarily fixed. When
+no tracked failures remain, the final status comment explains the outcome and the issue
+closes as completed; this does not certify historical catalogue removals as repaired.
+Incomplete infrastructure results must not close an issue.
+
+Status comments are emitted only for changes in the set of failing packages, rather than
+for different error messages from the same failures. A comment must publish before CI
+advances the tracked state in the issue body, so a failed notification can be retried on
+a later run. A rare body-edit failure after a successful comment can lead to a
+duplicate.
+
 The updater maintains an `Automated package update failures` issue to report known
 package failures, with links to the relevant workflow runs and diagnostic artifacts. The
 workflow also attempts to assign `UPDATE_MAINTAINERS` when failures are present,
