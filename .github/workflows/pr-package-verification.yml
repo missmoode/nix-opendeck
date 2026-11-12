@@ -20,6 +20,7 @@ jobs:
     outputs:
       targets: ${{ steps.compare.outputs.targets }}
       jobs: ${{ steps.compare.outputs.jobs }}
+      reused: ${{ steps.compare.outputs.reused }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -154,32 +155,7 @@ jobs:
 
           echo "targets=$(cat "$RUNNER_TEMP/pending-targets.json")" >> "$GITHUB_OUTPUT"
           echo "jobs=$(cat "$RUNNER_TEMP/check-jobs.json")" >> "$GITHUB_OUTPUT"
-
-          {
-            echo '## Changed package outputs'
-            echo
-            echo "- PR targets: $(jq 'length' "$RUNNER_TEMP/pr-targets.json")"
-            echo "- Changed/new targets: $(jq 'length' "$RUNNER_TEMP/changed-targets.json")"
-            echo "- Reused plugin verifications: $(jq 'length' "$RUNNER_TEMP/reused-targets.json")"
-            echo "- Targets requiring native verification: $(jq 'length' "$RUNNER_TEMP/pending-targets.json")"
-            echo "- Native runner jobs: $(jq 'length' "$RUNNER_TEMP/check-jobs.json")"
-            echo
-            if [[ "$(jq 'length' "$RUNNER_TEMP/reused-targets.json")" -gt 0 ]]; then
-              echo '### Reused successful jobs from this PR'
-              jq -r '.[] | "- `\(.system)` / `\(.label)` — [previous job](\(.jobUrl))"' \
-                "$RUNNER_TEMP/reused-targets.json"
-              echo
-            fi
-            if [[ "$(jq 'length' "$RUNNER_TEMP/pending-targets.json")" -eq 0 ]]; then
-              echo 'No targets remain for native verification.'
-            else
-              echo '### Targets requiring native verification'
-              jq -r '.[] | "- `\(.system)` / `\(.label)`"' "$RUNNER_TEMP/pending-targets.json"
-            fi
-            echo
-            echo 'Selection compares evaluated output paths; removed targets are not rebuilt.'
-            echo 'Prior success is reused only after verifying the old CI policy and exact output path.'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "reused=$(jq -c 'map({system, label})' "$RUNNER_TEMP/reused-targets.json")" >> "$GITHUB_OUTPUT"
   check:
     name: 'Rebuild: ${{ matrix.system }} / ${{ matrix.label }}'
     needs: discover
@@ -392,11 +368,6 @@ jobs:
           attr="$(jq -r '[.[] | select(.kind == "opendeck") | .attr] | first // empty' <<< "$TARGETS_JSON")"
           if [[ -z "$attr" ]]; then
             echo 'No wrapped OpenDeck output selected; skipping runtime checks.'
-            {
-              echo '### OpenDeck runtime tests'
-              echo
-              echo 'Not run (plugin-only verification job).'
-            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           output="$(nix eval --raw ".#${attr}.outPath")"
@@ -409,7 +380,10 @@ jobs:
               pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
             in import ./tests/runtime { inherit pkgs; }
           ')"
-          "$runner/bin/opendeck-runtime-test" "$output" \
+          # The protected test runner writes a detailed summary. Preserve it
+          # only for failures; successes are summarised by the final gate.
+          GITHUB_STEP_SUMMARY="$RUNNER_TEMP/opendeck-runtime-summary.md" \
+            "$runner/bin/opendeck-runtime-test" "$output" \
             --artifacts "$RUNNER_TEMP/opendeck-runtime"
       - name: Annotate runtime test failure
         if: ${{ always() && steps.runtime.outcome == 'failure' }}
@@ -433,8 +407,8 @@ jobs:
           path: ${{ runner.temp }}/opendeck-repro/
           if-no-files-found: ignore
           retention-days: 7
-      - name: Summarize result
-        if: ${{ always() }}
+      - name: Summarize failed verification
+        if: ${{ failure() }}
         shell: bash
         env:
           ARTIFACT_URL: ${{ steps.repro_artifact.outputs.artifact-url }}
@@ -449,8 +423,8 @@ jobs:
             echo "**${TARGET_SYSTEM}**"
             echo
             if [[ -s "$RUNNER_TEMP/repro-results.jsonl" ]]; then
-              jq -r '
-                "- **\(.label)**: " +
+              jq -r --argjson count "$(jq 'length' <<< "$TARGETS_JSON")" '
+                (if $count == 1 then "" else "- **\(.label)**: " end) +
                 (if .stage != "" then .stage + " failed"
                  elif .rebuild == "success" then "reproduced bit-for-bit"
                  else "verification incomplete" end) +
@@ -474,13 +448,21 @@ jobs:
             if [[ "$CHECK_OUTCOME" != success ]]; then
               echo 'See the build logs and diagnostic annotations above for the failure.'
               echo
-              echo '### OpenDeck runtime tests'
-              echo
-              echo 'Not run (package verification did not complete).'
-            elif [[ "$RUNTIME_OUTCOME" == failure ]]; then
-              echo '### OpenDeck runtime tests'
-              echo
-              echo 'Failed. See the runtime test job step and uploaded logs.'
+            fi
+            if jq -e 'any(.[]; .kind == "opendeck")' <<< "$TARGETS_JSON" > /dev/null; then
+              if [[ "$CHECK_OUTCOME" != success ]]; then
+                echo '### OpenDeck runtime tests'
+                echo
+                echo 'Not run (package verification did not complete).'
+              elif [[ "$RUNTIME_OUTCOME" == failure ]]; then
+                if [[ -s "$RUNNER_TEMP/opendeck-runtime-summary.md" ]]; then
+                  cat "$RUNNER_TEMP/opendeck-runtime-summary.md"
+                else
+                  echo '### OpenDeck runtime tests'
+                  echo
+                  echo 'Failed. See the runtime test job step and uploaded logs.'
+                fi
+              fi
             fi
             if [[ -n "$ARTIFACT_URL" ]]; then
               echo
@@ -502,11 +484,102 @@ jobs:
           DISCOVER_RESULT: ${{ needs.discover.result }}
           CHECK_RESULT: ${{ needs.check.result }}
           TARGETS: ${{ needs.discover.outputs.targets }}
+          REUSED: ${{ needs.discover.outputs.reused }}
         run: |
           set -euo pipefail
           [[ "$DISCOVER_RESULT" == success ]] || {
             echo 'Discovery failed for a ready-for-review PR.' >&2
             exit 1
           }
-          [[ "$TARGETS" == '[]' ]] && exit 0
-          [[ -n "$TARGETS" && "$CHECK_RESULT" == success ]]
+          if [[ "$TARGETS" != '[]' ]]; then
+            [[ -n "$TARGETS" && "$CHECK_RESULT" == success ]] || exit 1
+          fi
+
+          # Only a successful gate can report success. This is presentation,
+          # not evidence used to certify the PR or relax any verification.
+          if ! {
+            echo '## Native package verification passed (unprivileged)'
+            echo
+            echo "Native targets verified: $(jq 'length' <<< "$TARGETS")"
+            echo "Previously verified plugin targets reused: $(jq 'length' <<< "${REUSED:-[]}")"
+            echo
+            if [[ "$TARGETS" == '[]' && "${REUSED:-[]}" == '[]' ]]; then
+              echo 'No changed package outputs required native verification.'
+            else
+              echo '### Verified packages'
+              echo
+              jq -nr --argjson native "$TARGETS" --argjson reused "${REUSED:-[]}" '
+                def safe: tostring | .[0:120] | gsub("[^A-Za-z0-9._/+ -]"; "_");
+                (($native | map({label, system, origin: "native"}))
+                 + ($reused | map({label, system, origin: "reused"})))
+                | group_by(.label)[]
+                | "- **" + (.[0].label | safe) + "** — " +
+                    (map("`" + (.system | safe) + "`" +
+                         (if .origin == "reused" then " (reused)" else "" end))
+                     | join(", "))
+              '
+              echo
+              if jq -e 'any(.[]; .kind == "opendeck")' <<< "$TARGETS" > /dev/null; then
+                echo 'Packaged OpenDeck runtime command succeeded where selected; see logs for skipped checks.'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"; then
+            echo '::warning::Could not render the optional package verification summary.'
+          fi
+      - name: Summarize failed verification jobs
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '## Native package verification failed (unprivileged)'
+            echo
+            echo "[Complete workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}) — includes each job's logs and detailed summary."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The matrix does not expose per-job conclusions via needs.check.
+          # This optional public API lookup is never used to decide the gate.
+          if ! python3 - <<'PYTHON' >> "$GITHUB_STEP_SUMMARY"; then
+          import os
+          import re
+          import sys
+
+          sys.path.insert(0, ".github/ci")
+          from pr_verification_reuse import jobs_for_run
+          from verification_diagnostics import safe_text
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo) or not re.fullmatch(r"[0-9]+", run_id):
+              raise ValueError("Invalid workflow identity")
+
+          jobs = jobs_for_run(repo, int(run_id))
+
+          native_passed = sum(
+              j.get("name", "").startswith("Rebuild: ") and j.get("conclusion") == "success"
+              for j in jobs
+          )
+          failures = [
+              j for j in jobs
+              if j.get("name") != "Package verification gate"
+              and j.get("conclusion") in (
+                  "failure", "timed_out", "cancelled", "startup_failure", "action_required"
+              )
+              and type(j.get("id")) is int and j["id"] > 0
+              and isinstance(j.get("name"), str)
+          ]
+          print(f"Successful native jobs: {native_passed}.")
+          if failures:
+              print("\n### Failed jobs\n")
+              for job in failures[:40]:
+                  # Matrix labels can be PR-controlled. Never follow job-supplied URLs.
+                  name = safe_text(job["name"], 160)
+                  print(f"- [{name}](https://github.com/{repo}/actions/runs/{run_id}/job/{job['id']})")
+              if len(failures) > 40:
+                  print(f"- {len(failures) - 40} more failed jobs; see the full run.")
+          else:
+              print("\nNo failed job details were returned; consult the full run.")
+          PYTHON
+            echo 'Failed job details were unavailable; consult the linked workflow run.' >> "$GITHUB_STEP_SUMMARY"
+          fi
