@@ -98,9 +98,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Resolve nixpkgs from this repository's flake.lock, not the runner's registry.
-          nix profile add --inputs-from . nixpkgs#nix-update
+          # nix-update 1.16.0 uses `nix flake metadata` to locate the flake
+          # source. With Nix 2.35/storeFS this path need not be materialised,
+          # so its subsequent nix-instantiate call fails. Archive fetches the
+          # exact tracked source, including after an updater modifies it.
+          # Remove this override when nix-update fixes its source lookup.
+          nix_update="$(nix build --impure --no-link --print-out-paths \
+            --expr "$(cat <<'NIX'
+          let
+            flake = builtins.getFlake (toString ./.);
+            pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
+          in
+            pkgs.nix-update.overridePythonAttrs (old: {
+              postPatch = (old.postPatch or "") + ''
+                substituteInPlace nix_update/options.py \
+                  --replace-fail '["nix", "flake", "metadata", "--json"]' \
+                    '["nix", "flake", "archive", "--json"]'
+              '';
+            })
+          NIX
+          )")"
+          nix profile add "$nix_update"
           echo "$HOME/.nix-profile/bin" >> "$GITHUB_PATH"
+          # Resolve nixpkgs from this repository's flake.lock, not the runner's registry.
           nixpkgs_path=$(nix eval --impure --raw --expr \
             '(builtins.getFlake (toString ./.)).inputs.nixpkgs.outPath')
           echo "NIX_PATH=nixpkgs=$nixpkgs_path" >> "$GITHUB_ENV"
