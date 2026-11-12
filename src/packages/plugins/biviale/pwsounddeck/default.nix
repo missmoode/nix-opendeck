@@ -11,16 +11,16 @@
 
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-biviale-pwsounddeck";
-  version = "0.5.0";
+  version = "0.5.2";
 
   src = fetchFromGitHub {
     owner = "biviale";
     repo = "pwsounddeck";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-Lx42Lg4FYfYxmDPyVS7BTB1SpEBwwUCWpXNxCK8AZI0=";
+    hash = "sha256-wblti5GC9jmn9r2xMCCW7nS3R8+4J96cONzEvMaeMHI=";
   };
 
-  cargoHash = "sha256-IAMzFbjS8x1VB2bhn+RsKNs/LsW5+eThmRY6VQgOBqY=";
+  cargoHash = "sha256-NN3FOSSsohXkvNzSzHZWGUyZYPKytCKCsRbWmSQF6nU=";
 
   pluginId = "com.biviale.pwsounddeck.sdPlugin";
   binaryName = "pwsounddeck";
