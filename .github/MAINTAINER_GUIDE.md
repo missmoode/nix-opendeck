@@ -55,6 +55,11 @@ may need downloading on a first check run.
 You can get a new `narHash` for the home manager update pin via:
 `nix flake prefetch --json github:nix-community/home-manager/<revision>`
 
+Run the standalone Python CI tests with
+`python3 -m unittest discover -s .github/ci -p 'test_*.py'`. Their temporary Git
+repositories disable commit signing locally (including merge signing where needed), so a
+globally configured SSH signing key is not required to run the tests.
+
 The packaged-application runtime checks in `tests/runtime/` are separate from
 `nix flake check`. To run them locally on Linux from the repository root:
 
@@ -185,6 +190,16 @@ evaluated package output paths are unchanged. The runtime suite is not included 
 Failures retain useful diagnostics. Redistributable differing outputs may be archived
 for inspection; non-redistributable outputs must not be published.
 
+On success, the final `Package verification gate` job presents a consolidated summary of
+freshly verified targets and separately marked reused plugin verifications, grouped by
+package and architecture. Successful native jobs do not generate individual summaries.
+Failed native jobs retain detailed failure summaries, while the final gate links to
+their jobs using a best-effort, unauthenticated Actions API lookup; the full workflow
+run remains linked if job details cannot be retrieved. Plugin-only jobs do not display
+placeholders for OpenDeck runtime tests. These summaries are diagnostic only: neither
+their generation nor API availability can certify a failing build or change the trusted
+verification result.
+
 A PR that changes no evaluated package outputs can still pass the package verification
 gate after successful target discovery.
 
@@ -212,7 +227,7 @@ previous synthetic merge commit and re-evaluates its target catalogue against th
 
 The lookup is bounded to recent runs, and older synthetic merges may no longer be
 fetchable. API failures, missing evidence, policy changes, and reevaluation errors fall
-back to normal builds. Discovery lists reused jobs with links to their old logs, and the
+back to normal builds. The final gate identifies reused plugin verifications, and the
 gate requires every remaining target to pass during the current run. A fully reused
 plugin-only change may have no native jobs; successful discovery is sufficient in that
 case.
@@ -268,6 +283,10 @@ revision was cancelled, subject to its existing run-selection rules.
 Optional comments and maintainer assignments are notifications, not authorization or
 verification results. Their failure must not change whether a verified status is
 published.
+
+Read-only GitHub API requests retry transient HTTP 502, 503 and 504 responses with a
+bounded backoff. Writes are not automatically retried, since their outcomes may be
+ambiguous. Exhausted retries do not produce a trusted success status.
 
 ### Draft PRs and workflow approvals
 

@@ -21,6 +21,7 @@ class SourceRedundancyTests(unittest.TestCase):
             ("init", "-q", "-b", "main"),
             ("config", "user.name", "Test"),
             ("config", "user.email", "test@example.invalid"),
+            ("config", "commit.gpgsign", "false"),
         ):
             self.git(*argv)
         self.write("src/plugin.nix", 'version = "1";\n')

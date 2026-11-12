@@ -205,6 +205,8 @@ class ReuseTests(unittest.TestCase):
             git("init", "-q")
             git("config", "user.email", "ci@example.invalid")
             git("config", "user.name", "CI")
+            git("config", "commit.gpgsign", "false")
+            git("config", "merge.gpgsign", "false")
             for path in reuse.POLICY:
                 target = repo / path
                 target.parent.mkdir(parents=True, exist_ok=True)

@@ -36,6 +36,7 @@ class UpdateScopeTests(unittest.TestCase):
             ("init", "-q"),
             ("config", "user.name", "CI Test"),
             ("config", "user.email", "test@example.invalid"),
+            ("config", "commit.gpgsign", "false"),
             ("add", "-A"),
             ("commit", "-qm", "initial"),
         ]:
@@ -141,6 +142,7 @@ class FinalizationTests(unittest.TestCase):
             ("init", "-q"),
             ("config", "user.name", "CI Test"),
             ("config", "user.email", "test@example.invalid"),
+            ("config", "commit.gpgsign", "false"),
             ("add", "-A"),
             ("commit", "-qm", "initial"),
         ]:
