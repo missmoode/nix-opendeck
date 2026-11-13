@@ -37,6 +37,7 @@ let
   ];
 
   gstPluginPath = lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" gstPlugins;
+  runtimePath = lib.makeBinPath [ nodejs ];
 in
 rustPlatform.buildRustPackage (
   finalAttrs:
@@ -255,10 +256,16 @@ rustPlatform.buildRustPackage (
       ]
     );
 
+    # Finder starts the macOS .app without the Linux PATH wrapper. Embed
+    # the same runtime path for plugin subprocesses.
+    env = lib.optionalAttrs stdenv.hostPlatform.isDarwin {
+      OPENDECK_NIX_RUNTIME_PATH = runtimePath;
+    };
+
     preFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
       gappsWrapperArgs+=(
         --set GST_PLUGIN_PATH_1_0 "${gstPluginPath}"
-        --prefix PATH : "${lib.makeBinPath [ nodejs ]}"
+        --prefix PATH : "${runtimePath}"
       )
     '';
 

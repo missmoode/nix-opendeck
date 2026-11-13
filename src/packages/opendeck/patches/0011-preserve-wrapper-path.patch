@@ -1,20 +1,34 @@
-Subject: Preserve wrapper runtime paths when importing the login-shell environment
+Subject: Preserve Nix runtime paths when importing the login-shell environment
 
 diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
 index ba2ebc2..2717e7c 100644
 --- a/src-tauri/src/main.rs
 +++ b/src-tauri/src/main.rs
-@@ -56,10 +56,21 @@ fn hide_window(app: &AppHandle) -> Result<(), tauri::Error> {
+@@ -56,10 +56,35 @@ fn hide_window(app: &AppHandle) -> Result<(), tauri::Error> {
  	Ok(())
  }
- 
+
 -#[tokio::main]
 -async fn main() {
 +fn main() {
  	log_panics::init();
 -	let _ = fix_path_env::fix();
 +
-+	// Preserve Nix wrapper paths when upstream adds paths from the login shell.
++	// Finder does not inherit the Nix runtime PATH. Include the packaged
++	// executables before importing the login shell.
++	#[cfg(target_os = "macos")]
++	{
++		let existing_path = std::env::var_os("PATH").unwrap_or_default();
++		if let Ok(path) = std::env::join_paths(
++			std::env::split_paths(std::ffi::OsStr::new(env!("OPENDECK_NIX_RUNTIME_PATH")))
++				.chain(std::env::split_paths(&existing_path)),
++		) {
++			// SAFETY: The Tokio runtime and its worker threads have not started yet.
++			unsafe { std::env::set_var("PATH", path) };
++		}
++	}
++
++	// Preserve Nix runtime paths when upstream adds paths from the login shell.
 +	let inherited_path = std::env::var_os("PATH");
 +	if fix_path_env::fix().is_ok() {
 +		if let (Some(inherited_path), Some(shell_path)) = (inherited_path, std::env::var_os("PATH")) {
@@ -26,13 +40,13 @@ index ba2ebc2..2717e7c 100644
 +			}
 +		}
 +	}
- 
+
  	#[cfg(target_os = "linux")]
  	// SAFETY: std::env::set_var can cause race conditions in multithreaded contexts. We have not spawned any other threads at this point.
-@@ -68,6 +79,11 @@ async fn main() {
+@@ -68,6 +93,11 @@ async fn main() {
  		std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
  	}
- 
+
 +	run_app();
 +}
 +
