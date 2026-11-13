@@ -33,6 +33,19 @@ REPORTER_PATHS = (
     ".github/ci/trusted_ci_report.py",
     ".github/ci/verification_diagnostics.py",
 )
+# These scripts can influence privileged maintenance jobs (including issue/PR
+# writes). A new workflow can request credentials without changing any known
+# workflow, so protect the entire workflow directory separately below.
+# Keep this list scoped to executable automation, not every CI helper.
+PRIVILEGED_AUTOMATION_PATHS = frozenset(
+    {
+        ".github/ci/package_updates.py",
+        ".github/ci/upstream_compatibility.py",
+        ".github/ci/failure_audit.py",
+        ".github/ci/reconcile_update_prs.py",
+        ".github/ci/reconcile_manual_updates.py",
+    }
+)
 # The checks workflow runs test definitions from the PR. Compare full test
 # trees so added, removed, or renamed files cannot silently change CI policy.
 # Package verification runs its own protected runtime test entry point.
@@ -110,18 +123,26 @@ class GitHub:
 
 
 def test_policy_snapshot(tree, kind):
-    """Return protected test entries, or None if GitHub's tree is incomplete."""
+    """Return protected test and automation entries; None if tree is incomplete."""
     if tree.get("truncated") is not False or not isinstance(tree.get("tree"), list):
         return None
     entries = {}
     for entry in tree["tree"]:
         path = entry["path"]
+        # Compare path, mode, type and blob identity at both revisions. This
+        # catches additions, deletions, renames, and symlink substitutions, even
+        # when a helper does not yet exist on the trusted base branch.
+        protected = (
+            path == ".github/workflows"
+            or path.startswith(".github/workflows/")
+            or path in PRIVILEGED_AUTOMATION_PATHS
+        )
         if kind == "Checks":
-            protected = path.startswith("tests/") or (
+            protected = protected or path.startswith("tests/") or (
                 path.startswith(".github/ci/test_") and path.endswith(".py")
             )
         else:
-            protected = path.startswith("tests/runtime/")
+            protected = protected or path.startswith("tests/runtime/")
         if protected:
             entries[path] = (entry["mode"], entry["type"], entry["sha"])
     return entries
@@ -238,8 +259,9 @@ def assess(event, api):
             for file in protected
         )
         if unchanged:
-            # Match paths as well as contents: a new, removed or renamed test
-            # must require the same intentional bypass as editing an old one.
+            # Match paths, file types and modes as well as contents for tests
+            # and privileged automation. An added workflow or helper must not
+            # certify itself just because it was absent on trusted main.
             base_tree = test_policy_snapshot(
                 api.request(f"/git/trees/{pr['base']['sha']}?recursive=1"), kind
             )
