@@ -41,7 +41,9 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 
 
 def execute(*args):
-    return subprocess.run(args, check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(
+        args, check=True, capture_output=True, text=True
+    ).stdout.strip()
 
 
 def api(path):
@@ -73,12 +75,19 @@ def version_at(rev, path):
 
 
 def advanced(old, new):
-    if not old or not new or not NUMERIC_VERSION.fullmatch(old) or not NUMERIC_VERSION.fullmatch(new):
+    if (
+        not old
+        or not new
+        or not NUMERIC_VERSION.fullmatch(old)
+        or not NUMERIC_VERSION.fullmatch(new)
+    ):
         return False
     before = [int(part) for part in old.split(".")]
     after = [int(part) for part in new.split(".")]
     n = max(len(before), len(after))
-    return tuple(after + [0] * (n - len(after))) > tuple(before + [0] * (n - len(before)))
+    return tuple(after + [0] * (n - len(after))) > tuple(
+        before + [0] * (n - len(before))
+    )
 
 
 def updated_packages(labels, before, after):
@@ -110,7 +119,9 @@ def certified_tree(repo, pr, bot_login):
     head = pr.get("head", {}).get("sha", "")
     if not SHA.fullmatch(head):
         return None
-    statuses = latest_statuses(api(f"repos/{repo}/commits/{head}/status").get("statuses", []))
+    statuses = latest_statuses(
+        api(f"repos/{repo}/commits/{head}/status").get("statuses", [])
+    )
     expected_tree = None
     for context, (workflow_path, workflow_title) in WORKFLOWS.items():
         status = statuses.get(context, {})
@@ -145,7 +156,9 @@ def certified_tree(repo, pr, bot_login):
         merge_sha = title_match.group(1)
         # A synthetic merge may expire. Missing evidence means no closure;
         # never fall back to treating the PR head's status as merge evidence.
-        merge_tree = api(f"repos/{repo}/git/commits/{merge_sha}").get("tree", {}).get("sha")
+        merge_tree = (
+            api(f"repos/{repo}/git/commits/{merge_sha}").get("tree", {}).get("sha")
+        )
         if not isinstance(merge_tree, str) or not SHA.fullmatch(merge_tree):
             return None
         if expected_tree is not None and expected_tree != merge_tree:
@@ -165,7 +178,8 @@ def matching_merged_pr(repo, before, after, branch):
         return None
     prs = api(f"repos/{repo}/commits/{after}/pulls?per_page=100")
     matching = [
-        pr for pr in prs
+        pr
+        for pr in prs
         if pr.get("merged_at")
         and pr.get("merge_commit_sha") == after
         and pr.get("base", {}).get("ref") == branch
@@ -178,7 +192,8 @@ def acknowledged_labels(merge_message, issue_no):
     # The merged commit is immutable. PR bodies and labels may be edited after
     # merge by their authors, so they cannot authorise the bot's issue writes.
     return {
-        label for number, label in ACKNOWLEDGEMENT.findall(merge_message)
+        label
+        for number, label in ACKNOWLEDGEMENT.findall(merge_message)
         if number == str(issue_no)
     }
 
@@ -188,7 +203,9 @@ def remaining_issue_body(body, outstanding, resolved):
     previous = previous_failed_packages(body)
     if not resolved or previous - resolved != outstanding:
         raise ValueError("inconsistent issue reconciliation")
-    encoded = base64.urlsafe_b64encode(json.dumps(sorted(outstanding)).encode()).decode()
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(sorted(outstanding)).encode()
+    ).decode()
     new_body, count = ISSUE_MARKER.subn(
         f"<!-- nix-opendeck-failed-packages:{encoded} -->", body
     )
@@ -221,16 +238,24 @@ def remaining_issue_body(body, outstanding, resolved):
 def status_comment(changed, remaining, pr, repo, run_url):
     number = pr["number"]
     lines = [
-        "## Manual package update reconciliation", "",
+        "## Manual package update reconciliation",
+        "",
         f"Verified [PR #{number}](https://github.com/{repo}/pull/{number}) explicitly "
-        "acknowledged these failed package updates:", "",
+        "acknowledged these failed package updates:",
+        "",
     ]
-    lines.extend(f"- `{label}`: `{old}` → `{new}`" for label, (old, new) in sorted(changed.items()))
+    lines.extend(
+        f"- `{label}`: `{old}` → `{new}`"
+        for label, (old, new) in sorted(changed.items())
+    )
     lines += [
-        "", f"**Outstanding failures:** {len(remaining)} package(s).", "",
+        "",
+        f"**Outstanding failures:** {len(remaining)} package(s).",
+        "",
         "This records a verified manual repair, **not** proof that the updater "
         "itself was fixed. The scheduled updater will still check for failures.",
-        "", f"[Reconciliation run]({run_url})",
+        "",
+        f"[Reconciliation run]({run_url})",
     ]
     if not remaining:
         lines += ["", "No tracked failures remain; closing this incident."]
@@ -275,7 +300,10 @@ def main():
         return
 
     expected_tree = certified_tree(repo, pr, bot)
-    if expected_tree is None or execute("git", "rev-parse", f"{after}^{{tree}}") != expected_tree:
+    if (
+        expected_tree is None
+        or execute("git", "rev-parse", f"{after}^{{tree}}") != expected_tree
+    ):
         print("Merged tree lacks matching trusted CI verification; leave issue open")
         return
 
@@ -286,7 +314,9 @@ def main():
         return
 
     remaining = previous - changes.keys()
-    new_body = remaining_issue_body(old_body, remaining, set(changes)) if remaining else None
+    new_body = (
+        remaining_issue_body(old_body, remaining, set(changes)) if remaining else None
+    )
     run_url = (
         f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{repo}"
         f"/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
@@ -294,7 +324,9 @@ def main():
     comment = status_comment(changes, remaining, pr, repo, run_url)
     current = api(f"repos/{repo}/issues/{issue_no}")
     if current.get("state") != "open" or current.get("body") != old_body:
-        raise ValueError("failure issue changed during verification; no write performed")
+        raise ValueError(
+            "failure issue changed during verification; no write performed"
+        )
 
     with tempfile.TemporaryDirectory() as temp:
         path = Path(temp) / "comment.md"
@@ -305,7 +337,9 @@ def main():
             execute("gh", "issue", "edit", issue_no, "--body-file", str(path))
         else:
             execute("gh", "issue", "close", issue_no, "--reason", "completed")
-    print(f"Acknowledged {len(changes)} verified repair(s); {len(remaining)} outstanding")
+    print(
+        f"Acknowledged {len(changes)} verified repair(s); {len(remaining)} outstanding"
+    )
 
 
 if __name__ == "__main__":

@@ -20,7 +20,9 @@ def issue_body(labels):
         f"<!-- nix-opendeck-failed-packages:{encoded} -->\n"
         "## Outstanding package update failures\n\n"
         "The automated updater could not validate the following updates.\n\n"
-        + "".join(f"- {label}: updater failed (diagnostic text)\n" for label in sorted(labels))
+        + "".join(
+            f"- {label}: updater failed (diagnostic text)\n" for label in sorted(labels)
+        )
         + "\n### Diagnostic excerpts\n\nOriginal logs must remain intact.\n"
     )
 
@@ -60,9 +62,7 @@ class VersionTests(unittest.TestCase):
         )
         self.assertEqual(manual.acknowledged_labels(msg, "98"), set())
         self.assertEqual(
-            manual.acknowledged_labels(
-                "Resolves-Update-Failure: #99 ../../etc", "99"
-            ),
+            manual.acknowledged_labels("Resolves-Update-Failure: #99 ../../etc", "99"),
             set(),
         )
         self.assertEqual(manual.acknowledged_labels("Fixes #99", "99"), set())
@@ -83,12 +83,14 @@ class VersionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "disagrees"):
             manual.remaining_issue_body(
                 body.replace("- a/b: updater failed (diagnostic text)\n", ""),
-                {"c/d"}, {"a/b"}
+                {"c/d"},
+                {"a/b"},
             )
         with self.assertRaisesRegex(ValueError, "layout"):
             manual.remaining_issue_body(
                 body.replace("## Outstanding package update failures", "different"),
-                {"c/d"}, {"a/b"}
+                {"c/d"},
+                {"a/b"},
             )
 
 
@@ -106,8 +108,13 @@ class RealGitTests(unittest.TestCase):
             ("config", "commit.gpgsign", "false"),
         ):
             self.git(*args)
-        self.write("src/packages/plugins/wortkrieg/onairclock/default.nix", 'version = "1.3.0";\n')
-        self.write("src/packages/plugins/other/package/default.nix", 'version = "0.1.0";\n')
+        self.write(
+            "src/packages/plugins/wortkrieg/onairclock/default.nix",
+            'version = "1.3.0";\n',
+        )
+        self.write(
+            "src/packages/plugins/other/package/default.nix", 'version = "0.1.0";\n'
+        )
         self.commit("base")
         self.before = self.git("rev-parse", "HEAD")
 
@@ -126,11 +133,19 @@ class RealGitTests(unittest.TestCase):
         self.git("commit", "-qm", subject)
 
     def test_changed_version_only_one_tracked_label(self):
-        self.write("src/packages/plugins/wortkrieg/onairclock/default.nix", 'version = "2.0.0";\n')
-        self.write("src/packages/plugins/other/package/default.nix", 'version = "0.1.0";\n# patch only\n')
+        self.write(
+            "src/packages/plugins/wortkrieg/onairclock/default.nix",
+            'version = "2.0.0";\n',
+        )
+        self.write(
+            "src/packages/plugins/other/package/default.nix",
+            'version = "0.1.0";\n# patch only\n',
+        )
         self.commit("manual repair")
         changed = manual.updated_packages(
-            {"wortkrieg/onairclock", "other/package"}, self.before, self.git("rev-parse", "HEAD")
+            {"wortkrieg/onairclock", "other/package"},
+            self.before,
+            self.git("rev-parse", "HEAD"),
         )
         self.assertEqual(changed, {"wortkrieg/onairclock": ("1.3.0", "2.0.0")})
 
@@ -155,18 +170,33 @@ class TrustedTreeTests(unittest.TestCase):
         self.pr = {"number": 42, "head": {"sha": self.head}}
         self.contexts = sorted(manual.WORKFLOWS)
 
-    def fixture(self, *, status_state="success", status_bot=None, run_head=None,
-                run_title=None, run_path=None, tree=None, disagree=False,
-                run_conclusion="success", bad_url=False):
+    def fixture(
+        self,
+        *,
+        status_state="success",
+        status_bot=None,
+        run_head=None,
+        run_title=None,
+        run_path=None,
+        tree=None,
+        disagree=False,
+        run_conclusion="success",
+        bad_url=False,
+    ):
         statuses = []
         for i, context in enumerate(self.contexts, 1):
-            statuses.append({
-                "context": context,
-                "state": status_state,
-                "creator": {"login": status_bot or self.bot},
-                "target_url": ("https://evil.invalid/actions/runs/1" if bad_url
-                               else f"https://github.com/{self.repo}/actions/runs/{i}"),
-            })
+            statuses.append(
+                {
+                    "context": context,
+                    "state": status_state,
+                    "creator": {"login": status_bot or self.bot},
+                    "target_url": (
+                        "https://evil.invalid/actions/runs/1"
+                        if bad_url
+                        else f"https://github.com/{self.repo}/actions/runs/{i}"
+                    ),
+                }
+            )
         path_to_run = {}
         for i, context in enumerate(self.contexts, 1):
             path, kind = manual.WORKFLOWS[context]
@@ -185,16 +215,22 @@ class TrustedTreeTests(unittest.TestCase):
             if endpoint == f"repos/{self.repo}/commits/{self.head}/status":
                 return {"statuses": statuses}
             if endpoint == f"repos/{self.repo}/git/commits/{self.sha}":
-                return {"tree": {"sha": "f" * 40 if disagree and resolve.calls > 1 else self.tree}}
+                return {
+                    "tree": {
+                        "sha": "f" * 40 if disagree and resolve.calls > 1 else self.tree
+                    }
+                }
             if endpoint in path_to_run:
                 return path_to_run[endpoint]
             raise AssertionError(f"unexpected API call {endpoint}")
 
         resolve.calls = 0
+
         def tracking(endpoint):
             if endpoint == f"repos/{self.repo}/git/commits/{self.sha}":
                 resolve.calls += 1
             return resolve(endpoint)
+
         return tracking
 
     def assert_refused(self, **kwargs):
@@ -203,7 +239,9 @@ class TrustedTreeTests(unittest.TestCase):
 
     def test_exact_synthetic_merge_tree_is_retrievable(self):
         with patch.object(manual, "api", side_effect=self.fixture()):
-            self.assertEqual(manual.certified_tree(self.repo, self.pr, self.bot), self.tree)
+            self.assertEqual(
+                manual.certified_tree(self.repo, self.pr, self.bot), self.tree
+            )
 
     def test_stale_or_failing_status_rejected(self):
         self.assert_refused(status_state="failure")
@@ -222,10 +260,12 @@ class TrustedTreeTests(unittest.TestCase):
         self.assert_refused(disagree=True)
 
     def test_latest_status_wins_over_older_success(self):
-        latest = manual.latest_statuses([
-            {"context": "tests", "state": "failure"},
-            {"context": "tests", "state": "success"},
-        ])
+        latest = manual.latest_statuses(
+            [
+                {"context": "tests", "state": "failure"},
+                {"context": "tests", "state": "success"},
+            ]
+        )
         self.assertEqual(latest["tests"]["state"], "failure")
 
 
@@ -242,10 +282,14 @@ class MergeAssociationTests(unittest.TestCase):
 
     def verify(self, *, prs=None, parent=None):
         with (
-            patch.object(manual, "execute", side_effect=[self.after, parent or self.before]),
+            patch.object(
+                manual, "execute", side_effect=[self.after, parent or self.before]
+            ),
             patch.object(manual, "api", return_value=[self.pr] if prs is None else prs),
         ):
-            return manual.matching_merged_pr("example/repo", self.before, self.after, "main")
+            return manual.matching_merged_pr(
+                "example/repo", self.before, self.after, "main"
+            )
 
     def test_single_merged_pr(self):
         self.assertEqual(self.verify(), self.pr)
@@ -272,26 +316,34 @@ class WriteBoundaryTests(RealGitTests):
         self.tree = self.git("rev-parse", "HEAD^{tree}")
         self.bot = "nixopendeck-ci[bot]"
         self.pr = {
-            "number": 42, "merged_at": "2026-11-13T20:00:00Z",
+            "number": 42,
+            "merged_at": "2026-11-13T20:00:00Z",
             "merge_commit_sha": self.after,
             "head": {"sha": "c" * 40},
             "base": {"ref": "main", "repo": {"full_name": "example/repo"}},
         }
         self.body = issue_body({"wortkrieg/onairclock", "other/package"})
         self.issue = {
-            "state": "open", "title": manual.TITLE,
-            "user": {"login": self.bot}, "body": self.body,
+            "state": "open",
+            "title": manual.TITLE,
+            "user": {"login": self.bot},
+            "body": self.body,
         }
         self.writes = []
         self.original_execute = manual.execute
 
-    def run_reconciliation(self, *, tree=None, change_issue=False, remote=None,
-                           pr=None, status_ok=True):
+    def run_reconciliation(
+        self, *, tree=None, change_issue=False, remote=None, pr=None, status_ok=True
+    ):
         env = {
-            "GH_REPO": "example/repo", "BASE_BRANCH": "main",
-            "APP_BOT_LOGIN": self.bot, "ISSUE_NUMBER": "99",
-            "BEFORE_SHA": self.before, "AFTER_SHA": self.after,
-            "GITHUB_RUN_ID": "1234", "GITHUB_SERVER_URL": "https://github.com",
+            "GH_REPO": "example/repo",
+            "BASE_BRANCH": "main",
+            "APP_BOT_LOGIN": self.bot,
+            "ISSUE_NUMBER": "99",
+            "BEFORE_SHA": self.before,
+            "AFTER_SHA": self.after,
+            "GITHUB_RUN_ID": "1234",
+            "GITHUB_SERVER_URL": "https://github.com",
         }
         calls = {"issues": 0}
 
@@ -311,7 +363,9 @@ class WriteBoundaryTests(RealGitTests):
             if args[0] == "gh":
                 self.writes.append(args)
                 if "--body-file" in args:
-                    self.writes.append(Path(args[args.index("--body-file") + 1]).read_text())
+                    self.writes.append(
+                        Path(args[args.index("--body-file") + 1]).read_text()
+                    )
                 return ""
             return self.original_execute(*args)
 
@@ -319,13 +373,21 @@ class WriteBoundaryTests(RealGitTests):
             patch.dict(os.environ, env),
             patch.object(manual, "api", side_effect=endpoint),
             patch.object(manual, "execute", side_effect=operation),
-            patch.object(manual, "certified_tree", return_value=(tree if tree is not None else self.tree) if status_ok else None),
+            patch.object(
+                manual,
+                "certified_tree",
+                return_value=(tree if tree is not None else self.tree)
+                if status_ok
+                else None,
+            ),
         ):
             manual.main()
 
     def test_verified_repair_partially_updates_issue(self):
         self.run_reconciliation()
-        self.assertEqual([w[2] for w in self.writes if isinstance(w, tuple)], ["comment", "edit"])
+        self.assertEqual(
+            [w[2] for w in self.writes if isinstance(w, tuple)], ["comment", "edit"]
+        )
         final_body = self.writes[-1]
         self.assertEqual(previous_failed_packages(final_body), {"other/package"})
         self.assertIn("Original logs must remain intact.", final_body)
@@ -358,7 +420,9 @@ class WriteBoundaryTests(RealGitTests):
     def test_all_resolved_closes_issue_after_comment(self):
         self.issue = dict(self.issue, body=issue_body({"wortkrieg/onairclock"}))
         self.run_reconciliation()
-        self.assertEqual([w[2] for w in self.writes if isinstance(w, tuple)], ["comment", "close"])
+        self.assertEqual(
+            [w[2] for w in self.writes if isinstance(w, tuple)], ["comment", "close"]
+        )
 
 
 if __name__ == "__main__":

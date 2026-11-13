@@ -138,8 +138,10 @@ def test_policy_snapshot(tree, kind):
             or path in PRIVILEGED_AUTOMATION_PATHS
         )
         if kind == "Checks":
-            protected = protected or path.startswith("tests/") or (
-                path.startswith(".github/ci/test_") and path.endswith(".py")
+            protected = (
+                protected
+                or path.startswith("tests/")
+                or (path.startswith(".github/ci/test_") and path.endswith(".py"))
             )
         else:
             protected = protected or path.startswith("tests/runtime/")

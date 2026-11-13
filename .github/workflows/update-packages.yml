@@ -46,7 +46,6 @@ jobs:
             jq -r '[.[] | select(.title == "Automated package update failures")][0] | "number=\(.number)"' \
               <<< "$issues" >> "$GITHUB_OUTPUT"
           fi
-
   # The issue can be touched only by the trusted automation App. Its token is
   # minted after the read-only discovery job has found an outstanding issue.
   reconcile-manual:
@@ -86,7 +85,6 @@ jobs:
           AFTER_SHA: ${{ github.sha }}
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: python3 .github/ci/reconcile_manual_updates.py
-
   discover:
     if: github.event_name != 'push'
     runs-on: ubuntu-24.04
@@ -481,6 +479,7 @@ jobs:
 
 
 
+
            steps.finish.outcome != 'success' ||
            steps.finish.outputs.infrastructure_failure == 'true')
         shell: bash
@@ -764,8 +763,10 @@ jobs:
 
 
 
+
            steps.issues.outcome != 'success') ||
           steps.failure-select.outcome == 'failure' || steps.failure-reserve.outcome == 'failure' || steps.failure-publish.outcome == 'failure' || steps.pr.outcome == 'failure' || (steps.audit-select.outcome == 'success' &&
+
 
 
 
@@ -781,9 +782,11 @@ jobs:
 
 
 
+
            steps.audit-select.outputs.review_count != '0' &&
            steps.review-pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
+
 
 
 

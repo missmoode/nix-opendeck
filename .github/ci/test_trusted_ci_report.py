@@ -182,7 +182,9 @@ class ReporterTests(unittest.TestCase):
                             api.trees[MERGE][".github/ci/renamed-helper.py"] = existing
                         else:
                             api.trees[MERGE][path] = ("120000", "blob", "original")
-                        self.assertEqual(reporter.assess(event, api)["state"], "failure")
+                        self.assertEqual(
+                            reporter.assess(event, api)["state"], "failure"
+                        )
 
     def test_workflow_directory_additions_and_renames_require_review(self):
         # Protect the entire directory: adding a NEW secret-using workflow
@@ -203,7 +205,9 @@ class ReporterTests(unittest.TestCase):
                     elif change == "renamed":
                         api.trees[MERGE].pop(path)
                         api.trees[MERGE][".github/workflows/renamed.yml"] = (
-                            "100644", "blob", "original"
+                            "100644",
+                            "blob",
+                            "original",
                         )
                     else:
                         api.trees[MERGE][path] = ("120000", "blob", "original")
@@ -213,11 +217,11 @@ class ReporterTests(unittest.TestCase):
         for kind in ("Checks", "Package verification"):
             event, _, api = self.setup_case(kind)
             api.trees[BASE][".github/workflows/checks.yml"] = (
-                "100644", "blob", "original"
+                "100644",
+                "blob",
+                "original",
             )
-            api.trees[MERGE][".github/workflows"] = (
-                "120000", "blob", "symlink"
-            )
+            api.trees[MERGE][".github/workflows"] = ("120000", "blob", "symlink")
             self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
     def test_unrelated_ci_helper_is_not_privileged_policy(self):
@@ -225,7 +229,9 @@ class ReporterTests(unittest.TestCase):
         for kind in ("Checks", "Package verification"):
             event, _, api = self.setup_case(kind)
             api.trees[MERGE][".github/ci/unrelated_helper.py"] = (
-                "100644", "blob", "modified"
+                "100644",
+                "blob",
+                "modified",
             )
             self.assertEqual(reporter.assess(event, api)["state"], "success")
 
