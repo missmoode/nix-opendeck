@@ -76,7 +76,36 @@ restricted; macOS runtime checks target ephemeral CI runners.
 
 ### Package updates
 
-`Update packages` runs daily and can also be dispatched manually.
+`Update packages` runs daily and can also be dispatched manually. A push to `main` that
+changes package definitions triggers **only** the lightweight manual-reconciliation
+jobs. All full updater/build jobs are skipped on pushes. If no automated failure issue
+is open, reconciliation stops before requesting an App token.
+
+To acknowledge a manually repaired package failure, include this exact trailer in the
+**merge commit message**, replacing the issue number and package label:
+
+```text
+Resolves-Update-Failure: #99 wortkrieg/onairclock
+```
+
+Once that PR is merged, reconciliation requires the package's literal numeric version to
+increase and both trusted PR verification statuses to certify the **exact Git tree
+merged into `main`**. This is checked against the synthetic merge commit identified by
+the trusted workflow runs, not merely the PR head. It works with ordinary squash and
+merge commits. Missing or expired synthetic merge objects, stale statuses, unrelated
+pushes, missing merge trailers, non-numeric versions and ambiguous/multiple commits all
+leave the failure open for the next scheduled updater run. An acknowledgement authorises
+only the named package; other failures remain outstanding.
+
+This is a declaration that a **manual package update superseded the old failed
+attempt**, not evidence that the original updater bug is repaired or that no newer
+release exists. The usual scheduled updater continues checking upstream. The issue
+history and previous diagnostics are retained. The quick path uses only Git and GitHub's
+read API until the guarded issue write; no Nix, updater, package build, or external
+model is invoked. The trailer is read from the immutable commit actually merged into
+`main`; editing the PR description or labels after merge cannot authorise issue closure.
+For squash merges, edit the squash commit message to include the trailer, or configure
+GitHub to populate it from the PR description.
 
 It discovers packages with update scripts from the flake, proposes source updates,
 builds affected packages on supported native systems, and routes validated updates into
@@ -316,17 +345,24 @@ workflow YAML.
 
 ### Modifying trusted verification policy
 
-The reporter verifies that its own implementation and relevant workflow files have not
-been modified by the PR being certified.
+The reporter verifies that its own implementation, verification policy, and privileged
+automation have not been modified by the PR being certified. This includes all files
+under `.github/workflows/` (even newly added workflows) and the package updater,
+compatibility review, failure analysis, and issue/PR reconciliation entry points in
+`.github/ci/`. These files are compared as Git tree entries, including their paths, file
+modes and blob identities, so adding, removing, renaming or substituting a symlink also
+requires review. Other CI helpers are not automatically privileged merely because they
+live in `.github/ci/`.
 
 Consequently, a PR changing protected verification policy cannot certify itself through
 the ordinary PR checks.
 
-Changes to the trusted reporter, verification workflows, protected target selection
-policy, or runtime test files in `tests/runtime/` require explicit maintainer review and
-deployment through the repository's trusted-maintenance/default-branch procedure. Even a
-passing runtime suite cannot certify a PR that changes its own protected tests. A
-workflow rename changes its trusted identity and cannot certify itself on the PR.
+Changes to the trusted reporter, any workflow, privileged maintenance scripts, protected
+target selection policy, or runtime test files in `tests/runtime/` require explicit
+maintainer review and deployment through the repository's
+trusted-maintenance/default-branch procedure. Even a passing runtime suite cannot
+certify a PR that changes its own protected tests. A workflow rename changes its trusted
+identity and cannot certify itself on the PR.
 
 Do not temporarily remove these protections to obtain a passing status. Review the
 change, run the applicable tests, and preserve the separation between trusted status

@@ -160,6 +160,81 @@ class ReporterTests(unittest.TestCase):
                     api.changed = {(path, MERGE)}
                     self.assertEqual(reporter.assess(event, api)["state"], "failure")
 
+    def test_privileged_automation_requires_review(self):
+        # Both trusted statuses must reject changed privileged code. In
+        # particular, a previously absent helper must not certify itself.
+        for kind in ("Checks", "Package verification"):
+            for path in sorted(reporter.PRIVILEGED_AUTOMATION_PATHS):
+                for change in ("added", "modified", "removed", "renamed", "retyped"):
+                    with self.subTest(kind=kind, path=path, change=change):
+                        event, _, api = self.setup_case(kind)
+                        existing = ("100644", "blob", "original")
+                        api.trees[BASE][path] = existing
+                        api.trees[MERGE][path] = existing
+                        if change == "added":
+                            api.trees[BASE].pop(path)
+                        elif change == "modified":
+                            api.trees[MERGE][path] = ("100644", "blob", "new")
+                        elif change == "removed":
+                            api.trees[MERGE].pop(path)
+                        elif change == "renamed":
+                            api.trees[MERGE].pop(path)
+                            api.trees[MERGE][".github/ci/renamed-helper.py"] = existing
+                        else:
+                            api.trees[MERGE][path] = ("120000", "blob", "original")
+                        self.assertEqual(
+                            reporter.assess(event, api)["state"], "failure"
+                        )
+
+    def test_workflow_directory_additions_and_renames_require_review(self):
+        # Protect the entire directory: adding a NEW secret-using workflow
+        # must not bypass a list restricted to existing workflow filenames.
+        for kind in ("Checks", "Package verification"):
+            for change in ("added", "modified", "removed", "renamed", "retyped"):
+                with self.subTest(kind=kind, change=change):
+                    event, _, api = self.setup_case(kind)
+                    path = ".github/workflows/new-privileged.yml"
+                    api.trees[BASE][path] = ("100644", "blob", "original")
+                    api.trees[MERGE][path] = ("100644", "blob", "original")
+                    if change == "added":
+                        api.trees[BASE].pop(path)
+                    elif change == "modified":
+                        api.trees[MERGE][path] = ("100644", "blob", "changed")
+                    elif change == "removed":
+                        api.trees[MERGE].pop(path)
+                    elif change == "renamed":
+                        api.trees[MERGE].pop(path)
+                        api.trees[MERGE][".github/workflows/renamed.yml"] = (
+                            "100644",
+                            "blob",
+                            "original",
+                        )
+                    else:
+                        api.trees[MERGE][path] = ("120000", "blob", "original")
+                    self.assertEqual(reporter.assess(event, api)["state"], "failure")
+
+    def test_workflow_directory_replaced_by_symlink_requires_review(self):
+        for kind in ("Checks", "Package verification"):
+            event, _, api = self.setup_case(kind)
+            api.trees[BASE][".github/workflows/checks.yml"] = (
+                "100644",
+                "blob",
+                "original",
+            )
+            api.trees[MERGE][".github/workflows"] = ("120000", "blob", "symlink")
+            self.assertEqual(reporter.assess(event, api)["state"], "failure")
+
+    def test_unrelated_ci_helper_is_not_privileged_policy(self):
+        # Routine non-executed helpers should not require a trust-policy bypass.
+        for kind in ("Checks", "Package verification"):
+            event, _, api = self.setup_case(kind)
+            api.trees[MERGE][".github/ci/unrelated_helper.py"] = (
+                "100644",
+                "blob",
+                "modified",
+            )
+            self.assertEqual(reporter.assess(event, api)["state"], "success")
+
     def test_changed_or_added_check_definitions_require_review(self):
         for path in (
             "tests/default.nix",
@@ -226,7 +301,9 @@ class ReporterTests(unittest.TestCase):
                     "blob",
                     "new",
                 )
-                api.trees[MERGE][".github/ci/package_updates.py"] = (
+                # package_updates.py is now privileged automation. Use a
+                # genuinely unprotected helper for this regression test.
+                api.trees[MERGE][".github/ci/unrelated_helper.py"] = (
                     "100644",
                     "blob",
                     "new",

@@ -647,10 +647,13 @@ def render_failure_issue(state_file, output):
             + os.environ.get("GITHUB_SERVER_URL", "https://github.com")
             + "/"
             + os.environ.get("GITHUB_REPOSITORY", "missmoode/nix-opendeck")
-            + "/blob/main/.github/MAINTAINER_GUIDE.md#repairing-downstream-patches-for-new-upstream-versions).",
+            + "/blob/main/.github/MAINTAINER_GUIDE.md#manually-updating-and-repairing-packages).",
             "",
-            "Merging a repair PR does not close this issue automatically. "
-            "The normal updater on `main` reconciles outstanding failures.",
+            "For a verified manual version update, include "
+            "`Resolves-Update-Failure: #ISSUE_NUMBER PACKAGE_LABEL` in the repair "
+            "**merge commit message** (using this issue number and package). "
+            "On merge, the lightweight reconciliation job may mark that package "
+            "as superseded; the scheduled updater still checks upstream.",
         ]
     )
     lines.extend(

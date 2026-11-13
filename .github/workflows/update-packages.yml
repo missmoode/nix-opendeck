@@ -1,5 +1,9 @@
 name: Update packages
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/packages/**'
   schedule:
     - cron: '17 12 * * *'
   workflow_dispatch:
@@ -12,7 +16,77 @@ concurrency:
   cancel-in-progress: false
   queue: max
 jobs:
+  # Pushes only check whether a tracked failure exists; they do not run the
+  # updater, Nix, native builders, or package update PR machinery.
+  reconcile-find:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: read
+    outputs:
+      number: ${{ steps.issue.outputs.number }}
+    steps:
+      - name: Locate existing automated failure issue
+        id: issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          issues=$(gh issue list --state open --label 'automated failure report' \
+            --search 'Automated package update failures in:title' \
+            --limit 100 --json number,title)
+          count=$(jq '[.[] | select(.title == "Automated package update failures")] | length' <<< "$issues")
+          if [[ "$count" -gt 1 ]]; then
+            echo '::error::Ambiguous package failure issue; refusing reconciliation.'
+            exit 1
+          fi
+          if [[ "$count" -eq 1 ]]; then
+            jq -r '[.[] | select(.title == "Automated package update failures")][0] | "number=\(.number)"' \
+              <<< "$issues" >> "$GITHUB_OUTPUT"
+          fi
+  # The issue can be touched only by the trusted automation App. Its token is
+  # minted after the read-only discovery job has found an outstanding issue.
+  reconcile-manual:
+    needs: reconcile-find
+    if: needs.reconcile-find.outputs.number != ''
+    runs-on: ubuntu-24.04
+    environment:
+      name: trusted-automation
+      deployment: false
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Create short-lived issue token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-issues: write
+      - name: Reconcile explicitly acknowledged manual repairs
+        env:
+          READ_GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_BOT_LOGIN: ${{ steps.app-token.outputs.app-slug }}[bot]
+          ISSUE_NUMBER: ${{ needs.reconcile-find.outputs.number }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python3 .github/ci/reconcile_manual_updates.py
   discover:
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
@@ -276,7 +350,7 @@ jobs:
       name: trusted-automation
       deployment: false
     needs: [discover, update, prepare-builds, plugins, opendeck]
-    if: always()
+    if: always() && github.event_name != 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -399,6 +473,7 @@ jobs:
       - name: Report infrastructure failure
         if: >-
           always() && (needs.prepare-builds.result != 'success' ||
+
 
 
 
@@ -688,8 +763,10 @@ jobs:
 
 
 
+
            steps.issues.outcome != 'success') ||
           steps.failure-select.outcome == 'failure' || steps.failure-reserve.outcome == 'failure' || steps.failure-publish.outcome == 'failure' || steps.pr.outcome == 'failure' || (steps.audit-select.outcome == 'success' &&
+
 
 
 
@@ -705,9 +782,11 @@ jobs:
 
 
 
+
            steps.audit-select.outputs.review_count != '0' &&
            steps.review-pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
+
 
 
 
