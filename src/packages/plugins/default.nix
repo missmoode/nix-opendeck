@@ -149,7 +149,7 @@ let
 
     wortkrieg = {
       onairclock = pkgs.callPackage ./wortkrieg/onairclock {
-        inherit (pluginLib) mkPrebuiltOpenDeckPlugin;
+        inherit (pluginLib) mkNpmOpenDeckPlugin;
       };
     };
 
