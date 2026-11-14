@@ -102,7 +102,7 @@
           };
 
           # Build a plugin package and install a user-managed copy.
-          apps.install = {
+          apps.install-plugin = {
             type = "app";
             program = "${
               pkgs.writeShellApplication {
