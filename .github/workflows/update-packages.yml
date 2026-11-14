@@ -480,6 +480,7 @@ jobs:
 
 
 
+
            steps.finish.outcome != 'success' ||
            steps.finish.outputs.infrastructure_failure == 'true')
         shell: bash
@@ -764,8 +765,10 @@ jobs:
 
 
 
+
            steps.issues.outcome != 'success') ||
           steps.failure-select.outcome == 'failure' || steps.failure-reserve.outcome == 'failure' || steps.failure-publish.outcome == 'failure' || steps.pr.outcome == 'failure' || (steps.audit-select.outcome == 'success' &&
+
 
 
 
@@ -783,9 +786,11 @@ jobs:
 
 
 
+
            steps.audit-select.outputs.review_count != '0' &&
            steps.review-pr.outputs.pull-request-number == '') ||
           (github.ref_name == github.event.repository.default_branch &&
+
 
 
 
