@@ -8,7 +8,7 @@ fail() {
 }
 
 if (($# != 3)); then
-  echo 'usage: nix run ...#install -- <owner.plugin | nix-installable>' >&2
+  echo 'usage: nix run ...#install-plugin -- <owner.plugin | nix-installable>' >&2
   exit 2
 fi
 
