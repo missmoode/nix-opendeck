@@ -418,8 +418,8 @@ nix run github:missmoode/nix-opendeck#install-plugin -- \
 
 The package must contain one plugin directory with a `manifest.json` at its root.
 Existing ordinary plugin directories are replaced; Home Manager-owned plugins and
-existing symlinks are never overwritten. It won't install any
-[udev rules](#device-access) by itself.
+existing symlinks are never overwritten. Some plugins on Linux require additional
+[hardware access](#device-access) setup which this command doesn't do.
 
 ### Home Manager Module
 
