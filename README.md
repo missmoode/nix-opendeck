@@ -406,13 +406,13 @@ To install a writable, user-managed **copy** of a packaged plugin rather than a
 Nix-store symlink:
 
 ```sh
-nix run github:missmoode/nix-opendeck#install -- openactionplugins.mpris
+nix run github:missmoode/nix-opendeck#install-plugin -- openactionplugins.mpris
 ```
 
 The installer also accepts Nix-built plugin packages from other flakes, for example:
 
 ```sh
-nix run github:missmoode/nix-opendeck#install -- \
+nix run github:missmoode/nix-opendeck#install-plugin -- \
   'github:missmoode/opendeck-umbriel-controls#default'
 ```
 
