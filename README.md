@@ -197,7 +197,8 @@ To install OpenDeck into your user profile:
 nix profile add github:missmoode/nix-opendeck#opendeck
 ```
 
-See [Usage](#usage) for information on declaratively installing the package.
+See [imperative plugin installation](#imperative-plugin-installation) for installing
+plugins via the command line.
 
 ### Traditional Nix (without flakes)
 
@@ -398,6 +399,27 @@ contribute rules to the OpenDeck package's `.udev` attribute.
 
 Plugins may also depend on [runtime commands](#required-runtime-commands) or external
 services that the wrapper does not automatically configure.
+
+### Imperative plugin installation
+
+To install a writable, user-managed **copy** of a packaged plugin rather than a
+Nix-store symlink:
+
+```sh
+nix run github:missmoode/nix-opendeck#install -- openactionplugins.mpris
+```
+
+The installer also accepts Nix-built plugin packages from other flakes, for example:
+
+```sh
+nix run github:missmoode/nix-opendeck#install -- \
+  'github:missmoode/opendeck-umbriel-controls#default'
+```
+
+The package must contain one plugin directory with a `manifest.json` at its root.
+Existing ordinary plugin directories are replaced; Home Manager-owned plugins and
+existing symlinks are never overwritten. It won't install any
+[udev rules](#device-access) by itself.
 
 ### Home Manager Module
 

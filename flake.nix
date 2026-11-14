@@ -101,6 +101,26 @@
             };
           };
 
+          # Build a plugin package and install a user-managed copy.
+          apps.install = {
+            type = "app";
+            program = "${
+              pkgs.writeShellApplication {
+                name = "opendeck-plugin-install";
+                runtimeInputs = [
+                  pkgs.nix
+                  pkgs.jq
+                  pkgs.coreutils
+                ];
+                text = ''
+                  exec ${pkgs.bash}/bin/bash ${./src/apps/install.sh} \
+                    ${lib.escapeShellArg (toString self.outPath)} \
+                    ${lib.escapeShellArg pkgs.stdenv.hostPlatform.system} "$@"
+                '';
+              }
+            }/bin/opendeck-plugin-install";
+          };
+
           # Explicitly invoked integration suite; not part of nix flake check.
           apps.opendeck-runtime-test = {
             type = "app";
