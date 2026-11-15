@@ -19,9 +19,9 @@ what I can to make it useful for everyone.
 As this began as both a personal tool and a learning exercise, I
 [made use of LLM assistance during development](#llm-usage-disclosure).
 
-> [!WARNING]
-> Breaking changes may still happen for a little while, but I think it's very unlikely
-> at this point. This README will remain an up-to-date source of truth.
+> [!NOTE]
+> I'm 98% sure there won't be any breaking changes at this point, unless I've missed
+> anything. This README will remain an up-to-date source of truth.
 
 <div align="center">
 
