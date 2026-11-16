@@ -120,7 +120,7 @@ def certified_tree(repo, pr, bot_login):
     if not SHA.fullmatch(head):
         return None
     statuses = latest_statuses(
-        api(f"repos/{repo}/commits/{head}/status").get("statuses", [])
+        api(f"repos/{repo}/commits/{head}/statuses?per_page=100")
     )
     expected_tree = None
     for context, (workflow_path, workflow_title) in WORKFLOWS.items():
