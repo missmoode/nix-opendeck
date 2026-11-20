@@ -25,34 +25,50 @@ let
     printf '%s\n' "$*" >> "$OPENDECK_TEST_LOG"
   '';
 
+  mkHome =
+    options:
+    homeManager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      modules = [
+        module
+        {
+          home.username = "test";
+          home.homeDirectory = testHome;
+          home.stateVersion = "26.05";
+          programs.opendeck = {
+            enable = true;
+            installPackage = false;
+            package = fakeOpenDeck;
+          }
+          // options;
+        }
+      ];
+    };
+
   mkActivation =
     options:
-    let
-      hm = homeManager.lib.homeManagerConfiguration {
-        inherit pkgs;
-        modules = [
-          module
-          {
-            home.username = "test";
-            home.homeDirectory = testHome;
-            home.stateVersion = "26.05";
-            programs.opendeck = {
-              enable = true;
-              installPackage = false;
-              package = fakeOpenDeck;
-            }
-            // options;
-          }
-        ];
-      };
-    in
-    pkgs.writeText "opendeck-hm-activation-script" hm.config.home.activation.opendeck.data;
+    pkgs.writeText "opendeck-hm-activation-script"
+      (mkHome options).config.home.activation.opendeck.data;
+
+  # The read-only preflight that Home Manager runs before writeBoundary.
+  mkCheck =
+    options:
+    pkgs.writeText "opendeck-hm-check-script"
+      (mkHome options).config.home.activation.checkOpenDeck.data;
+
+  # Entry names in the order Home Manager will run them.
+  activationOrder =
+    options:
+    map (entry: entry.name)
+      (homeManager.lib.hm.dag.topoSort (mkHome options).config.home.activation).result;
 in
 {
   inherit
     lib
     mkPlugin
     mkActivation
+    mkCheck
+    activationOrder
     fakeOpenDeck
     ;
 
