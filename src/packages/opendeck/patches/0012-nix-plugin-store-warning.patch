@@ -1,10 +1,10 @@
 Subject: Show the Nix plugin compatibility warning in the plugin manager
 
 diff --git a/src/components/PluginManager.svelte b/src/components/PluginManager.svelte
-index 277fe7f..d918c4e 100644
+index e979a63..7dee771 100644
 --- a/src/components/PluginManager.svelte
 +++ b/src/components/PluginManager.svelte
-@@ -326,6 +326,16 @@
+@@ -315,6 +315,16 @@
  		<WarningCircle size="20" class="mt-0.5 text-yellow-500" />
  		<div class="text-sm text-yellow-200">
  			{$t("plugin_manager.warning", { PRODUCT_NAME })}
