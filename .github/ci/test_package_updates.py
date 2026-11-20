@@ -345,7 +345,9 @@ class IssueStatusTests(unittest.TestCase):
         encoded = package_updates.base64.urlsafe_b64encode(payload).decode()
         return f"<!-- nix-opendeck-failed-packages:{encoded} -->\n"
 
-    def status(self, previous, *, failing, catalog, infrastructure=False):
+    def status(
+        self, previous, *, failing, catalog, infrastructure=False, homepages=None
+    ):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             state = root / "state.json"
@@ -358,6 +360,7 @@ class IssueStatusTests(unittest.TestCase):
                     "packageFailures": [f"{p}: updater failed" for p in failing],
                     "failedPackages": failing,
                     "catalogPackages": catalog,
+                    "packageHomepages": homepages or {},
                 },
             )
             old.write_text(previous)
@@ -380,6 +383,16 @@ class IssueStatusTests(unittest.TestCase):
     def test_unchanged_failure_does_not_comment_when_error_changes(self):
         previous = self.metadata(["a"])
         self.assertEqual(self.status(previous, failing=["a"], catalog=["a"]), "")
+
+    def test_status_links_package_homepage(self):
+        homepage = "https://github.com/sjourdois/opendeck-pipewire"
+        comment = self.status(
+            self.metadata([]),
+            failing=["sjourdois/pipewire"],
+            catalog=["sjourdois/pipewire"],
+            homepages={"sjourdois/pipewire": homepage},
+        )
+        self.assertIn(f"[`sjourdois/pipewire`]({homepage})", comment)
 
     def test_removed_package_is_not_reported_as_fixed(self):
         previous = self.metadata(["a", "b"])
@@ -412,6 +425,40 @@ class IssueStatusTests(unittest.TestCase):
     def test_missing_metadata_fails_safe(self):
         with self.assertRaisesRegex(ValueError, "tracking metadata"):
             self.status("No valid bot tracking metadata", failing=[], catalog=[])
+
+    def test_failure_issue_uses_upstream_links_and_current_pr_instructions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state.json"
+            issue = Path(temp) / "issue.md"
+            homepage = "https://github.com/sjourdois/opendeck-pipewire"
+            package_updates.save(
+                state,
+                {
+                    "packageFailures": [
+                        "sjourdois/pipewire: updater failed (nix-update exited with 1)",
+                        "other/plugin (x86_64-linux): build failed",
+                    ],
+                    "failedPackages": ["sjourdois/pipewire", "other/plugin"],
+                    "packageHomepages": {"sjourdois/pipewire": homepage},
+                    "failureDiagnostics": [
+                        {
+                            "label": "sjourdois/pipewire",
+                            "system": "x86_64-linux",
+                            "phase": "updater",
+                            "error": "updater failed",
+                            "excerpt": "error: source unavailable",
+                        }
+                    ],
+                },
+            )
+            package_updates.render_failure_issue(state, issue)
+            body = issue.read_text()
+            self.assertIn(f"- [sjourdois/pipewire]({homepage}): updater failed", body)
+            self.assertIn("- other/plugin (x86_64-linux): build failed", body)
+            self.assertIn(f"**[sjourdois/pipewire]({homepage})**", body)
+            self.assertIn("one non-draft PR", body)
+            self.assertNotIn("run checks", body)
+            self.assertNotIn("AI diagnosis", body)
 
     def test_issue_metadata_is_hidden_and_preserves_labels(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -74,6 +74,20 @@ def safe_text(value, max_length=260):
     return re.sub(r"([\\`*_{}\[\]()<>!|])", r"\\\1", value)
 
 
+def package_label(label, homepages, *, code=False):
+    """Link a package label to its declared upstream homepage when it is safe."""
+    name = safe_text(label, 160)
+    if code:
+        name = f"`{name}`"
+    homepage = homepages.get(label)
+    if isinstance(homepage, str) and re.fullmatch(
+        r"https://[A-Za-z0-9][A-Za-z0-9.-]+(?:/[A-Za-z0-9._~:/?#@!$&'*+,;=%-]*)?",
+        homepage,
+    ):
+        return f"[{name}]({homepage})"
+    return name
+
+
 def command_escape(text, *, property=False):
     text = str(text)[:400]
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", text)
@@ -216,8 +230,9 @@ def render_job_failures(jobs, repo, run_id, fetch_annotations):
     return "\n".join(lines)
 
 
-def render_update_diagnostics(items):
+def render_update_diagnostics(items, homepages=None):
     """Compact an updater issue's excerpts without conflating unknown failures."""
+    homepages = homepages or {}
     grouped = OrderedDict()
     for item in items:
         hint = extract_error(str(item.get("excerpt", "")).splitlines())
@@ -238,7 +253,7 @@ def render_update_diagnostics(items):
         item = group["sample"]
         systems = ", ".join(group["systems"])
         heading = (
-            f"**{safe_text(item['label'], 160)}** "
+            f"**{package_label(item['label'], homepages)}** "
             f"({safe_text(systems, 160)}, {safe_text(item['phase'], 80)})"
         )
         summary = group["hint"] or str(item.get("error", "build failed"))

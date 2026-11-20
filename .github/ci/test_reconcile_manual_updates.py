@@ -21,7 +21,8 @@ def issue_body(labels):
         "## Outstanding package update failures\n\n"
         "The automated updater could not validate the following updates.\n\n"
         + "".join(
-            f"- {label}: updater failed (diagnostic text)\n" for label in sorted(labels)
+            f"- [{label}](https://github.com/example/{label}): updater failed (diagnostic text)\n"
+            for label in sorted(labels)
         )
         + "\n### Diagnostic excerpts\n\nOriginal logs must remain intact.\n"
     )
@@ -73,8 +74,11 @@ class VersionTests(unittest.TestCase):
             body, {"tonyheadband/steam"}, {"wortkrieg/onairclock"}
         )
         self.assertEqual(previous_failed_packages(update), {"tonyheadband/steam"})
-        self.assertNotIn("- wortkrieg/onairclock: updater failed", update)
-        self.assertIn("- tonyheadband/steam: updater failed", update)
+        self.assertNotIn("- [wortkrieg/onairclock]", update)
+        self.assertIn(
+            "- [tonyheadband/steam](https://github.com/example/tonyheadband/steam): updater failed",
+            update,
+        )
         self.assertIn("Original logs must remain intact.", update)
         self.assertIn("explicitly acknowledged", update)
 
@@ -82,7 +86,10 @@ class VersionTests(unittest.TestCase):
         body = issue_body({"a/b", "c/d"})
         with self.assertRaisesRegex(ValueError, "disagrees"):
             manual.remaining_issue_body(
-                body.replace("- a/b: updater failed (diagnostic text)\n", ""),
+                body.replace(
+                    "- [a/b](https://github.com/example/a/b): updater failed (diagnostic text)\n",
+                    "",
+                ),
                 {"c/d"},
                 {"a/b"},
             )

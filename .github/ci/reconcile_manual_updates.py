@@ -219,10 +219,15 @@ def remaining_issue_body(body, outstanding, resolved):
     seen = set()
     remaining_lines = []
     for line in section.splitlines():
-        match = re.fullmatch(r"- ([^:]+): .*", line)
-        if match and match.group(1) in previous:
-            seen.add(match.group(1))
-            if match.group(1) in resolved:
+        # Labels with homepages are links; labels without one remain plain text.
+        match = re.fullmatch(
+            r"- (?:\[([^]\n]+)\]\(https://[^)\s]+\)|([^:()\n]+))(?: \([^)]*\))?: .*",
+            line,
+        )
+        label = (match.group(1) or match.group(2)) if match else None
+        if label in previous:
+            seen.add(label)
+            if label in resolved:
                 continue
         remaining_lines.append(line)
     if seen != previous:

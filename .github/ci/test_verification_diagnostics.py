@@ -154,6 +154,23 @@ class DiagnosticsTests(unittest.TestCase):
         out = "\n".join(diag.render_update_diagnostics(items))
         self.assertEqual(out.count("**x**"), 2)
 
+    def test_package_labels_use_only_safe_metadata_homepages(self):
+        homepage = "https://github.com/sjourdois/opendeck-pipewire"
+        self.assertEqual(
+            diag.package_label("sjourdois/pipewire", {"sjourdois/pipewire": homepage}),
+            f"[sjourdois/pipewire]({homepage})",
+        )
+        self.assertEqual(
+            diag.package_label("sjourdois/pipewire", {}, code=True),
+            "`sjourdois/pipewire`",
+        )
+        self.assertEqual(
+            diag.package_label(
+                "sjourdois/pipewire", {"sjourdois/pipewire": "javascript:alert(1)"}
+            ),
+            "sjourdois/pipewire",
+        )
+
     def test_mentions_and_markdown_escaped(self):
         self.assertIn("@\u200beveryone", diag.safe_text("@everyone"))
         self.assertIn("\\`", diag.safe_text("`bad`"))

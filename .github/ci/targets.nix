@@ -35,6 +35,7 @@ let
     storePath = drv.outPath;
     redistributable = redistributable drv;
     updatable = (drv.updateScript or null) != null;
+    homepage = drv.meta.homepage or null;
   };
 in
 {

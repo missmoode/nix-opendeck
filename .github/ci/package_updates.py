@@ -16,7 +16,7 @@ import re
 import subprocess
 import sys
 
-from verification_diagnostics import render_update_diagnostics
+from verification_diagnostics import package_label, render_update_diagnostics
 
 SYSTEM_PREFERENCE = ("x86_64-linux", "aarch64-linux", "aarch64-darwin")
 
@@ -94,6 +94,7 @@ def discover(args):
                 "label": label,
                 "system": chosen["system"],
                 "attr": chosen["attr"],
+                "homepage": chosen.get("homepage"),
             }
         )
 
@@ -559,6 +560,7 @@ def render_failure_status(state_file, previous_body_file, output):
         raise ValueError("incomplete updater results cannot resolve failure issues")
     current = set(state["failedPackages"])
     catalog = set(state["catalogPackages"])
+    homepages = state.get("packageHomepages", {})
     if bool(state["packageFailures"]) != bool(current) or not current <= catalog:
         raise ValueError("failure identities disagree with the updater report")
 
@@ -570,10 +572,6 @@ def render_failure_status(state_file, previous_body_file, output):
         Path(output).write_text("")
         return
 
-    def safe_label(label):
-        # Prevent labels from generating user mentions or formatting in comments.
-        return "`" + label.replace("`", "'").replace("@", "@\u200b") + "`"
-
     lines = ["## Package update status", ""]
     for title, labels in (
         ("Newly failing", added),
@@ -582,7 +580,9 @@ def render_failure_status(state_file, previous_body_file, output):
     ):
         if labels:
             lines.extend([f"**{title}:**", ""])
-            lines.extend(f"- {safe_label(label)}" for label in labels)
+            lines.extend(
+                f"- {package_label(label, homepages, code=True)}" for label in labels
+            )
             lines.append("")
     lines.extend(
         [
@@ -606,6 +606,7 @@ def render_failure_status(state_file, previous_body_file, output):
 def render_failure_issue(state_file, output):
     state = load(state_file)
     diagnostics = state.get("failureDiagnostics", [])
+    homepages = state.get("packageHomepages", {})
     payload = {"failures": sorted(state["packageFailures"]), "diagnostics": diagnostics}
     fingerprint = hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()
@@ -622,16 +623,28 @@ def render_failure_issue(state_file, output):
         "Successfully validated updates are proposed separately.",
         "",
     ]
-    lines.extend(
-        f"- {failure.replace('@', '@​')}" for failure in state["packageFailures"]
-    )
+    for failure in state["packageFailures"]:
+        label = next(
+            (
+                name
+                for name in state["failedPackages"]
+                if failure.startswith((f"{name}:", f"{name} ("))
+            ),
+            None,
+        )
+        if label is None:
+            lines.append(f"- {failure.replace('@', '@​')}")
+        else:
+            suffix = failure[len(label) :].replace("@", "@\u200b")
+            lines.append(f"- {package_label(label, homepages)}{suffix}")
     lines.extend(
         [
             "",
-            "### Resolving downstream patch failures",
+            "### Resolving update failures",
             "",
-            "Not every update failure is caused by a downstream patch. "
-            "Check the diagnostic excerpts and workflow logs first.",
+            "Update failures can result from new packaging requirements, "
+            "incompatible downstream patches, or problems with the updater itself. "
+            "Check the diagnostic excerpts and workflow logs to identify the cause.",
             "",
             "If an upstream update breaks a downstream patch, repair the **new "
             "version and the patch together** in a branch; don't merge a "
@@ -639,7 +652,7 @@ def render_failure_issue(state_file, output):
             "artifact from the linked workflow run to recover the updater's "
             "proposed version/hash changes (even if the build failed). Apply "
             "the affected package diff, adapt the downstream patch, test, and "
-            "open **one PR against `main`** with the `run checks` label. "
+            "open **one non-draft PR against `main`**. Checks run automatically. "
             "Already committed the updated version and hashes? Keep them; "
             "you don't need to rerun the updater.",
             "",
@@ -661,12 +674,11 @@ def render_failure_issue(state_file, output):
             "",
             "### Diagnostic excerpts",
             "",
-            "The complete build output remains in the linked workflow logs. "
-            "These excerpts are captured even when no AI diagnosis is requested.",
+            "The complete build output remains in the linked workflow logs.",
             "",
         ]
     )
-    lines.extend(render_update_diagnostics(diagnostics))
+    lines.extend(render_update_diagnostics(diagnostics, homepages))
     lines.append(
         f"[Workflow run]({os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/"
         f"{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')})"
@@ -811,6 +823,9 @@ def finalize(args):
             "packageFailures": package_failures,
             "failedPackages": sorted(failed_packages),
             "catalogPackages": sorted(pkg["label"] for pkg in plan["packages"]),
+            "packageHomepages": {
+                p["label"]: p["homepage"] for p in plan["packages"] if p.get("homepage")
+            },
             "failureDiagnostics": collect_failure_diagnostics(prepared, args.builds),
             "accepted": [p["label"] for p in accepted],
         },
