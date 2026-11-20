@@ -1,7 +1,7 @@
 Subject: Authorize config, symlinked user and effective package assets narrowly
 
 diff --git a/src-tauri/src/plugins/webserver.rs b/src-tauri/src/plugins/webserver.rs
-index 95097e3..d184a40 100644
+index 95097e3..abb185f 100644
 --- a/src-tauri/src/plugins/webserver.rs
 +++ b/src-tauri/src/plugins/webserver.rs
 @@ -14,6 +14,138 @@ fn mime(extension: &str) -> String {
@@ -143,20 +143,7 @@ index 95097e3..d184a40 100644
  /// Start a simple webserver to serve files of plugins that run in a browser environment.
  pub async fn init_webserver(prefix: PathBuf) {
  	let prefix = prefix.canonicalize().unwrap();
-@@ -32,22 +164,28 @@ pub async fn init_webserver(prefix: PathBuf) {
- 	};
- 
- 	for request in server.incoming_requests() {
--		let mut url = urlencoding::decode(request.url()).unwrap().into_owned();
-+		let mut url = match urlencoding::decode(request.url()) {
-+			Ok(url) => url.into_owned(),
-+			Err(_) => {
-+				let _ = request.respond(Response::empty(400));
-+				continue;
-+			}
-+		};
- 		if url.contains('?') {
- 			url = url.split_once('?').unwrap().0.to_owned();
+@@ -38,16 +170,16 @@ pub async fn init_webserver(prefix: PathBuf) {
  		}
  		#[cfg(target_os = "windows")]
  		let url = url[1..].replace('/', "\\");
@@ -169,15 +156,14 @@ index 95097e3..d184a40 100644
  		}
  
 -		// Ensure the requested path is within the config directory to prevent unrestricted access to the filesystem.
--		let developer = crate::store::get_settings().value.developer;
--		if !developer && !path.canonicalize().is_ok_and(|p| p.starts_with(&prefix)) {
 +		// Preserve upstream's documented developer-mode filesystem access.
-+		let developer = crate::store::get_settings().value.developer;
+ 		let developer = crate::store::get_settings().value.developer;
+-		if !developer && !path.canonicalize().is_ok_and(|p| p.starts_with(&prefix)) {
 +		if !developer && !path_is_allowed(path, &prefix) {
  			let _ = request.respond(Response::empty(403));
  			continue;
  		}
-@@ -67,9 +205,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -67,9 +199,7 @@ pub async fn init_webserver(prefix: PathBuf) {
  		// Instead, we have to inject a replacement window.open implementation that creates an IFrame element
  		// and requests the Svelte frontend to maximise the property inspector.
  
@@ -188,7 +174,7 @@ index 95097e3..d184a40 100644
  			let mut content = tokio::fs::read_to_string(path).await.unwrap_or_default();
  			content += r#"
  				<div id="opendeck_iframe_container" style="position: absolute; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; display: none;"></div>
-@@ -143,9 +279,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -143,9 +273,7 @@ pub async fn init_webserver(prefix: PathBuf) {
  				value: "text/html".parse().unwrap(),
  			});
  			let _ = request.respond(response);
@@ -199,7 +185,7 @@ index 95097e3..d184a40 100644
  			let mut content = tokio::fs::read_to_string(path).await.unwrap_or_default();
  			content = format!("<script>window.opener ??= window.parent;</script>{content}");
  
-@@ -157,7 +291,7 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -157,7 +285,7 @@ pub async fn init_webserver(prefix: PathBuf) {
  			});
  			let _ = request.respond(response);
  		} else {
@@ -208,7 +194,7 @@ index 95097e3..d184a40 100644
  				Some(extension) => extension.to_string_lossy().into_owned(),
  				None => "html".to_owned(),
  			});
-@@ -168,12 +302,12 @@ pub async fn init_webserver(prefix: PathBuf) {
+@@ -168,12 +296,12 @@ pub async fn init_webserver(prefix: PathBuf) {
  			};
  
  			if mime_type.starts_with("text/") || mime_type == "image/svg+xml" {
