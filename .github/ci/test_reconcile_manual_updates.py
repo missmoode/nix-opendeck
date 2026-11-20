@@ -212,7 +212,10 @@ class TrustedTreeTests(unittest.TestCase):
         merged = {"tree": {"sha": tree or self.tree}}
 
         def resolve(endpoint):
-            if endpoint == f"repos/{self.repo}/commits/{self.head}/statuses?per_page=100":
+            if (
+                endpoint
+                == f"repos/{self.repo}/commits/{self.head}/statuses?per_page=100"
+            ):
                 return statuses
             if endpoint == f"repos/{self.repo}/git/commits/{self.sha}":
                 return {

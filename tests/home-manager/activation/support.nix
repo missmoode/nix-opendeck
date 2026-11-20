@@ -47,14 +47,14 @@ let
 
   mkActivation =
     options:
-    pkgs.writeText "opendeck-hm-activation-script"
-      (mkHome options).config.home.activation.opendeck.data;
+    pkgs.writeText "opendeck-hm-activation-script" (mkHome options)
+    .config.home.activation.opendeck.data;
 
   # The read-only preflight that Home Manager runs before writeBoundary.
   mkCheck =
     options:
-    pkgs.writeText "opendeck-hm-check-script"
-      (mkHome options).config.home.activation.checkOpenDeck.data;
+    pkgs.writeText "opendeck-hm-check-script" (mkHome options)
+    .config.home.activation.checkOpenDeck.data;
 
   # Entry names in the order Home Manager will run them.
   activationOrder =
