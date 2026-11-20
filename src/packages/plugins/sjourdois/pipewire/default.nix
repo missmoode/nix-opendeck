@@ -10,20 +10,20 @@
 }:
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-sjourdois-pipewire";
-  version = "0.5.0";
+  version = "0.6.0";
 
   src = fetchFromGitHub {
     owner = "sjourdois";
     repo = "opendeck-pipewire";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-R2qg2+3Yp9Vb1Y+sA6vBZmalQni3XFfnP4mcbuKERlc=";
+    hash = "sha256-wDV55RkR6vgQOOnReXXTNwZmDegsPOyvdafNSt7fb5Q=";
   };
 
   pluginId = "fr.jourdois.pipewire.sdPlugin";
   binaryName = "opendeck-pipewire";
   binaryInstallPath = "${clangStdenv.hostPlatform.rust.rustcTarget}/bin/${finalAttrs.binaryName}";
 
-  cargoHash = "sha256-v/D1VZEd2YCjymXj8y2pZWPBoc9qJZs3Iss3HXcbkgo=";
+  cargoHash = "sha256-FdaU6hLFQVTKTIz5xvZX1YLHabuyKrvg6ipOMteMxew=";
 
   stdenv = clangStdenv;
 
