@@ -32,7 +32,27 @@ let
     other
   ];
   invalid = script [ missing ];
+
+  check =
+    plugins:
+    support.mkCheck {
+      inherit plugins;
+      reloadOnPluginChanges = false;
+    };
+  initialCheck = check [ old ];
+  conflictingCheck = check [
+    new
+    other
+  ];
+
+  # Conflicts must be rejected before Home Manager creates the generation.
+  order = support.activationOrder { plugins = [ old ]; };
+  position = name: pkgs.lib.lists.findFirstIndex (entry: entry == name) null order;
 in
+assert pkgs.lib.assertMsg (
+  position "checkOpenDeck" < position "writeBoundary"
+  && position "writeBoundary" < position "opendeck"
+) "OpenDeck activation order is wrong: ${builtins.toJSON order}";
 pkgs.runCommand "opendeck-home-manager-activation-plugins" { inherit (support) nativeBuildInputs; }
   ''
     ${support.setup}
@@ -40,6 +60,14 @@ pkgs.runCommand "opendeck-home-manager-activation-plugins" { inherit (support) n
     managed="$pluginDir/${managedId}"
     otherTarget="$pluginDir/${otherId}"
     userTarget="$pluginDir/${userId}"
+
+    render ${initialCheck} "$root/initial-check.sh"
+    render ${conflictingCheck} "$root/conflicting-check.sh"
+
+    # The preflight is read-only: it creates no configuration directory.
+    bash "$root/initial-check.sh"
+    DRY_RUN=1 bash "$root/initial-check.sh"
+    [[ ! -e "$configDir" ]]
 
     render ${initial} "$root/initial.sh"
     render ${upgraded} "$root/upgraded.sh"
@@ -85,6 +113,16 @@ pkgs.runCommand "opendeck-home-manager-activation-plugins" { inherit (support) n
     expect_failure "$root/conflicting.sh"
     expect_link "$managed" "${old}/${managedId}"
     cmp -s "$root/initial-ownership" "$state"
+
+    # The pre-writeBoundary check rejects the same conflict, including in a
+    # dry run, without touching anything in the configuration directory.
+    snapshot() { (cd "$configDir" && find . -printf '%p %y %l %s\n' | sort); }
+    snapshot > "$root/before-check"
+    expect_failure "$root/conflicting-check.sh"
+    DRY_RUN=1 expect_failure "$root/conflicting-check.sh"
+    snapshot > "$root/after-check"
+    cmp -s "$root/before-check" "$root/after-check"
+    [[ "$(cat "$otherTarget/settings.json")" == 'do not overwrite' ]]
 
     bash "$root/removed.sh"
     [[ ! -e "$managed" && ! -L "$managed" ]]

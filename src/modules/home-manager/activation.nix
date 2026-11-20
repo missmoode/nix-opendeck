@@ -61,11 +61,69 @@ let
     fi
   '') externalPlugins;
 
+  # Read-only preflight shared by both activation entries. It never writes,
+  # so it is safe before writeBoundary and during dry runs.
+  preflight = ''
+    configDir=${lib.escapeShellArg configDir}
+    pluginDir=${lib.escapeShellArg pluginDir}
+    ownershipFile=${lib.escapeShellArg ownershipFile}
+    settingsFile="$configDir/settings.json"
+
+    previousState=""
+    if [[ -f "$ownershipFile" ]]; then
+      previousState=$(cat "$ownershipFile")
+    fi
+
+    # Ownership must be recorded and the target must still be a store
+    # symlink. Ordinary user-installed plugins are never overwritten.
+    isManagedPluginTarget() {
+      local pluginId="$1"
+      local target="$pluginDir/$pluginId"
+      local resolved
+
+      grep -Fqx -- "$pluginId" <<<"$previousState" || return 1
+      [[ -L "$target" ]] || return 1
+      resolved=$(readlink -f "$target" 2>/dev/null || true)
+      [[ "$resolved" == /nix/store/* ]]
+    }
+
+    # Preflight before modifying any plugin targets or ownership state.
+    validationFailed=0
+    ${validatePlugins}
+    if (( validationFailed )); then
+      exit 1
+    fi
+
+    ${lib.optionalString hasManagedSettings ''
+      # A symlink (including a dangling one) belongs to another manager.
+      if [[ -L "$settingsFile" ]]; then
+        echo "error: OpenDeck settings.json is a symlink; refusing to replace it" >&2
+        exit 1
+      fi
+      if [[ -e "$settingsFile" ]]; then
+        if [[ ! -f "$settingsFile" ]] || ! ${jq} -s -e 'length == 1 and (.[0] | type == "object")' "$settingsFile" >/dev/null; then
+          echo "error: OpenDeck settings.json is not a valid JSON object" >&2
+          exit 1
+        fi
+      fi
+    ''}
+  '';
+
   notificationsEnabled =
     cfg.reloadOnPluginChanges || cfg.restartOnPluginChanges || cfg.restartOnSettingsChanges;
 in
 {
   config = lib.mkIf cfg.enable {
+    # Like Home Manager's checkLinkTargets: reject conflicts before Home
+    # Manager creates the new generation, so a failure leaves nothing
+    # half-activated. Read-only, so it also runs during dry runs.
+    home.activation.checkOpenDeck = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
+      (
+        set -euo pipefail
+        ${preflight}
+      )
+    '';
+
     # One entry owns the entire reconciliation and notification lifecycle.
     # A subshell isolates variables and the EXIT trap from Home Manager.
     home.activation.opendeck = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -75,10 +133,10 @@ in
         (
           set -euo pipefail
 
-          configDir=${lib.escapeShellArg configDir}
-          pluginDir=${lib.escapeShellArg pluginDir}
-          ownershipFile=${lib.escapeShellArg ownershipFile}
-          settingsFile="$configDir/settings.json"
+          # Repeat the preflight: entries after writeBoundary (such as
+          # linkGeneration) may have changed the configuration directory.
+          ${preflight}
+
           desiredState=${lib.escapeShellArg desiredState}
           changedPlugins=()
           settingsChanged=false
@@ -90,45 +148,6 @@ in
             if [[ -n "$settingsTemp" ]]; then rm -f "$settingsTemp"; fi
           }
           trap cleanup EXIT
-
-          previousState=""
-          if [[ -f "$ownershipFile" ]]; then
-            previousState=$(cat "$ownershipFile")
-          fi
-
-          # Ownership must be recorded and the target must still be a store
-          # symlink. Ordinary user-installed plugins are never overwritten.
-          isManagedPluginTarget() {
-            local pluginId="$1"
-            local target="$pluginDir/$pluginId"
-            local resolved
-
-            grep -Fqx -- "$pluginId" <<<"$previousState" || return 1
-            [[ -L "$target" ]] || return 1
-            resolved=$(readlink -f "$target" 2>/dev/null || true)
-            [[ "$resolved" == /nix/store/* ]]
-          }
-
-          # Preflight before modifying any plugin targets or ownership state.
-          validationFailed=0
-          ${validatePlugins}
-          if (( validationFailed )); then
-            exit 1
-          fi
-
-          ${lib.optionalString hasManagedSettings ''
-            # A symlink (including a dangling one) belongs to another manager.
-            if [[ -L "$settingsFile" ]]; then
-              echo "error: OpenDeck settings.json is a symlink; refusing to replace it" >&2
-              exit 1
-            fi
-            if [[ -e "$settingsFile" ]]; then
-              if [[ ! -f "$settingsFile" ]] || ! ${jq} -s -e 'length == 1 and (.[0] | type == "object")' "$settingsFile" >/dev/null; then
-                echo "error: OpenDeck settings.json is not a valid JSON object" >&2
-                exit 1
-              fi
-            fi
-          ''}
 
           # Prepare and compare the new settings *before* plugin mutations.
           # This also prevents a jq failure from leaving plugins half-updated.
