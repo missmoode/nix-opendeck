@@ -9,16 +9,16 @@
 
 mkRustOpenDeckPlugin (finalAttrs: {
   pname = "opendeck-havner-uinput-simulation";
-  version = "0.1.1";
+  version = "0.2.0";
 
   src = fetchFromGitHub {
     owner = "Havner";
     repo = "uinput-simulation";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-XEA1btu8+qL4OjYN+Jthdy4kNJeb3L8tCUQ/SDtJjlI=";
+    hash = "sha256-1UifkNA4R7lxP9vDjBWVM9U7CUNM3dyA2Mq4cxQcfz0=";
   };
 
-  cargoHash = "sha256-u7b72OCmwFoj9hVLoF6jFS9ZqoieCqposSyEbQIBJ+w=";
+  cargoHash = "sha256-2ZMKNKXoX6bKFwtquPQ/x3vnTfIWQZVO0PWbxCJxe7Q=";
 
   pluginId = "com.havner.uinput.sdPlugin";
   binaryName = "uinput-simulation";
