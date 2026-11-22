@@ -172,24 +172,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # nix-update 1.16.0 uses `nix flake metadata` to locate the flake
-          # source. With Nix 2.35/storeFS this path need not be materialised,
-          # so its subsequent nix-instantiate call fails. Archive fetches the
-          # exact tracked source, including after an updater modifies it.
-          # Remove this override when nix-update fixes its source lookup.
           nix_update="$(nix build --impure --no-link --print-out-paths \
             --expr "$(cat <<'NIX'
           let
             flake = builtins.getFlake (toString ./.);
             pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
           in
-            pkgs.nix-update.overridePythonAttrs (old: {
-              postPatch = (old.postPatch or "") + ''
-                substituteInPlace nix_update/options.py \
-                  --replace-fail '["nix", "flake", "metadata", "--json"]' \
-                    '["nix", "flake", "archive", "--json"]'
-              '';
-            })
+            pkgs.nix-update
           NIX
           )")"
           nix profile add "$nix_update"
